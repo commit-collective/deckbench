@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deckbench"
+version = "0.1.0"
+description = "Simulated DJ decks on a network, for testing what talks to them (Pro DJ Link)."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT OR Apache-2.0" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Software Development :: Testing",
+]
+
+[project.scripts]
+deckbench = "deckbench.cli:main"
+
+[tool.setuptools]
+packages = ["deckbench", "deckbench.protocols"]
