@@ -124,7 +124,8 @@ function render() {
     el.classList.toggle("off", !d.on);
     const track = d.track ? ' &middot; ' + esc(d.track) : "";
     el.querySelector(".title").innerHTML = '<b>' + esc(d.name) + '</b>' + track +
-      (d.model ? ' &middot; ' + esc(d.model) : "");
+      (d.model ? ' &middot; ' + esc(d.model) : "") +
+      (d.address ? ' &middot; ' + esc(d.address) : "");
     for (const b of el.querySelectorAll("button")) {
       const what = b.dataset.what;
       b.classList.toggle("on", !!d[what] && (what === "on" || d.on));

@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 """Pro DJ Link: the decks as CDJs on the network.
 
-Each deck is on its own loopback address, 127.0.0.<player number>, so that
+Each deck is on an address of its own. By default that is the loopback address
+127.0.0.<player number> and its broadcasts go to 127.255.255.255, so that
 everything stays on one machine (run it in the network namespace of the client:
-in WSL for an emulator there). A deck that is on
+in WSL for an emulator there). On a real network a deck is given an address of
+the machine's (an alias of a network card; see docs/real-network.md) and the
+network's broadcast address. A deck that is on
 
 - broadcasts a keep-alive on UDP 50000 every 2 s, to 127.255.255.255;
 - broadcasts a CDJ status on UDP 50002 every 200 ms: the track it has loaded
@@ -118,9 +121,11 @@ def read_message(conn):
 class LinkDeck:
     """What a deck is to Pro DJ Link, beside what it is (core.Deck)."""
 
-    def __init__(self, net, deck, loaded, titles, model):
+    def __init__(self, net, deck, loaded, titles, model, address, broadcast):
         self.net = net
         self.deck = deck
+        self.address = address              # the address it is on
+        self.broadcast = broadcast          # where its broadcasts go
         self.source, self.slot, self.rbid = loaded
         self.titles = titles                # {(slot, id): title} this deck knows
         self.queries = []
@@ -144,7 +149,7 @@ class LinkDeck:
         p[0x24] = self.number
         p[0x25] = 0x01
         p[0x26:0x2C] = bytes([0x02, 0xFA, 0x4E, 0xDE, 0xC0, self.number])
-        p[0x2C:0x30] = socket.inet_aton("127.0.0.%d" % self.number)
+        p[0x2C:0x30] = socket.inet_aton(self.address)
         p[0x30] = 1
         p[0x34] = 0x01
         return bytes(p)
@@ -203,11 +208,11 @@ class LinkDeck:
         p[0xCC] = 0x0F                                   # a nexus
         return bytes(p)
 
-    def beat(self):
-        """The beat packet at the beginning of a beat."""
+    def beat(self, position):
+        """The beat packet at the beginning of the beat that `position` (in beats) is in."""
         deck = self.deck
         period = 60000.0 / deck.tempo()
-        beat = deck.beat_in_bar
+        beat = int(position) % 4 + 1
         left = 5 - beat                                  # beats to the next bar line
         p = bytearray(0x60)
         p[0:0x1F] = header(0x28, self.name)
@@ -224,7 +229,7 @@ class LinkDeck:
     def announce(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        s.bind(("127.0.0.%d" % self.number, 0))
+        s.bind((self.address, 0))
         last_status = 0.0
         last_keep = 0.0
         while True:
@@ -234,19 +239,19 @@ class LinkDeck:
                 time.sleep(0.1)
                 continue
             if now - last_keep >= 2.0:
-                s.sendto(self.keepalive(), (BROADCAST, ANNOUNCE_PORT))
+                s.sendto(self.keepalive(), (self.broadcast, ANNOUNCE_PORT))
                 last_keep = now
             if now - last_status >= 0.2:
                 with self.net.world.lock:
                     packet = self.status()
-                s.sendto(packet, (BROADCAST, UPDATE_PORT))
+                s.sendto(packet, (self.broadcast, UPDATE_PORT))
                 last_status = now
             time.sleep(0.05)
 
     def beats(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        s.bind(("127.0.0.%d" % self.number, 0))
+        s.bind((self.address, 0))
         deck = self.deck
         sent = None                         # the beat (counted from the anchor) last sent
         while True:
@@ -260,9 +265,9 @@ class LinkDeck:
                 tempo = deck.tempo()
                 beat = int(pos)
                 due = (beat + 1 - pos) * 60.0 / tempo
-                packet = self.beat() if sent != beat else None
+                packet = self.beat(pos) if sent != beat else None
             if packet:
-                s.sendto(packet, (BROADCAST, BEAT_PORT))
+                s.sendto(packet, (self.broadcast, BEAT_PORT))
                 sent = beat
             time.sleep(min(max(due, 0.002), 0.02))
 
@@ -270,9 +275,9 @@ class LinkDeck:
         """Master hand-off requests and sync commands, sent to this deck."""
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(("127.0.0.%d" % self.number, BEAT_PORT))
+        s.bind((self.address, BEAT_PORT))
         out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        out.bind(("127.0.0.%d" % self.number, 0))
+        out.bind((self.address, 0))
         deck, world = self.deck, self.net.world
         while True:
             data, addr = s.recvfrom(2048)
@@ -347,7 +352,7 @@ class LinkDeck:
     def serve_port(self):
         srv = socket.socket()
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind(("127.0.0.%d" % self.number, 12523))
+        srv.bind((self.address, 12523))
         srv.listen(5)
         while True:
             conn, _ = srv.accept()
@@ -366,7 +371,7 @@ class LinkDeck:
     def serve_db(self):
         srv = socket.socket()
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind(("127.0.0.%d" % self.number, DB_PORT))
+        srv.bind((self.address, DB_PORT))
         srv.listen(5)
         while True:
             conn, _ = srv.accept()
@@ -420,11 +425,14 @@ class LinkDeck:
 class Prolink(Protocol):
     name = "prolink"
 
-    def __init__(self, world, loaded=None, titles=None, model=None, status_length=0x124):
+    def __init__(self, world, loaded=None, titles=None, model=None, status_length=0x124,
+                 addresses=None, broadcast=BROADCAST):
         """world.decks must have the decks (core.Deck, by player number) already.
         loaded: {deck: (source player, slot, rekordbox id)}; titles: {source
         player: {(slot, id): title}}. A deck has by default the track 100 + its
-        number, from itself, in slot 3 (USB), titled "Track of deck N"."""
+        number, from itself, in slot 3 (USB), titled "Track of deck N". addresses:
+        {deck: address} (default 127.0.0.<number>); broadcast: where the broadcasts
+        go (default 127.255.255.255, that of the loopback)."""
         self.world = world
         self.status_length = status_length
         self.unit = {"number": 0, "ip": None, "master": False, "bpm": None}   # the unit under test
@@ -435,7 +443,8 @@ class Prolink(Protocol):
         self.decks = {}
         for n, deck in world.decks.items():
             self.decks[n] = LinkDeck(self, deck, loaded.get(n, (n, 3, 100 + n)),
-                                     known.get(n, {}), model)
+                                     known.get(n, {}), model,
+                                     (addresses or {}).get(n, "127.0.0.%d" % n), broadcast)
         world.protocols.append(self)
 
     def start(self):
@@ -443,8 +452,8 @@ class Prolink(Protocol):
             deck = link.deck
             for target in (link.announce, link.beats, link.control, link.serve_port, link.serve_db):
                 threading.Thread(target=target, daemon=True).start()
-            log("%s on 127.0.0.%d: track %d:%d:%d at %.0f BPM"
-                % ((deck.name, n, link.source, link.slot, link.rbid, deck.base_bpm)))
+            log("%s on %s: track %d:%d:%d at %.0f BPM"
+                % ((deck.name, link.address, link.source, link.slot, link.rbid, deck.base_bpm)))
         threading.Thread(target=self.sniff, daemon=True).start()
 
     # -- what the World asks --
@@ -461,7 +470,7 @@ class Prolink(Protocol):
         source = self.decks.get(link.source, link)
         return {"track": source.titles.get((link.slot, link.rbid), ""),
                 "track_id": "%d:%d:%d" % (link.source, link.slot, link.rbid),
-                "model": link.name.decode()}
+                "model": link.name.decode(), "address": link.address}
 
     def info(self):
         return {"unit": dict(self.unit) if self.unit["number"] else None}
@@ -496,7 +505,7 @@ class Prolink(Protocol):
                 request = header(0x26, link.name) + bytes([
                     0x01, 0x00, link.number, 0x00, 0x04, 0x00, 0x00, 0x00, link.number])
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.bind(("127.0.0.%d" % link.number, 0))
+                s.bind((link.address, 0))
                 s.sendto(bytes(request), (self.unit["ip"], BEAT_PORT))
                 s.close()
                 link.pending = True
@@ -539,10 +548,10 @@ class Prolink(Protocol):
         # What the unit sends to a deck itself (its status, to port 50002 of the
         # deck's address) goes to the socket bound to that address, not to the
         # ones bound to any address: a socket for each deck.
-        for number in self.decks:
+        for link in self.decks.values():
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind(("127.0.0.%d" % number, UPDATE_PORT))
+            s.bind((link.address, UPDATE_PORT))
             s.settimeout(0.5)
             socks.append((s, UPDATE_PORT))
         world, unit = self.world, self.unit

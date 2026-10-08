@@ -39,6 +39,8 @@ Options (`python -m deckbench --help`):
 - `--loaded DECK=SOURCE:SLOT:ID`, `--titles FILE`: the track a deck has loaded
   (from another player's database) and the titles each deck knows; the
   default is track 100 + the deck's number, from itself, "Track of deck N"
+- `--bind ADDRESS,...`, `--netmask`, `--broadcast`: decks on a real network, with an
+  address each (see [docs/real-network.md](docs/real-network.md)); default the loopback
 - `--model NAME`: the device name the decks announce (default `CDJ-FAKEn`)
 - `--http-port PORT` (default 8750, -1 for none), `--http-host ADDRESS`
 
@@ -68,6 +70,7 @@ It uses UDP 50000-50002 on the loopback: nothing else may listen there.
     deckbench/web.py              the page and the API
     deckbench/cli.py              the command line
     docs/prolink.md               what it sends, and what a unit under test was found to need
+    docs/real-network.md          showing the decks to a real unit on a real network
 
 A protocol is a module that gives the World what to show of the decks and
 takes part in the changes that concern it (`core.Protocol`).

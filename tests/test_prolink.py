@@ -31,8 +31,24 @@ def listen(port):
     return s
 
 
-def collect(sock, seconds, keep=lambda data: True):
-    """The datagrams that arrive in `seconds`, that are Pro DJ Link ones."""
+def drain(sock):
+    """Throws away what waits in the socket (it keeps the datagrams that came
+    while nobody read it)."""
+    sock.settimeout(0)
+    try:
+        while True:
+            sock.recvfrom(4096)
+    except (BlockingIOError, socket.timeout):
+        pass
+    finally:
+        sock.settimeout(0.3)
+
+
+def collect(sock, seconds, keep=lambda data: True, fresh=True):
+    """The datagrams that arrive in `seconds` (from now on, unless fresh is
+    false: then those that wait too), that are Pro DJ Link ones."""
+    if fresh:
+        drain(sock)
     out = []
     end = time.time() + seconds
     while time.time() < end:
@@ -181,7 +197,7 @@ class Bench(unittest.TestCase):
         request = prolink.header(0x26, b"TEST") + bytes([0x01, 0x00, 9, 0x00, 0x04, 0, 0, 0, 9])
         s.sendto(bytes(request), ("127.0.0.2", BEAT_PORT))
         s.close()
-        reply = collect(self.statuses, 2.0, lambda d: d[0x0A] == 0x27)
+        reply = collect(self.statuses, 2.0, lambda d: d[0x0A] == 0x27, fresh=False)
         self.assertTrue(reply, "no answer to the request")
         self.assertEqual((reply[0][0x21], reply[0][-1]), (2, 1))                # yields: 1
         self.assertEqual(self.status_of(2)[0x9F], 9)                            # Mh: to player 9
@@ -234,6 +250,14 @@ class Bench(unittest.TestCase):
                 if mtype == 0x4101 and args[6][1] == 0x04:
                     titles.append(args[3][1])
             self.assertEqual(titles, ["Café del Mar"])
+
+
+class Addresses(unittest.TestCase):
+    def test_broadcast_of(self):
+        from deckbench.cli import broadcast_of
+        self.assertEqual(broadcast_of("192.168.1.50", "255.255.255.0"), "192.168.1.255")
+        self.assertEqual(broadcast_of("169.254.7.9", "255.255.0.0"), "169.254.255.255")
+        self.assertEqual(broadcast_of("10.1.2.3", "255.255.255.128"), "10.1.2.127")
 
 
 if __name__ == "__main__":

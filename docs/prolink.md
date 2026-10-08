@@ -6,7 +6,9 @@ library Beat Link, which is also what to read for what a player really sends
 (`VirtualCdj.java`: `STATUS_PAYLOAD`, `sendStatus`, `becomeTempoMaster`).
 Nothing is copied from either.
 
-A deck is a CDJ at `127.0.0.<player number>`, broadcasting to `127.255.255.255`.
+A deck is a CDJ at `127.0.0.<player number>`, broadcasting to `127.255.255.255`
+(or, on a real network, at an address of the machine's, with the network's
+broadcast address: [real-network.md](real-network.md)).
 
 ## What a deck that is on sends
 
@@ -81,9 +83,8 @@ must look like. Each of these was found by the unit not reacting:
 
 ## Not done
 
-- Decks on a real network: each deck is a loopback address, so a unit on a
-  real network does not see them. A mode with a real address for each deck
-  would.
+- The claim packets a player sends when it joins (hello, the three claim
+  stages): the decks only send keep-alives, which is all a unit was seen to need.
 - Many models: the status length and the name can be chosen (`--status-length`,
   `--model`), the contents are those of a nexus player.
 - Beat grids, waveforms, cues and the rest of the database.

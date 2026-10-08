@@ -1,12 +1,20 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 """The command line: python -m deckbench [options]."""
 import argparse
+import socket
 import time
 
 from . import __version__
 from .core import Deck, World, log
 from .protocols.prolink import Prolink
 from .web import serve
+
+
+def broadcast_of(address, netmask):
+    """The broadcast address of the network that `address` is on."""
+    ip = int.from_bytes(socket.inet_aton(address), "big")
+    mask = int.from_bytes(socket.inet_aton(netmask), "big")
+    return socket.inet_ntoa(((ip & mask) | (~mask & 0xFFFFFFFF)).to_bytes(4, "big"))
 
 
 def parse_loaded(items):
@@ -51,6 +59,16 @@ def main(argv=None):
     ap.add_argument("--model", help="the device name every deck announces (default CDJ-FAKEn)")
     ap.add_argument("--status-length", type=lambda x: int(x, 0), default=0x124, metavar="N",
                     help="the length of the Pro DJ Link status packets (default 0x124)")
+    ap.add_argument("--bind", metavar="ADDRESS,ADDRESS,...",
+                    help="a real network: the address of each deck, in the order of the "
+                         "decks (aliases of a network card; see docs/real-network.md); "
+                         "default the loopback, 127.0.0.<number>")
+    ap.add_argument("--netmask", default="255.255.255.0", metavar="MASK",
+                    help="the network's mask, to find its broadcast address from --bind "
+                         "(default 255.255.255.0)")
+    ap.add_argument("--broadcast", metavar="ADDRESS",
+                    help="the network's broadcast address (default: from the first --bind "
+                         "address and --netmask)")
     ap.add_argument("--http-port", type=int, default=8750, metavar="PORT",
                     help="the page and API's port (default 8750, 0 for any, -1 for none)")
     ap.add_argument("--http-host", default="127.0.0.1", metavar="ADDRESS",
@@ -61,9 +79,21 @@ def main(argv=None):
     world = World()
     for i, n in enumerate(numbers):
         world.decks[n] = Deck(world, n, 128.0 - 2 * i, "deck %d" % n)
+    addresses, broadcast = None, "127.255.255.255"
+    if a.bind:
+        given = a.bind.split(",")
+        if len(given) != len(numbers):
+            ap.error("--bind needs an address for each of the %d decks (%s), it has %d"
+                     % (len(numbers), ",".join(map(str, numbers)), len(given)))
+        addresses = dict(zip(numbers, given))
+        broadcast = a.broadcast or broadcast_of(given[0], a.netmask)
+    elif a.broadcast:
+        broadcast = a.broadcast
     Prolink(world, loaded=parse_loaded(a.loaded),
             titles=parse_titles(a.titles) if a.titles else None,
-            model=a.model, status_length=a.status_length).start()
+            model=a.model, status_length=a.status_length,
+            addresses=addresses, broadcast=broadcast).start()
+    log("broadcasting to %s" % broadcast)
     for n, deck in world.decks.items():
         wanted = [item.partition("=")[2] for item in a.init if int(item.partition("=")[0]) == n]
         if a.on or wanted:
