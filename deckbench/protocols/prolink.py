@@ -573,7 +573,16 @@ class Prolink(Protocol):
                             log("the unit under test %s the tempo master"
                                 % ("is now" if master else "is no longer"))
                         unit["master"] = master
-                        unit["bpm"] = struct.unpack(">H", data[0x92:0x94])[0] / 100.0
+                        # The BPM field is the track's; the tempo it plays at is that
+                        # times the pitch (0x100000 is no change), as on a CDJ.
+                        unit["track_bpm"] = struct.unpack(">H", data[0x92:0x94])[0] / 100.0
+                        unit["pitch"] = struct.unpack(">I", data[0x8C:0x90])[0]
+                        unit["bpm"] = round(unit["track_bpm"] * unit["pitch"] / PITCH_NORMAL, 2)
+                        tempo = (unit["track_bpm"], unit["pitch"])
+                        if tempo != unit.get("tempo"):
+                            unit["tempo"] = tempo
+                            log("the unit's tempo: track %.2f BPM, pitch %#x: %.2f BPM"
+                                % (tempo + (unit["bpm"],)))
                         if master:
                             for link in self.decks.values():
                                 if link.deck.master and link.handing_to == data[0x21]:

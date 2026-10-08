@@ -71,6 +71,11 @@ must look like. Each of these was found by the unit not reacting:
 - **The unit sends its status to a deck's own address** (UDP 50002), not to
   the broadcast, so a listener has to be bound to the deck's address: a socket
   bound to any address loses the datagrams to others bound to it too.
+- **The BPM field is the track's, the pitch is the tempo change.** A unit's
+  tempo slider moves the pitch (0x8c, 0x100000 is none, 0x200000 is +100%) and
+  leaves the BPM field (0x92) alone, as a CDJ does; the tempo it plays at is
+  the BPM times the pitch. The bench follows that (a deck synced to the unit
+  as the master takes it).
 - **A unit's takeover request is 0x28 bytes**, shorter than the status-sized
   packets: a deck must not drop packets shorter than 0x2c.
 
