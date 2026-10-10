@@ -56,6 +56,9 @@ def main(argv=None):
                          "(default: 100 + its number, from itself, slot 3)")
     ap.add_argument("--titles", metavar="FILE",
                     help='lines "SOURCE:SLOT:ID=Title" (UTF-8): the titles the decks know')
+    ap.add_argument("--refuse-db", action="store_true",
+                    help="the decks' database servers turn metadata requests down, as real decks "
+                         "do those of a device that is not a player they know")
     ap.add_argument("--model", help="the device name every deck announces (default CDJ-FAKEn)")
     ap.add_argument("--status-length", type=lambda x: int(x, 0), default=0x124, metavar="N",
                     help="the length of the Pro DJ Link status packets (default 0x124)")
@@ -92,7 +95,7 @@ def main(argv=None):
     Prolink(world, loaded=parse_loaded(a.loaded),
             titles=parse_titles(a.titles) if a.titles else None,
             model=a.model, status_length=a.status_length,
-            addresses=addresses, broadcast=broadcast).start()
+            addresses=addresses, broadcast=broadcast, refuse_db=a.refuse_db).start()
     log("broadcasting to %s" % broadcast)
     for n, deck in world.decks.items():
         wanted = [item.partition("=")[2] for item in a.init if int(item.partition("=")[0]) == n]

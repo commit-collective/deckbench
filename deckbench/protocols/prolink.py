@@ -121,8 +121,9 @@ def read_message(conn):
 class LinkDeck:
     """What a deck is to Pro DJ Link, beside what it is (core.Deck)."""
 
-    def __init__(self, net, deck, loaded, titles, model, address, broadcast):
+    def __init__(self, net, deck, loaded, titles, model, address, broadcast, refuse_db=False):
         self.net = net
+        self.refuse_db = refuse_db          # the database server turns requests down (as it does a stranger's)
         self.deck = deck
         self.address = address              # the address it is on
         self.broadcast = broadcast          # where its broadcasts go
@@ -390,6 +391,9 @@ class LinkDeck:
                 if mtype == 0x0000:                         # query context setup
                     conn.sendall(message(txid, 0x4000, [("n", 0), ("n", self.number)]))
                     log("%s: query context for device %d" % (name, args[0][1]))
+                elif mtype == 0x2002 and self.refuse_db:    # as it answers a device it does not know
+                    log("%s: metadata request turned down" % name)
+                    conn.sendall(message(txid, 0x0100, []))
                 elif mtype == 0x2002:                       # track metadata request
                     dmst, rbid = args[0][1], args[1][1]
                     slot = (dmst >> 8) & 0xFF
@@ -426,13 +430,15 @@ class Prolink(Protocol):
     name = "prolink"
 
     def __init__(self, world, loaded=None, titles=None, model=None, status_length=0x124,
-                 addresses=None, broadcast=BROADCAST):
+                 addresses=None, broadcast=BROADCAST, refuse_db=False):
         """world.decks must have the decks (core.Deck, by player number) already.
         loaded: {deck: (source player, slot, rekordbox id)}; titles: {source
         player: {(slot, id): title}}. A deck has by default the track 100 + its
         number, from itself, in slot 3 (USB), titled "Track of deck N". addresses:
         {deck: address} (default 127.0.0.<number>); broadcast: where the broadcasts
-        go (default 127.255.255.255, that of the loopback)."""
+        go (default 127.255.255.255, that of the loopback). refuse_db: the database servers
+        turn metadata requests down (as real decks do those of a device that is not a
+        player they know)."""
         self.world = world
         self.status_length = status_length
         self.unit = {"number": 0, "ip": None, "master": False, "bpm": None}   # the unit under test
@@ -444,7 +450,7 @@ class Prolink(Protocol):
         for n, deck in world.decks.items():
             self.decks[n] = LinkDeck(self, deck, loaded.get(n, (n, 3, 100 + n)),
                                      known.get(n, {}), model,
-                                     (addresses or {}).get(n, "127.0.0.%d" % n), broadcast)
+                                     (addresses or {}).get(n, "127.0.0.%d" % n), broadcast, refuse_db)
         world.protocols.append(self)
 
     def start(self):

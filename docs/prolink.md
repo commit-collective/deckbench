@@ -81,6 +81,21 @@ must look like. Each of these was found by the unit not reacting:
 - **A unit's takeover request is 0x28 bytes**, shorter than the status-sized
   packets: a deck must not drop packets shorter than 0x2c.
 
+## What real decks do to a device they do not know
+
+- **The database server turns it down.** CDJ-2000NXS2 and XDJ-1000MK2 (seen on real ones,
+  2026-10) answer the setup request of a player numbered 1 to 4, but a device that is not a
+  known player gets an error code (0x0100) to its track request, and a number of 5 or 6 no
+  answer at all: the old players only serve 1 to 4. `--refuse-db` makes the bench's decks
+  do the first, to test what falls back from it.
+- **Their drives are not open either.** They share them over NFS (version 2, UDP) to
+  169.254.0.0/16 only, and mounting from a device that is not a known player is refused
+  (error 13) from a reserved port too. The bench does not serve NFS: it was written and
+  dropped (it is in the history of the archive branch).
+- **export.pdb** (`deckbench.protocols.pdb`): a made one, from {id: title}, and a reader,
+  for tests of what looks titles up in a copy of the file. The layout was checked on a real
+  file of 3198 tracks.
+
 ## Not done
 
 - The claim packets a player sends when it joins (hello, the three claim
