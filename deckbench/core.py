@@ -131,6 +131,8 @@ class World:
 
     # -- what is done to a deck --
     def set_enabled(self, deck, on):
+        if on and not all(p.allow_enable(deck) for p in self.protocols):
+            return False
         def change():
             deck.enabled = on
             if not on:
@@ -140,6 +142,7 @@ class World:
             protocol.deck_enabled(deck, on)
         log("%s %s" % (deck.name, "on" if on else "off"))
         self.changed()
+        return True
 
     def set_play(self, deck, on):
         def change():
@@ -225,6 +228,10 @@ class Protocol:
     def info(self):
         """More to show about the protocol's side: a dict."""
         return {}
+
+    def allow_enable(self, deck):
+        """False if a deck must stay off (the protocol says why in the log)."""
+        return True
 
     def deck_enabled(self, deck, on):
         pass

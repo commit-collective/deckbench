@@ -141,6 +141,7 @@ function render() {
   for (const [n, d] of Object.entries(state.decks)) {
     const el = document.getElementById("deck" + n);
     if (!el) continue;
+    const link = state.protocols.prolink, unit = link && link.unit;
     el.classList.toggle("off", !d.on);
     const track = d.track ? ' &middot; ' + esc(d.track) : "";
     el.querySelector(".title").innerHTML = '<b>' + esc(d.name) + '</b>' + track +
@@ -151,6 +152,11 @@ function render() {
       b.classList.toggle("on", what === "loop" ? d.on && d.loop === +b.dataset.beats
                                                : !!d[what] && (what === "on" || d.on));
       b.disabled = what !== "on" && !d.on;
+      if (what === "on") {                        // the unit's own number: a clash, left off
+        const mine = !!unit && unit.number === +el.id.slice(4);
+        b.disabled = mine && !d.on;
+        b.title = mine && !d.on ? "this is the unit's own number: a deck here is a clash" : "";
+      }
     }
     el.querySelector(".bpm").textContent = d.on ? d.bpm.toFixed(1) + " BPM" : "";
   }

@@ -481,6 +481,14 @@ class Prolink(Protocol):
     def info(self):
         return {"unit": dict(self.unit) if self.unit["number"] else None}
 
+    def allow_enable(self, deck):
+        # A deck with the unit's own number is a clash: the unit then links to no deck at all.
+        if self.unit["number"] == deck.number:
+            log("%s has the number of the unit under test: left off (a clash makes the unit "
+                "link to no deck)" % deck.name)
+            return False
+        return True
+
     def deck_enabled(self, deck, on):
         link = self.decks.get(deck.number)
         if link and not on:
