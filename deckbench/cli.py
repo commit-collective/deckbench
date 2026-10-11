@@ -50,7 +50,8 @@ def main(argv=None):
     ap.add_argument("--on", action="store_true",
                     help="start the decks on (by default they are off, to switch on from the page)")
     ap.add_argument("--init", action="append", default=[], metavar="DECK=play,sync,master",
-                    help="start this deck on, and playing, synced and/or the master")
+                    help="start this deck on, and playing, synced and/or the master "
+                         "(loopN: and looping N beats from its start)")
     ap.add_argument("--loaded", action="append", default=[], metavar="DECK=SOURCE:SLOT:ID",
                     help="the track a deck has loaded: a track of the source player's database "
                          "(default: 100 + its number, from itself, slot 3)")
@@ -105,6 +106,9 @@ def main(argv=None):
             deck.playing = "play" in what
             deck.sync = "sync" in what
             deck.master = "master" in what
+            for word in what.split(","):
+                if word.startswith("loop") and word[4:].isdigit():
+                    deck.loop = (0.0, float(word[4:]))
     if a.http_port >= 0:
         serve(world, a.http_host, a.http_port)
     log("running; Ctrl-C to stop")

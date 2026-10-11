@@ -33,13 +33,20 @@ class Deck:
         # the time anchor_t: its place now is counted on from there.
         self.anchor_t = time.time()
         self.anchor_pos = 0.0
+        # A loop: (the beat it starts at, its length in beats), or None. The
+        # deck goes round it, so its place never passes the loop's end.
+        self.loop = None
 
     def position(self, now):
         """Beats since the bar line, counted on from the anchor at the tempo
-        the deck plays at (a stopped deck stays where it stopped)."""
+        the deck plays at (a stopped deck stays where it stopped), round the
+        loop if there is one."""
         if not self.playing:
             return self.anchor_pos
-        return self.anchor_pos + (now - self.anchor_t) * self.tempo() / 60.0
+        pos = self.anchor_pos + (now - self.anchor_t) * self.tempo() / 60.0
+        if self.loop and pos >= self.loop[0] + self.loop[1]:
+            pos = self.loop[0] + (pos - self.loop[0]) % self.loop[1]
+        return pos
 
     def reanchor(self, now):
         self.anchor_pos = self.position(now)
@@ -113,7 +120,7 @@ class World:
             for n, d in self.decks.items():
                 entry = {"on": d.enabled, "play": d.playing, "sync": d.sync,
                          "master": d.master and d.enabled, "bpm": round(d.tempo(), 2),
-                         "name": d.name,
+                         "name": d.name, "loop": d.loop[1] if d.loop else 0, "loop_from": d.loop[0] if d.loop else 0,
                          "phase": [d.anchor_t, d.anchor_pos, round(d.tempo(), 2)]
                          if d.enabled and d.playing else None}
                 for protocol in self.protocols:
@@ -142,6 +149,18 @@ class World:
                 deck.anchor_pos = 0.0
         self.settle(change)
         log("%s %s" % (deck.name, "plays" if on else "stops"))
+        self.changed()
+
+    def set_loop(self, deck, beats):
+        """Sets a loop of `beats` beats (a whole number) that starts at the
+        beat the deck is in, or ends the loop (beats 0)."""
+        def change():
+            if beats:
+                deck.loop = (float(int(deck.position(time.time()))), float(beats))
+            else:
+                deck.loop = None
+        self.settle(change)
+        log("%s %s" % (deck.name, "loops %d beats" % beats if beats else "leaves its loop"))
         self.changed()
 
     def set_sync(self, deck, on):

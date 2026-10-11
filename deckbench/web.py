@@ -7,6 +7,8 @@
                                  play, sync or master; answers the new state
     POST /api/deck/<n>/<what>/<0|1>
                                  sets the switch instead of toggling it
+    POST /api/deck/<n>/loop/<beats>  a loop of that many beats from the beat the
+                                 deck is in (0 ends it)
 
 The page polls /api/state and counts the beat squares on from each deck's
 phase, so it needs nothing but a browser, on the machine or any that can reach
@@ -27,7 +29,7 @@ PAGE = r"""<!doctype html>
 <style>
 :root {
   --bg: #101114; --panel: #1a1b1f; --edge: #2c2e34; --text: #e1e4e8; --dim: #969aa2;
-  --off: #28292d; --on: #96dc78; --play: #78d278; --sync: #6eaaf0; --master: #f0a03c;
+  --off: #28292d; --on: #96dc78; --play: #78d278; --sync: #6eaaf0; --master: #f0a03c; --loop: #c88cf0;
   --beat1: #eb2828; --beat: #3c82eb; --unlit: #1e1f23;
   color-scheme: dark;
 }
@@ -56,6 +58,10 @@ button[data-what=on].on { background: var(--on); }
 button[data-what=play].on { background: var(--play); }
 button[data-what=sync].on { background: var(--sync); }
 button[data-what=master].on { background: var(--master); }
+button[data-what=loop].on { background: var(--loop); }
+button.n { min-width: 36px; }
+.loops { margin-top: 6px; }
+.loops .lbl { color: var(--dim); font-size: 12px; min-width: 64px; }
 button:disabled { opacity: .45; cursor: default; }
 button:focus-visible { outline: 2px solid var(--sync); outline-offset: 2px; }
 .beats { display: flex; gap: 4px; margin-left: 10px; }
@@ -78,6 +84,7 @@ button:focus-visible { outline: 2px solid var(--sync); outline-offset: 2px; }
 </main>
 <script>
 const WHAT = [["on", "ON"], ["play", "PLAY"], ["sync", "SYNC"], ["master", "MASTER"]];
+const LOOPS = [1, 2, 4, 8, 16, 32];
 let offset = 0, state = null, built = "";
 
 function build() {
@@ -104,6 +111,17 @@ function build() {
     const bpm = document.createElement("span");
     bpm.className = "bpm";
     line.appendChild(bpm);
+    const loops = document.createElement("div");
+    loops.className = "line loops";
+    loops.innerHTML = '<span class="lbl">LOOP</span>';
+    for (const beats of LOOPS) {
+      const b = document.createElement("button");
+      b.dataset.what = "loop"; b.dataset.beats = beats; b.className = "n";
+      b.textContent = beats; b.title = beats + " beats from where the deck is; again to end it";
+      b.addEventListener("click", () => loop(n, beats));
+      loops.appendChild(b);
+    }
+    d.appendChild(loops);
     root.appendChild(d);
   }
 }
@@ -112,7 +130,9 @@ function beat(d) {
   if (!d.phase) return 0;
   const [t, pos, bpm] = d.phase;
   const now = Date.now() / 1000 + offset;
-  return Math.floor(pos + (now - t) * bpm / 60) % 4 + 1;
+  let at = pos + (now - t) * bpm / 60;
+  if (d.loop && at >= d.loop_from + d.loop) at = d.loop_from + (at - d.loop_from) % d.loop;
+  return Math.floor(at) % 4 + 1;
 }
 
 function render() {
@@ -128,7 +148,8 @@ function render() {
       (d.address ? ' &middot; ' + esc(d.address) : "");
     for (const b of el.querySelectorAll("button")) {
       const what = b.dataset.what;
-      b.classList.toggle("on", !!d[what] && (what === "on" || d.on));
+      b.classList.toggle("on", what === "loop" ? d.on && d.loop === +b.dataset.beats
+                                               : !!d[what] && (what === "on" || d.on));
       b.disabled = what !== "on" && !d.on;
     }
     el.querySelector(".bpm").textContent = d.on ? d.bpm.toFixed(1) + " BPM" : "";
@@ -170,6 +191,11 @@ async function load(url, options) {
 
 async function click(n, what) {
   try { await load("api/deck/" + n + "/" + what, {method: "POST"}); render(); } catch (e) { fail(); }
+}
+
+async function loop(n, beats) {
+  const d = state.decks[n], now = d && d.loop === beats ? 0 : beats;     // again: ends it
+  try { await load("api/deck/" + n + "/loop/" + now, {method: "POST"}); render(); } catch (e) { fail(); }
 }
 
 function fail() {
@@ -225,6 +251,16 @@ def serve(world, host="127.0.0.1", port=8750):
                 except (ValueError, KeyError):
                     return self.send(404, '{"error": "no such deck"}')
                 what = parts[3]
+                if what == "loop" and len(parts) == 5:      # the loop's length in beats, 0 for none
+                    try:
+                        beats = int(parts[4])
+                    except ValueError:
+                        beats = -1
+                    if not 0 <= beats <= 64:
+                        return self.send(400, '{"error": "no such loop"}')
+                    if deck.enabled:
+                        world.set_loop(deck, beats)
+                    return self.send(200, json.dumps(world.snapshot()))
                 if len(parts) == 5:             # set, not toggle
                     want = parts[4] == "1"
                     current = {"on": deck.enabled, "play": deck.playing, "sync": deck.sync,

@@ -35,7 +35,7 @@ Options (`python -m deckbench --help`):
 
 - `--decks N` or `--numbers N,N,...`: the players (default 1 to 4)
 - `--on`: start them on (otherwise off; switch on from the page)
-- `--init DECK=play,sync,master`: start a deck on, playing, synced, the master
+- `--init DECK=play,sync,master,loopN`: start a deck on, playing, synced, the master, looping N beats
 - `--loaded DECK=SOURCE:SLOT:ID`, `--titles FILE`: the track a deck has loaded
   (from another player's database) and the titles each deck knows; the
   default is track 100 + the deck's number, from itself, "Track of deck N"
@@ -49,6 +49,7 @@ Options (`python -m deckbench --help`):
     GET  /api/state                   what the decks are, as JSON
     POST /api/deck/<n>/<what>         a click on a switch: on, play, sync, master
     POST /api/deck/<n>/<what>/<0|1>   set the switch instead
+    POST /api/deck/<n>/loop/<beats>   loop that many beats from the beat the deck is in (0: end it)
 
 `/api/state` has, for each deck, its switches, its tempo, its name, its track
 and, while it plays, a `phase` ([time, beats into its bar, tempo]) to count the

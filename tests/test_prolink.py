@@ -121,6 +121,22 @@ class Bench(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError):
             self.api("api/deck/9/on", post=True)
 
+    def test_loop_keeps_the_beat_in_the_track_in_it(self):
+        self.switch(2, "on", True)
+        self.switch(2, "play", True)
+        self.api("api/deck/2/loop/2", post=True)
+        self.assertEqual(self.api("api/state")["decks"]["2"]["loop"], 2)
+        seen = set()
+        end = time.time() + 3.0              # more than two rounds of a loop of 2 beats
+        while time.time() < end:
+            for p in collect(self.statuses, 0.3, lambda d: d[0x21] == 2):
+                seen.add(struct.unpack(">I", p[0xA0:0xA4])[0])
+        self.assertLessEqual(len(seen), 2, seen)
+        self.assertEqual(max(seen) - min(seen), len(seen) - 1)
+        self.api("api/deck/2/loop/0", post=True)
+        with self.assertRaises(urllib.error.HTTPError):
+            self.api("api/deck/2/loop/99", post=True)
+
     # -- what a deck sends --
     def test_off_deck_is_silent(self):
         self.switch(3, "on", False)

@@ -187,7 +187,7 @@ class LinkDeck:
         p[0x27] = 1 if deck.playing else 0               # activity
         p[0x28], p[0x29], p[0x2A] = self.source, self.slot, 1
         p[0x2C:0x30] = struct.pack(">I", self.rbid)
-        p[0x7B] = 3 if deck.playing else 5               # playing / paused
+        p[0x7B] = (4 if deck.loop else 3) if deck.playing else 5     # playing (looping) / paused
         p[0x7C:0x80] = b"1.00"
         p[0x84:0x88] = struct.pack(">I", self.sync_number)
         p[0x89] = self.flags()
