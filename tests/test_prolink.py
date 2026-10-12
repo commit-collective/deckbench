@@ -145,6 +145,25 @@ class Bench(unittest.TestCase):
         self.assertEqual(collect(self.statuses, 1.0, lambda d: d[0x21] == 3), [])
         self.switch(3, "on", True)
 
+    def test_fader_start_starts_and_stops_players(self):
+        self.switch(2, "on", True)
+        self.switch(3, "on", True)
+        self.switch(2, "play", True)
+        self.switch(3, "play", False)
+        packet = bytearray(0x28)
+        packet[:10] = MAGIC
+        packet[0x0A] = 0x02
+        packet[0x0B:0x13] = b"DJS-1000"
+        packet[0x1F], packet[0x21], packet[0x23] = 1, 4, 4
+        packet[0x24:0x28] = bytes((2, 1, 0, 2))             # leave 1, stop 2, start 3, leave 4
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        s.sendto(bytes(packet), ("127.255.255.255", BEAT_PORT))
+        time.sleep(0.5)
+        decks = self.api("api/state")["decks"]
+        self.assertFalse(decks["2"]["play"])
+        self.assertTrue(decks["3"]["play"])
+
     def test_keepalive(self):
         self.switch(2, "on", True)
         packets = collect(self.keepalives, 3.0, lambda d: d[0x0A] == 0x06)

@@ -461,6 +461,24 @@ class Prolink(Protocol):
             log("%s on %s: track %d:%d:%d at %.0f BPM"
                 % ((deck.name, link.address, link.source, link.slot, link.rbid, deck.base_bpm)))
         threading.Thread(target=self.sniff, daemon=True).start()
+        threading.Thread(target=self.faders, daemon=True).start()
+
+    def faders(self):
+        """Fader start packets (type 0x02, broadcast on 50001, as a mixer sends them): a byte for each
+        of the players 1 to 4, 0 start, 1 stop, 2 leave it."""
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(("", BEAT_PORT))
+        while True:
+            data, addr = s.recvfrom(2048)
+            if len(data) < 0x28 or data[:10] != MAGIC or data[0x0A] != 0x02:
+                continue
+            log("fader start from %d (%s): %s" % (data[0x21], data[0x0B:0x1F].rstrip(b"\0").decode("latin-1"),
+                                                  data[0x24:0x28].hex()))
+            for i in range(4):
+                deck = self.world.decks.get(i + 1)
+                if deck and deck.enabled and data[0x24 + i] in (0, 1):
+                    self.world.set_play(deck, data[0x24 + i] == 0)
 
     # -- what the World asks --
     def external_master_bpm(self):
