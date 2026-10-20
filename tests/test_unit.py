@@ -141,7 +141,7 @@ class Skipped(unittest.TestCase):
         self.assertIn("none announced itself in 0.3 s", scenario.skipped)
 
     def test_a_missing_adapter_skips_it(self):
-        scenario = Scenario({"name": "x", "requires": ["adapter"], "steps": []})
+        scenario = Scenario({"name": "x", "requires": ["adapter"], "unit_wait": 0.2, "steps": []})
         scenario.run(World())
         self.assertIn("adapter", scenario.skipped)
 
@@ -325,6 +325,31 @@ class Command(unittest.TestCase):
                              timeout=30, cwd=ROOT)
         self.assertEqual(out.returncode, 3, out.stdout + out.stderr)
         self.assertIn("skipped", out.stderr)
+
+    def run_scenarios(self, *scenarios):
+        import os
+        import tempfile
+        folder = tempfile.mkdtemp()
+        for name, data in scenarios:
+            with open(os.path.join(folder, name), "w", encoding="utf-8") as f:
+                json.dump(data, f)
+        return subprocess.run([sys.executable, "-m", "deckbench", "--numbers", "2", "--http-port", "-1", "--port-shift",
+                               str(fresh().shift), "--scenario", folder, "--then-exit"], capture_output=True, text=True,
+                              timeout=60, cwd=ROOT)
+
+    def test_a_folder_is_a_suite(self):
+        ok = {"name": "fine", "steps": [{"at": 0, "do": "log", "text": "x"}]}
+        out = self.run_scenarios(("1.json", ok), ("2.json", {"name": "needs", "requires": ["adapter"], "unit_wait": 0.2, "steps": []}))
+        self.assertEqual(out.returncode, 3, out.stderr)
+        self.assertIn("2 scenarios: 1 passed, 0 failed, 1 skipped", out.stderr)
+
+    def test_a_failed_expectation_is_status_1(self):
+        bad = {"name": "bad", "steps": [{"at": 0, "do": "expect_deck", "deck": 2, "match": {"on": True}, "within": 0.2}]}
+        ok = {"name": "fine", "steps": []}
+        out = self.run_scenarios(("1.json", bad), ("2.json", ok), ("3.json", {"name": "s", "requires": ["adapter"], "unit_wait": 0.1, "steps": []}))
+        self.assertEqual(out.returncode, 1, out.stderr)
+        self.assertIn("3 scenarios: 1 passed, 1 failed, 1 skipped", out.stderr)
+        self.assertIn("on is False (wanted True)", out.stderr)
 
 
 if __name__ == "__main__":

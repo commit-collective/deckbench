@@ -1,0 +1,27 @@
+{"name": "The unit follows the master with 30 % of the packets lost",
+ "requires": ["unit", "adapter"],
+ "steps": [
+  {"at": 0, "do": "log", "text": "Start from a known state: every deck off, nobody the master, the unit's SYNC off"},
+  {"at": 0, "deck": 2, "do": "off"}, {"at": 0, "deck": 3, "do": "off"}, {"at": 0, "deck": 4, "do": "off"},
+  {"at": 0, "do": "loss", "percent": 0},
+  {"at": 0.5, "deck": 2, "do": "on"}, {"at": 0.5, "deck": 3, "do": "on"},
+  {"at": 0.7, "deck": 2, "do": "play"}, {"at": 0.7, "deck": 2, "do": "sync"},
+  {"at": 1, "deck": 2, "do": "master", "when": {"master": true}},
+  {"at": 1, "do": "expect_unit", "match": {"master": false}, "within": 10},
+  {"at": 1.1, "deck": 2, "do": "release"}, {"at": 1.1, "deck": 2, "do": "unsync"}, {"at": 1.1, "deck": 2, "do": "stop"},
+  {"at": 1.5, "do": "unit", "press": "sync", "when": {"synced": true}},
+  {"at": 1.5, "do": "expect_unit", "match": {"synced": false, "lamp.sync": false}, "within": 5},
+
+  {"at": 2, "deck": 2, "do": "tempo", "bpm": 126}, {"at": 2, "deck": 2, "do": "play"}, {"at": 2.1, "deck": 2, "do": "master"},
+  {"at": 3, "do": "unit", "press": "sync"},
+  {"at": 3, "do": "expect_unit", "within": 10, "match": {"synced": true, "bpm": {"near": 126, "tol": 0.3}}},
+
+  {"at": 4, "do": "log", "text": "30 % of the datagrams are lost, and the tempo changes twice"},
+  {"at": 4, "do": "loss", "percent": 30},
+  {"at": 5, "deck": 2, "do": "tempo", "bpm": 124},
+  {"at": 5, "do": "expect_unit", "within": 12, "for": 2, "match": {"synced": true, "bpm": {"near": 124, "tol": 0.3}}},
+  {"at": 6, "deck": 2, "do": "tempo", "bpm": 130},
+  {"at": 6, "do": "expect_unit", "within": 12, "for": 2, "match": {"synced": true, "bpm": {"near": 130, "tol": 0.3}}},
+  {"at": 7, "do": "loss", "percent": 0},
+  {"at": 7, "do": "expect_unit", "within": 6, "for": 2, "match": {"synced": true, "bpm": {"near": 130, "tol": 0.3}}}
+ ]}

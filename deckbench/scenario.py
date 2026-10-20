@@ -37,8 +37,13 @@ What a step does (`deck` is the player number where a deck is meant):
                    within `within` seconds (default 2)
   unit             press a control of the device under test through the adapter: `press` (its name) or `send` (a raw line)
 
+Any step can have `when`, a match against the device under test (as in `expect_unit`): the step is done only if it holds
+at that moment, so a scenario can bring a device that keeps its state to where it starts: {"do": "unit", "press": "sync",
+"when": {"synced": false}}.
+
 A scenario can say what it `requires`: "unit" (the device has announced itself on the link, waited for up to `unit_wait`
-seconds, 10 by default) and "adapter" (an adapter is connected). If one is missing the scenario is skipped, not failed.
+seconds, 10 by default) and "adapter" (an adapter is connected, waited for just as long). If one is missing the scenario is
+skipped, not failed.
 
 `Scenario.run` does the steps at their times and gives the results: a list of (step, ok, message). Only the expectations and
 `unit` can fail.
@@ -82,6 +87,8 @@ class Scenario:
         do = step.get("do")
         if do not in ACTIONS:
             raise ScenarioError("step %r: no such action (%s)" % (step, ", ".join(ACTIONS)))
+        if "when" in step and not isinstance(step["when"], dict):
+            raise ScenarioError("step %r: when is a match, like {\"synced\": true}" % (step,))
         if do in DECK_ACTIONS and "deck" not in step:
             raise ScenarioError("step %r: %s needs a deck" % (step, do))
         for key, kinds in (("loop", ("beats",)), ("load", ("id",)), ("tempo", ("bpm",)), ("silence", ("seconds",)),
@@ -119,15 +126,17 @@ class Scenario:
 
     def unmet(self, world, clock=time.time, sleep=time.sleep, cancel=None):
         """What the scenario requires that is not there (a sentence), or None."""
-        if "adapter" in self.requires and not any(a.connected() for a in world.adapters):
-            return "it needs an adapter that is connected (--adapter), and none is"
-        if "unit" in self.requires:
-            end = clock() + self.unit_wait
-            while not world.unit_state().get("heard"):
-                if clock() >= end or (cancel and cancel()):
-                    return "it needs the device under test to be on the link, and none announced itself in %g s" % self.unit_wait
-                sleep(0.1)
-        return None
+        end = clock() + self.unit_wait
+        while True:
+            if "adapter" in self.requires and not any(a.connected() for a in world.adapters):
+                missing = "it needs an adapter that is connected (--adapter), and none was in %g s" % self.unit_wait
+            elif "unit" in self.requires and not world.unit_state().get("heard"):
+                missing = "it needs the device under test to be on the link, and none announced itself in %g s" % self.unit_wait
+            else:
+                return None
+            if clock() >= end or (cancel and cancel()):
+                return missing
+            sleep(0.1)
 
     @staticmethod
     def wait_for(read, match, within, hold=0.0, clock=time.time, sleep=time.sleep):
@@ -157,6 +166,8 @@ class Scenario:
     @staticmethod
     def do(world, step, first_event=0):
         do = step["do"]
+        if "when" in step and not matches(world.unit_state(), step["when"]):
+            return True, "(not done: %s)" % (explain(world.unit_state(), step["when"]) or "the condition does not hold")
         deck = world.decks.get(int(step["deck"])) if "deck" in step else None
         if "deck" in step and deck is None:
             return False, "no deck %s" % step["deck"]

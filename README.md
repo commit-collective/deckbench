@@ -56,6 +56,8 @@ Options (`python -m deckbench --help`):
   `netsh interface ipv4 show excludedportrange protocol=udp`). A unit on the real ports does not hear such decks
 - `--ready-file FILE`: once the decks and the page are up, write FILE, a JSON object with the page's address, the ports and the
   process. A script that starts the bench waits for it instead of guessing a delay
+- `--adapter NAME[:ARGS]`: what the device under test shows beyond the network, so a scenario can expect a lamp and press a
+  control. There is `djs1000-emu` for the emulator (see [docs/adapters.md](docs/adapters.md))
 - `--model NAME`: the device name the decks announce (default `CDJ-FAKEn`)
 - `--http-port PORT` (default 8750, -1 for none), `--http-host ADDRESS`
 
@@ -70,6 +72,8 @@ Options (`python -m deckbench --help`):
     POST /api/deck/<n>/load/<id>      the deck loads that track (optional ?title=...&bpm=...&source=<player>&slot=<n>), from its first beat
     POST /api/deck/<n>/unplug         the cable is pulled (also plug, and silence/<seconds>)
     POST /api/settings/<name>/<value> strict and refuse_db (0 or 1), model (the name the decks announce)
+    GET  /api/unit                    what is known of the device under test (the network's word, and the adapters')
+    POST /api/unit/press/<control>    press a control of the device under test through an adapter
     GET  /api/examples                the scenarios that come with the bench (deckbench/examples)
     GET  /api/stream                  the state, the events and the scenario as server-sent events (what the page follows)
     POST /api/loss/<percent>          that share of the datagrams is lost (0 for none)
@@ -116,6 +120,8 @@ From any other language, start `python -m deckbench --http-port 0 --ready-file r
     deckbench/ui/                 the page: index.html, app.css, app.js (no packages, no build step)
     deckbench/examples/           scenarios to start from (the page lists them, `--scenario` plays them)
     deckbench/events.py           what the device under test did, to wait for and check
+    deckbench/adapters/           what the device under test shows beyond the network (the DJS-1000 emulator's lamps and buttons)
+    deckbench/matching.py         matching the device's state against what a scenario expects
     deckbench/scenario.py         a timeline of what the decks do and what to expect
     deckbench/audio.py            the decks' sound, in real time
     deckbench/testing.py          a bench to start from a test (Bench)
@@ -124,6 +130,7 @@ From any other language, start `python -m deckbench --http-port 0 --ready-file r
     docs/real-network.md          showing the decks to a real unit on a real network
     docs/scenarios.md             scenarios, faults, events and the strict decks
     docs/audio.md                 the decks' sound
+    docs/adapters.md              seeing the device under test from the inside, and writing an adapter
 
 A protocol is a module that gives the World what to show of the decks and
 takes part in the changes that concern it (`core.Protocol`).

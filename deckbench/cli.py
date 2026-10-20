@@ -76,9 +76,12 @@ def main(argv=None):
                     help="serve the decks' sound (a drum loop in time with each playing deck) on this TCP port, as raw "
                          "stereo 16-bit 44.1 kHz samples in real time (default 0: none; 7320 is the emulator's)")
     ap.add_argument("--audio-decks", metavar="N,N,...", help="the decks that are heard (default all)")
-    ap.add_argument("--scenario", metavar="FILE", help="play a scenario (see deckbench/scenario.py) once it runs")
+    ap.add_argument("--scenario", action="append", default=[], metavar="FILE|FOLDER",
+                    help="play a scenario (see docs/scenarios.md) once it runs. Again for more, or a folder for each .json "
+                         "in it, in order (deckbench/examples/unit is a suite)")
     ap.add_argument("--then-exit", action="store_true",
-                    help="with --scenario: leave when it is over, with status 1 if an expectation failed")
+                    help="with --scenario: leave when they are over, with status 1 if an expectation failed, else 3 if "
+                         "one was skipped (its unit or adapter was not there), else 0")
     ap.add_argument("--adapter", action="append", default=[], metavar="NAME[:ARGS]",
                     help="what the device under test shows beyond the network, so a scenario can expect a lamp and press a "
                          "control (see deckbench/adapters). There is djs1000-emu[:HOST:PORT], the emulator's link "
@@ -120,12 +123,15 @@ def main(argv=None):
     world = World()
     if a.events:
         world.events = Events(a.events)
-    scenario = None
-    if a.scenario:
-        try:
-            scenario = Scenario.load(a.scenario)
-        except (OSError, ValueError, ScenarioError) as e:
-            ap.error("--scenario: %s" % e)
+    scenarios = []
+    for path in a.scenario:
+        files = sorted(os.path.join(path, f) for f in os.listdir(path) if f.endswith(".json")) \
+            if os.path.isdir(path) else [path]
+        for file in files:
+            try:
+                scenarios.append(Scenario.load(file))
+            except (OSError, ValueError, ScenarioError) as e:
+                ap.error("--scenario %s: %s" % (file, e))
     for i, n in enumerate(numbers):
         world.decks[n] = Deck(world, n, 128.0 - 2 * i, "deck %d" % n)
     addresses, broadcast = None, "127.255.255.255"
@@ -180,22 +186,33 @@ def main(argv=None):
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(world.info, f)
         os.replace(tmp, a.ready_file)               # it appears whole
-    failed = []
-    if scenario:
+    outcomes = []                               # (scenario, "passed" | "failed" | "skipped", what)
+    if scenarios:
         def play():
-            log("scenario %s: %d steps" % (scenario.name, len(scenario.steps)))
-            for step, ok, message in scenario.run(world, log=log):
-                if not ok:
-                    failed.append((step, message))
-            log("scenario %s: %s" % (scenario.name, "skipped, %s" % scenario.skipped if scenario.skipped
-                                      else "%d expectations failed" % len(failed) if failed else "done"))
+            for scenario in scenarios:
+                failed = []
+                log("scenario %s: %d steps" % (scenario.name, len(scenario.steps)))
+                for step, ok, message in scenario.run(world, log=log):
+                    if not ok:
+                        failed.append((step, message))
+                if scenario.skipped:
+                    outcomes.append((scenario, "skipped", scenario.skipped))
+                elif failed:
+                    outcomes.append((scenario, "failed", "%d failed: %s" % (len(failed), "; ".join(m for _, m in failed))))
+                else:
+                    outcomes.append((scenario, "passed", ""))
+                log("scenario %s: %s%s" % (scenario.name, outcomes[-1][1], ", " + outcomes[-1][2] if outcomes[-1][2] else ""))
+            if len(scenarios) > 1:
+                log("%d scenarios: %s" % (len(scenarios), ", ".join("%d %s" % (sum(1 for o in outcomes if o[1] == kind), kind)
+                                                                    for kind in ("passed", "failed", "skipped"))))
             if a.then_exit:
                 done.set()
         done = threading.Event()
         threading.Thread(target=play, daemon=True).start()
         if a.then_exit:
             done.wait()
-            return 3 if scenario.skipped else 1 if failed else 0
+            kinds = {o[1] for o in outcomes}
+            return 1 if "failed" in kinds else 3 if "skipped" in kinds else 0
     log("running; Ctrl-C to stop")
     try:
         while True:

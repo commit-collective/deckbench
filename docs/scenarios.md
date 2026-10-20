@@ -6,7 +6,8 @@ that moves, a cable that is pulled.
 
     python -m deckbench --scenario loop-and-stop.json --then-exit
 
-plays it once the bench runs and, with `--then-exit`, leaves when it is over with status 1 if an expectation failed.
+plays it once the bench runs and, with `--then-exit`, leaves when it is over with status 1 if an expectation failed. `--scenario`
+can be given again, or a folder, to play a suite in order: the status is 1 if one failed, else 3 if one was skipped, else 0.
 Without it the bench goes on, for the page and the API.
 
 ## The file
@@ -40,6 +41,11 @@ from the start), `do`, and what the action needs. `deck` is the player number.
 | `loss` (`percent`) | that share of the datagrams of all the decks is lost (0 for none) |
 | `log` (`text`) | a line in the log |
 | `expect` (`event`, `within`, `match`) | an event of the device under test is there within `within` seconds (5 by default) |
+| `expect_unit` (`match`, `within`, `for`) | what is known of the device under test matches within `within` seconds (5), and then for `for` more seconds if it is given |
+| `expect_deck` (`deck`, `match`, `within`, `for`) | the same for a deck: `on`, `play`, `sync`, `master`, `bpm`, `loop`, `unplugged`, `track_rbid`... (`within` is 2 by default) |
+| `unit` (`press` or `send`) | press a control of the device under test through an adapter, or send it a raw line |
+
+`load` can also take `source` (the player whose database the track is in) and `slot`.
 
 On the page: the **Scenario** tab has the JSON in an editor that says what is wrong with it and where, the examples that come with
 the bench (`deckbench/examples`, which `--scenario` plays too), the scenarios kept in the browser, OPEN and DOWNLOAD for files, RUN and
@@ -48,6 +54,29 @@ scenario as the body, 409 while one plays, 400 with the reason if it is not one)
 
 The same things can be done by hand: the page's API ([README](../README.md)) has them, and `Scenario.run(world)` plays one from
 Python.
+
+## Expecting things of the device
+
+`expect_unit` and `expect_deck` take a `match`: a dictionary of key and wanted value. A wanted value is a plain value (equal to
+it) or one of these:
+
+| | |
+|---|---|
+| `{"near": 128, "tol": 0.5}` | a number within `tol` (0.5 by default) of it |
+| `{"min": 100, "max": 140}` | a number in that range (an end can be left out) |
+| `{"in": [1, 2]}` | one of them |
+| `{"not": 3}` | anything but it, also when the key is not known |
+
+What is known of the device is the network's word (`heard`, `master`, `synced`, `playing`, `bpm`...) and what an adapter adds
+(`lamp.sync`...): the list is in [adapters.md](adapters.md). A key that is not known never matches. When an expectation fails the
+message says what was wrong: `bpm is 126.0 (wanted near 130 +-0.5)`.
+
+Any step can have `when`, a match against the device: the step is done only if it holds at that moment. It brings a device that
+keeps its state to where a scenario starts: `{"do": "unit", "press": "sync", "when": {"synced": true}}`.
+
+A scenario can say what it `requires`: `"unit"` (the device has announced itself on the link, waited for up to `unit_wait`
+seconds, 10 by default) and `"adapter"` (an adapter is connected, waited for just as long). When one is missing the scenario is
+skipped and not failed. The page says so, and the command line ends with status 3.
 
 ## Events
 
@@ -58,6 +87,8 @@ since the bench started), `kind` and what the kind adds.
 |---|---|---|
 | `unit_seen` | the unit announces itself with a player number | `number` |
 | `unit_master` | the unit takes or leaves the tempo master role | `on` |
+| `unit_sync` | the unit's sync flag turns on or off | `on` |
+| `unit_play` | the unit starts or stops playing | `on` |
 | `fader_start` | a fader start packet starts or stops a deck | `deck`, `action` (`start` or `stop`), `sender` |
 | `sync_command` | the unit tells a deck to sync, unsync or become the master | `deck`, `command`, `sender` |
 | `handoff_request` | the unit asks a deck to yield the master role | `deck`, `sender`, `granted` |

@@ -1,0 +1,26 @@
+{"name": "The unit takes the master role from a deck",
+ "requires": ["unit", "adapter"],
+ "steps": [
+  {"at": 0, "do": "log", "text": "Start from a known state: every deck off, nobody the master, the unit's SYNC off"},
+  {"at": 0, "deck": 2, "do": "off"}, {"at": 0, "deck": 3, "do": "off"}, {"at": 0, "deck": 4, "do": "off"},
+  {"at": 0, "do": "loss", "percent": 0},
+  {"at": 0.5, "deck": 2, "do": "on"}, {"at": 0.5, "deck": 3, "do": "on"},
+  {"at": 0.7, "deck": 2, "do": "play"}, {"at": 0.7, "deck": 2, "do": "sync"},
+  {"at": 1, "deck": 2, "do": "master", "when": {"master": true}},
+  {"at": 1, "do": "expect_unit", "match": {"master": false}, "within": 10},
+  {"at": 1.1, "deck": 2, "do": "release"}, {"at": 1.1, "deck": 2, "do": "unsync"}, {"at": 1.1, "deck": 2, "do": "stop"},
+  {"at": 1.5, "do": "unit", "press": "sync", "when": {"synced": true}},
+  {"at": 1.5, "do": "expect_unit", "match": {"synced": false, "lamp.sync": false}, "within": 5},
+
+  {"at": 2, "do": "log", "text": "Deck 2 plays as the master and the unit follows it"},
+  {"at": 2, "deck": 2, "do": "tempo", "bpm": 126}, {"at": 2, "deck": 2, "do": "play"}, {"at": 2.1, "deck": 2, "do": "master"},
+  {"at": 3, "do": "unit", "press": "sync"},
+  {"at": 3, "do": "expect_unit", "within": 10, "match": {"synced": true, "bpm": {"near": 126, "tol": 0.3}}},
+
+  {"at": 4, "do": "log", "text": "The unit presses MASTER: it asks deck 2, which yields"},
+  {"at": 4, "do": "unit", "press": "master"},
+  {"at": 4, "do": "expect", "event": "handoff_request", "within": 5, "match": {"deck": 2, "granted": true}},
+  {"at": 4, "do": "expect_unit", "within": 6, "match": {"master": true, "lamp.master": true}},
+  {"at": 4, "do": "expect_deck", "deck": 2, "within": 3, "match": {"master": false}},
+  {"at": 5, "do": "expect_unit", "within": 3, "for": 3, "match": {"master": true, "lamp.master": true}}
+ ]}

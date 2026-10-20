@@ -10,6 +10,15 @@ The first version, `v0.1.0`, once it is tagged.
 - A new page: a card for each deck (switches, beat squares, tempo display and slider, loops, cable, a track from any deck's database),
   and tabs for events (filter, pause, export), scenarios (editor, examples, saved ones, progress), the network and the settings.
   It follows a server-sent event stream and works in light and dark. The page is files (`deckbench/ui`), not a string in Python.
+- Scenarios can expect things of the device under test (`expect_unit`: its master role, sync, tempo, and the lamps an adapter
+  reads) and of the decks (`expect_deck`), press its controls (`unit`), act only `when` it is in a given state, and say what
+  they `require`. A scenario that needs a unit or an adapter that is not there is skipped, not failed. `--scenario` takes
+  several files or a folder and ends with a summary. Matchers: `near`, `min`, `max`, `in`, `not`.
+- Adapters: `--adapter djs1000-emu` reads the DJS-1000 emulator's lamps and presses its SYNC and MASTER. `GET /api/unit`,
+  `POST /api/unit/press/<control>`, and the Network tab shows the unit's state with buttons.
+- A library of scenarios for a unit (`deckbench/examples/unit`): it follows a master deck and its tempo, the master role passes
+  between a deck and the unit, and it keeps following after a cable pull and with 30 % of the packets lost.
+- More of the unit is heard: synced, playing, on air and the beat, and `unit_sync` and `unit_play` events.
 - Settings that can be changed while it runs: strict decks, database refusal and the model name (`/api/settings`).
 - A track can come from another deck's database and slot (`/api/deck/<n>/load/<id>?source=&slot=`). A title with a percent sign
   is no longer decoded twice.

@@ -529,31 +529,29 @@ class Prolink(Protocol):
 
     def check_ports(self):
         """Binds every port the decks need once, to say so at once if one cannot be had (the threads that serve
-        them would die unseen). Raises PortError."""
-        for link in self.decks.values():
-            for kind, port in ((socket.SOCK_DGRAM, self.ports.beat), (socket.SOCK_STREAM, self.ports.query),
-                               (socket.SOCK_STREAM, self.ports.db)):
-                s = socket.socket(socket.AF_INET, kind)
-                try:
-                    if kind == socket.SOCK_STREAM and os.name != "nt":
-                        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)     # a port in TIME_WAIT is free
-                    s.bind((link.address, port))
-                except OSError as e:
-                    proto = "UDP" if kind == socket.SOCK_DGRAM else "TCP"
-                    raise PortError("%s %d on %s: %s. Something else holds it, or the system keeps it back "
-                                    "(on Windows: netsh interface ipv4 show excludedportrange protocol=udp). "
-                                    "--port-shift moves every port of the decks, for a bench beside it or for the tests."
-                                    % (proto, port, link.address, e.strerror or e)) from e
-                finally:
-                    s.close()
-        for port in (self.ports.announce, self.ports.update):
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        them would die unseen). Raises PortError.
+
+        It binds as the decks do: where sockets can share a port with SO_REUSEADDR (Linux, macOS) an emulator that
+        listens on the same ports does not stop the bench, as it must not. Windows lets any socket that sets it take
+        over a port, so there it binds without, and a program that holds the port (rekordbox does) is found."""
+        share = os.name != "nt"
+        wanted = [(socket.SOCK_DGRAM, link.address, self.ports.beat) for link in self.decks.values()]
+        wanted += [(socket.SOCK_STREAM, link.address, port) for link in self.decks.values()
+                   for port in (self.ports.query, self.ports.db)]
+        wanted += [(socket.SOCK_DGRAM, "0.0.0.0", self.ports.announce), (socket.SOCK_DGRAM, "0.0.0.0", self.ports.update)]
+        for kind, address, port in wanted:
+            s = socket.socket(socket.AF_INET, kind)
             try:
-                s.bind(("0.0.0.0", port))       # without SO_REUSEADDR: another bench on the port must make it fail
+                if share:
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    if kind == socket.SOCK_DGRAM and hasattr(socket, "SO_REUSEPORT"):
+                        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                s.bind((address, port))
             except OSError as e:
-                raise PortError("UDP %d: %s. The system keeps it back or another program holds it exclusively "
+                raise PortError("%s %d on %s: %s. Something else holds it, or the system keeps it back "
                                 "(on Windows: netsh interface ipv4 show excludedportrange protocol=udp). "
-                                "--port-shift moves every port of the decks." % (port, e.strerror or e)) from e
+                                "--port-shift moves every port of the decks, for a bench beside it or for the tests."
+                                % ("UDP" if kind == socket.SOCK_DGRAM else "TCP", port, address, e.strerror or e)) from e
             finally:
                 s.close()
 

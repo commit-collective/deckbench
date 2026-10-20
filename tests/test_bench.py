@@ -46,10 +46,10 @@ class Started(unittest.TestCase):
 
     def test_says_why_it_did_not_come_up(self):
         with Bench(numbers=[2], timeout=5) as first:
-            second = Bench(numbers=[3], shift=first.shift, timeout=5)
+            second = Bench(numbers=[2], shift=first.shift, timeout=5)
             with self.assertRaises(BenchError) as error:
                 second.start()
-            self.assertIn("UDP", str(error.exception))
+            self.assertIn("--port-shift", str(error.exception))
 
 
 class Command(unittest.TestCase):

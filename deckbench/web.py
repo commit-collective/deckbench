@@ -19,7 +19,7 @@
     GET  /api/scenario               how far it is: running, name, total, results, failed, stopped
     GET  /api/events?since=<n>       what the device under test did, from the n-th event on (see events.py)
     POST /api/events/clear           forget them
-    GET  /api/examples               the scenarios that come with the bench: [{file, name, text}]
+    GET  /api/examples               the scenarios that come with the bench: [{file, group, name, text}]
     GET  /api/stream                 the same as server-sent events: `state` (when the decks change, and every second),
                                      `event` (each event of the device under test), `scenario` (how far it is)
     GET  /api/unit                   what is known of the device under test: the network's word and the adapters' (lamps...)
@@ -47,14 +47,16 @@ KINDS = {".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".s
 
 
 def examples():
-    """The scenarios that come with the bench (deckbench/examples): [{file, name, text}]."""
+    """The scenarios that come with the bench (deckbench/examples, and its folder `unit` for a device under test):
+    [{file, group, name, text}]."""
     out = []
-    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples")
-    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
-        if name.endswith(".json"):
-            with open(os.path.join(folder, name), encoding="utf-8") as f:
-                text = f.read()
-            out.append({"file": name, "name": json.loads(text).get("name", name[:-5]), "text": text})
+    base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples")
+    for group, folder in (("Examples", base), ("Unit under test", os.path.join(base, "unit"))):
+        for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+            if name.endswith(".json"):
+                with open(os.path.join(folder, name), encoding="utf-8") as f:
+                    text = f.read()
+                out.append({"file": name, "group": group, "name": json.loads(text).get("name", name[:-5]), "text": text})
     return out
 
 

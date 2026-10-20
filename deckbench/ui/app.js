@@ -349,7 +349,11 @@ function fillSaved() {
 async function loadExamples() {
   try {
     S.examples = await (await fetch("api/examples")).json();
-    for (const [i, ex] of S.examples.entries()) $("scexample").append(h("option", {value: i}, ex.name));
+    const groups = {};
+    for (const [i, ex] of S.examples.entries()) {
+      if (!groups[ex.group]) { groups[ex.group] = h("optgroup", {label: ex.group}); $("scexample").append(groups[ex.group]); }
+      groups[ex.group].append(h("option", {value: i}, ex.name));
+    }
     if (!$("scenario").value && S.examples.length) setScenario(S.examples[0].text);
   } catch (e) { /* no examples */ }
 }
