@@ -18,7 +18,7 @@ from deckbench import audio
 from deckbench.core import Deck, World
 from deckbench.events import Events
 from deckbench.protocols import prolink
-from _ports import PORTS
+from _ports import fresh
 from deckbench.protocols.prolink import (MAGIC, Prolink, message, num,
                                          read_exact, read_message)
 from deckbench.scenario import Scenario, ScenarioError
@@ -200,12 +200,13 @@ class AudioTests(unittest.TestCase):
 class Faults(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.ports = fresh()
         cls.world = world_of(1, 4)
-        cls.prolink = Prolink(cls.world, ports=PORTS)
+        cls.prolink = Prolink(cls.world, ports=cls.ports)
         cls.prolink.start()
         cls.server = serve(cls.world, "127.0.0.1", 0)
         cls.url = "http://127.0.0.1:%d/" % cls.server.server_address[1]
-        cls.statuses, cls.beats = listen(PORTS.update), listen(PORTS.beat)
+        cls.statuses, cls.beats = listen(cls.ports.update), listen(cls.ports.beat)
 
     @classmethod
     def tearDownClass(cls):
@@ -276,7 +277,7 @@ class Faults(unittest.TestCase):
         packet[0x24:0x28] = bytes([1, 2, 2, 2])                       # stop deck 1, leave the others
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        s.sendto(bytes(packet), ("127.255.255.255", PORTS.beat))
+        s.sendto(bytes(packet), ("127.255.255.255", self.ports.beat))
         s.close()
         event = self.world.events.wait("fader_start", timeout=3, start=before, deck=1, action="stop")
         self.assertIsNotNone(event)
@@ -359,8 +360,9 @@ class Faults(unittest.TestCase):
 class Strict(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.ports = fresh()
         cls.world = world_of(6)
-        cls.prolink = Prolink(cls.world, strict=True, ports=PORTS)
+        cls.prolink = Prolink(cls.world, strict=True, ports=cls.ports)
         cls.prolink.start()
         cls.world.set_enabled(cls.world.decks[6], True)
         time.sleep(0.3)
@@ -370,7 +372,7 @@ class Strict(unittest.TestCase):
         cls.world.set_enabled(cls.world.decks[6], False)
 
     def connect(self, requester):
-        c = socket.create_connection(("127.0.0.6", PORTS.db), timeout=3)
+        c = socket.create_connection(("127.0.0.6", self.ports.db), timeout=3)
         c.sendall(num(1))
         read_exact(c, 5)
         c.sendall(message(0xFFFFFFFE, 0x0000, [("n", requester)]))

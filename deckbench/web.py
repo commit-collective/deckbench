@@ -3,6 +3,7 @@
 
     GET  /                       the page: a row for each deck
     GET  /api/state              what the decks are (core.World.snapshot())
+    GET  /api/ready              {"ready": true} and how the bench was started (version, ports, pid)
     POST /api/deck/<n>/<what>    a click on switch <what> of deck <n>: on,
                                  play, sync or master; answers the new state
     POST /api/deck/<n>/<what>/<0|1>
@@ -423,6 +424,8 @@ def serve(world, host="127.0.0.1", port=8750):
                 self.send(200, PAGE, "text/html")
             elif path == "/api/state":
                 self.send(200, json.dumps(world.snapshot()))
+            elif path == "/api/ready":
+                self.send(200, json.dumps(dict(world.info, ready=True)))
             elif path == "/api/scenario":
                 self.send(200, json.dumps(runner.snapshot()))
             elif path == "/api/events":

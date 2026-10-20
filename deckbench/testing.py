@@ -1,0 +1,169 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+"""A bench to start from a test, in a process of its own, and to drive over its API.
+
+    from deckbench.testing import Bench
+
+    with Bench(numbers=[2, 3], on=True, init={2: "play,loop4"}) as bench:
+        # point the device under test at bench.ports (shifted from the real ones unless shift=0), then:
+        bench.post("api/deck/2/tempo/126")
+        event = bench.wait_event("fader_start", timeout=5, deck=2)
+        assert bench.state()["decks"]["2"]["playing"]
+
+It takes the first free range of ports (`free_shift`), starts `python -m deckbench` and waits for it to say it is ready
+(`--ready-file`), so there is no sleep to guess. What the bench printed is in `bench.output()`, to read when a test fails.
+"""
+import json
+import os
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+
+from .protocols.prolink import Ports
+
+
+def ports_free(ports, address="0.0.0.0"):
+    """True if every port of `ports` can be bound."""
+    for kind, port in ((socket.SOCK_DGRAM, ports.announce), (socket.SOCK_DGRAM, ports.beat),
+                       (socket.SOCK_DGRAM, ports.update), (socket.SOCK_STREAM, ports.query),
+                       (socket.SOCK_STREAM, ports.db)):
+        s = socket.socket(socket.AF_INET, kind)
+        try:
+            s.bind((address, port))
+        except OSError:
+            return False
+        finally:
+            s.close()
+    return True
+
+
+def free_shift(start=1000, stop=10000, step=100):
+    """The first shift (see Ports) at which every port is free. RuntimeError if there is none.
+    DECKBENCH_PORT_SHIFT, when set, is used as it is."""
+    if os.environ.get("DECKBENCH_PORT_SHIFT"):
+        return int(os.environ["DECKBENCH_PORT_SHIFT"])
+    for shift in range(start, stop, step):
+        if ports_free(Ports.shifted(shift)):
+            return shift
+    raise RuntimeError("no free range of ports: set DECKBENCH_PORT_SHIFT")
+
+
+class BenchError(RuntimeError):
+    pass
+
+
+class Bench:
+    """A bench in a process of its own. `numbers`: the players. `on`: start them on. `init`: {deck: "play,sync,loop4"}.
+    `shift`: the ports' shift (None: the first free, 0: the real ones). `args`: more command line arguments."""
+
+    def __init__(self, numbers=(1, 2, 3, 4), on=False, init=None, shift=None, args=(), timeout=15.0):
+        self.numbers = list(numbers)
+        self.shift = free_shift() if shift is None else shift
+        self.timeout = timeout
+        self.cmd = [sys.executable, "-m", "deckbench", "--numbers", ",".join(map(str, self.numbers)),
+                    "--http-port", "0", "--port-shift", str(self.shift)]
+        if on:
+            self.cmd.append("--on")
+        for deck, what in (init or {}).items():
+            self.cmd += ["--init", "%d=%s" % (deck, what)]
+        self.cmd += list(args)
+        self.proc = None
+        self.printed = ""
+        self.info = {}
+        self.url = None
+        self.ports = Ports.shifted(self.shift)
+
+    # -- life --
+    def start(self):
+        self.dir = tempfile.mkdtemp(prefix="deckbench-")
+        ready = os.path.join(self.dir, "ready.json")
+        self.log = open(os.path.join(self.dir, "output.txt"), "w+b")
+        self.proc = subprocess.Popen(self.cmd + ["--ready-file", ready], stdout=self.log, stderr=subprocess.STDOUT,
+                                     cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        end = time.time() + self.timeout
+        while time.time() < end:
+            if os.path.exists(ready):
+                with open(ready, encoding="utf-8") as f:
+                    self.info = json.load(f)
+                self.url = self.info["http"]
+                return self
+            if self.proc.poll() is not None:
+                break
+            time.sleep(0.05)
+        out = self.output()
+        self.stop()
+        raise BenchError("the bench did not come up in %.0f s:\n%s" % (self.timeout, out))
+
+    def stop(self):
+        if self.proc and self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(5)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                self.proc.wait()
+        self.proc = None
+        self.output()                       # reads what it printed, to keep it after the file is closed
+        self.log.close()
+
+    def __enter__(self):
+        return self.start()
+
+    def __exit__(self, *exc):
+        self.stop()
+
+    def output(self):
+        """What the bench printed."""
+        if self.log.closed:
+            return self.printed
+        self.log.flush()
+        self.log.seek(0)
+        self.printed = self.log.read().decode("utf-8", "replace")
+        return self.printed
+
+    # -- the API --
+    def request(self, path, post=False, body=None):
+        data = None if body is None else (body if isinstance(body, bytes) else json.dumps(body).encode("utf-8"))
+        req = urllib.request.Request(self.url + path.lstrip("/"), data=data, method="POST" if post or data else "GET")
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            raise BenchError("%s: %d %s" % (path, e.code, e.read().decode("utf-8", "replace"))) from None
+
+    def get(self, path):
+        return self.request(path)
+
+    def post(self, path, body=None):
+        return self.request(path, post=True, body=body)
+
+    def state(self):
+        return self.get("api/state")
+
+    def events(self, since=0):
+        return self.get("api/events?since=%d" % since)
+
+    def wait_event(self, kind, timeout=5.0, since=0, **match):
+        """The first event of that kind with all of `match`, from event `since` on. None after `timeout` seconds."""
+        end = time.time() + timeout
+        while True:
+            for item in self.events(since):
+                if item["kind"] == kind and all(item.get(k) == v for k, v in match.items()):
+                    return item
+            if time.time() >= end:
+                return None
+            time.sleep(0.1)
+
+    def run_scenario(self, scenario, timeout=60.0):
+        """Plays a scenario (a dict) to its end and gives how far it got: `failed` lists the expectations that failed."""
+        self.post("api/scenario", scenario)
+        end = time.time() + timeout
+        while time.time() < end:
+            state = self.get("api/scenario")
+            if not state.get("running"):
+                return state
+            time.sleep(0.2)
+        raise BenchError("the scenario did not end in %.0f s" % timeout)

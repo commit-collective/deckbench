@@ -35,6 +35,7 @@ found to need.
 """
 import select
 import random
+import os
 import socket
 import struct
 import threading
@@ -533,7 +534,8 @@ class Prolink(Protocol):
                                (socket.SOCK_STREAM, self.ports.db)):
                 s = socket.socket(socket.AF_INET, kind)
                 try:
-                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    if kind == socket.SOCK_STREAM and os.name != "nt":
+                        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)     # a port in TIME_WAIT is free
                     s.bind((link.address, port))
                 except OSError as e:
                     proto = "UDP" if kind == socket.SOCK_DGRAM else "TCP"
@@ -546,8 +548,7 @@ class Prolink(Protocol):
         for port in (self.ports.announce, self.ports.update):
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                s.bind(("0.0.0.0", port))
+                s.bind(("0.0.0.0", port))       # without SO_REUSEADDR: another bench on the port must make it fail
             except OSError as e:
                 raise PortError("UDP %d: %s. The system keeps it back or another program holds it exclusively "
                                 "(on Windows: netsh interface ipv4 show excludedportrange protocol=udp). "

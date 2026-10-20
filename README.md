@@ -52,6 +52,8 @@ Options (`python -m deckbench --help`):
 - `--port-shift N`: move every port of the decks by N (UDP 50000-50002, TCP 12523 and 1051). For a bench beside something that
   holds the real ports, or where the system keeps them back (Windows can reserve UDP 50000-50059, see
   `netsh interface ipv4 show excludedportrange protocol=udp`). A unit on the real ports does not hear such decks
+- `--ready-file FILE`: once the decks and the page are up, write FILE, a JSON object with the page's address, the ports and the
+  process. A script that starts the bench waits for it instead of guessing a delay
 - `--model NAME`: the device name the decks announce (default `CDJ-FAKEn`)
 - `--http-port PORT` (default 8750, -1 for none), `--http-host ADDRESS`
 
@@ -66,6 +68,7 @@ Options (`python -m deckbench --help`):
     POST /api/deck/<n>/load/<id>      the deck loads that track (optional ?title=...&bpm=...), from its first beat
     POST /api/deck/<n>/unplug         the cable is pulled (also plug, and silence/<seconds>)
     POST /api/loss/<percent>          that share of the datagrams is lost (0 for none)
+    GET  /api/ready                   {"ready": true} and how the bench was started (version, pid, ports, address)
     GET  /api/events?since=<n>        what the device under test did, from the n-th event on
     POST /api/events/clear            forget them
     POST /api/scenario                play the scenario in the body (JSON), one at a time; /stop ends it; GET gives how far it is
@@ -84,6 +87,22 @@ hand-off to a player that asks, the sync commands, the database and the API.
 It runs on Linux, Windows and macOS (macOS needs the aliases 127.0.0.2 and up on `lo0`).
 The tests do not use the real ports: they take the first free range, or the shift in `DECKBENCH_PORT_SHIFT`.
 
+## Use it from a test
+
+`deckbench.testing.Bench` starts a bench in a process of its own, on a free range of ports, waits until it is ready and
+stops it at the end. Its methods drive the API:
+
+    from deckbench.testing import Bench
+
+    with Bench(numbers=[2, 3], on=True, init={2: "play,loop4"}) as bench:
+        # point the device under test at bench.ports, then:
+        bench.post("api/deck/2/tempo/126")
+        event = bench.wait_event("fader_start", timeout=5, deck=2)
+        result = bench.run_scenario(scenario_dict)     # result["failed"]: the expectations that failed
+        print(bench.output())                          # what the bench printed
+
+From any other language, start `python -m deckbench --http-port 0 --ready-file ready.json` and read the file.
+
 ## Layout
 
     deckbench/core.py             a deck, and the world of decks, whatever the protocol
@@ -92,6 +111,7 @@ The tests do not use the real ports: they take the first free range, or the shif
     deckbench/events.py           what the device under test did, to wait for and check
     deckbench/scenario.py         a timeline of what the decks do and what to expect
     deckbench/audio.py            the decks' sound, in real time
+    deckbench/testing.py          a bench to start from a test (Bench)
     deckbench/cli.py              the command line
     docs/prolink.md               what it sends, and what a unit under test was found to need
     docs/real-network.md          showing the decks to a real unit on a real network

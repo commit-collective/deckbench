@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 """The command line: python -m deckbench [options]."""
 import argparse
+import json
+import os
 import socket
 import sys
 import threading
@@ -94,6 +96,9 @@ def main(argv=None):
                     help="move every port of the decks by N (UDP 50000-50002, TCP 12523 and 1051), to run beside "
                          "something that holds the real ones or where the system keeps them back. A unit on the real "
                          "ports does not hear them (default 0)")
+    ap.add_argument("--ready-file", metavar="FILE",
+                    help="once the decks and the page are up, write FILE: a JSON object with the page's address, the "
+                         "ports and the process (a script starting the bench waits for it; GET /api/ready says the same)")
     ap.add_argument("--http-port", type=int, default=8750, metavar="PORT",
                     help="the page and API's port (default 8750, 0 for any, -1 for none)")
     ap.add_argument("--http-host", default="127.0.0.1", metavar="ADDRESS",
@@ -149,8 +154,17 @@ def main(argv=None):
             for word in what.split(","):
                 if word.startswith("loop") and word[4:].isdigit():
                     deck.loop = (0.0, float(word[4:]))
-    if a.http_port >= 0:
-        serve(world, a.http_host, a.http_port)
+    world.info.update(version=__version__, pid=os.getpid(), numbers=numbers,
+                      ports={"announce": link.ports.announce, "beat": link.ports.beat, "update": link.ports.update,
+                             "query": link.ports.query, "db": link.ports.db})
+    server = serve(world, a.http_host, a.http_port) if a.http_port >= 0 else None
+    if server:
+        world.info["http"] = "http://%s:%d/" % (a.http_host, server.server_address[1])
+    if a.ready_file:
+        tmp = a.ready_file + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(world.info, f)
+        os.replace(tmp, a.ready_file)               # it appears whole
     failed = []
     if scenario:
         def play():
