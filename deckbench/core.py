@@ -13,6 +13,8 @@ import sys
 import threading
 import time
 
+from .events import Events
+
 
 def log(text):
     sys.stderr.write("deckbench: %s\n" % text)
@@ -36,6 +38,9 @@ class Deck:
         # A loop: (the beat it starts at, its length in beats), or None. The
         # deck goes round it, so its place never passes the loop's end.
         self.loop = None
+        # The cable is pulled: it says nothing and answers nothing (the protocols see to that).
+        self.unplugged = False
+        self.track = None                    # the track it has loaded: (rekordbox id, title), or None for its first
 
     def position(self, now):
         """Beats since the bar line, counted on from the anchor at the tempo
@@ -70,6 +75,8 @@ class World:
         self.protocols = []
         self.lock = threading.RLock()
         self.listeners = []                  # called, with no argument, after a change
+        self.events = Events()               # what the device under test did, to wait for and check (events.py)
+        self.loss = 0.0                      # the share of the datagrams of all the decks that is lost, 0 to 1
 
     # -- what the decks are, together --
     def master_deck(self):
@@ -121,13 +128,14 @@ class World:
                 entry = {"on": d.enabled, "play": d.playing, "sync": d.sync,
                          "master": d.master and d.enabled, "bpm": round(d.tempo(), 2),
                          "name": d.name, "loop": d.loop[1] if d.loop else 0, "loop_from": d.loop[0] if d.loop else 0,
+                         "unplugged": d.unplugged,
                          "phase": [d.anchor_t, d.anchor_pos, round(d.tempo(), 2)]
                          if d.enabled and d.playing else None}
                 for protocol in self.protocols:
                     entry.update(protocol.describe(d))
                 decks[str(n)] = entry
             info = {p.name: p.info() for p in self.protocols}
-        return {"now": time.time(), "decks": decks, "protocols": info}
+        return {"now": time.time(), "decks": decks, "protocols": info, "loss": round(self.loss * 100, 1)}
 
     # -- what is done to a deck --
     def set_enabled(self, deck, on):
@@ -164,6 +172,49 @@ class World:
                 deck.loop = None
         self.settle(change)
         log("%s %s" % (deck.name, "loops %d beats" % beats if beats else "leaves its loop"))
+        self.changed()
+
+    def set_tempo(self, deck, bpm):
+        """The pitch fader: the deck plays at `bpm` (its place in its bar is kept)."""
+        def change():
+            deck.base_bpm = float(bpm)
+        self.settle(change)
+        log("%s plays at %.1f BPM" % (deck.name, deck.base_bpm))
+        self.changed()
+
+    def load_track(self, deck, rbid, title=None, bpm=None):
+        """The deck loads the track with that rekordbox id (from its own database, with that title if one is given, and
+        at that tempo): it starts from its first beat, as a loaded track does, and the protocols tell the network."""
+        def change():
+            deck.track = (int(rbid), title)
+            if bpm:
+                deck.base_bpm = float(bpm)
+            deck.anchor_t = time.time()
+            deck.anchor_pos = 0.0
+            deck.loop = None
+        self.settle(change)
+        for protocol in self.protocols:
+            protocol.track_loaded(deck, int(rbid), title)
+        log("%s loads track %d%s" % (deck.name, int(rbid), " (%s)" % title if title else ""))
+        self.changed()
+
+    def set_unplugged(self, deck, on):
+        """Pulls the cable (the deck says nothing and answers nothing) or plugs it in again."""
+        deck.unplugged = bool(on)
+        log("%s %s" % (deck.name, "is unplugged" if on else "is plugged in"))
+        self.changed()
+
+    def silence(self, deck, seconds):
+        """Unplugs the deck for `seconds`, then plugs it in."""
+        self.set_unplugged(deck, True)
+        timer = threading.Timer(float(seconds), self.set_unplugged, args=(deck, False))
+        timer.daemon = True
+        timer.start()
+
+    def set_loss(self, percent):
+        """`percent` of the datagrams of all the decks are lost (0 for none)."""
+        self.loss = max(0.0, min(100.0, float(percent))) / 100.0
+        log("%.0f %% of the datagrams are lost" % (self.loss * 100))
         self.changed()
 
     def set_sync(self, deck, on):
@@ -237,6 +288,10 @@ class Protocol:
         pass
 
     def master_released(self, deck):
+        pass
+
+    def track_loaded(self, deck, rbid, title):
+        """The deck has loaded a track (its rekordbox id, and its title if one was given)."""
         pass
 
     def take_master(self, deck):

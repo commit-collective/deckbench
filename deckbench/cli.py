@@ -2,11 +2,16 @@
 """The command line: python -m deckbench [options]."""
 import argparse
 import socket
+import sys
+import threading
 import time
 
 from . import __version__
 from .core import Deck, World, log
+from .audio import AudioServer
+from .events import Events
 from .protocols.prolink import Prolink
+from .scenario import Scenario, ScenarioError
 from .web import serve
 
 
@@ -60,6 +65,18 @@ def main(argv=None):
     ap.add_argument("--refuse-db", action="store_true",
                     help="the decks' database servers turn metadata requests down, as real decks "
                          "do those of a device that is not a player they know")
+    ap.add_argument("--strict", action="store_true",
+                    help="the decks behave as a CDJ-2000NXS2 or an XDJ-1000MK2 does: they serve the players 1 to 4 that "
+                         "announced themselves and nobody else (a fifth device gets no answer, a unit that is not a "
+                         "player has its requests turned down)")
+    ap.add_argument("--audio-port", type=int, default=0, metavar="PORT",
+                    help="serve the decks' sound (a drum loop in time with each playing deck) on this TCP port, as raw "
+                         "stereo 16-bit 44.1 kHz samples in real time (default 0: none; 7320 is the emulator's)")
+    ap.add_argument("--audio-decks", metavar="N,N,...", help="the decks that are heard (default all)")
+    ap.add_argument("--scenario", metavar="FILE", help="play a scenario (see deckbench/scenario.py) once it runs")
+    ap.add_argument("--then-exit", action="store_true",
+                    help="with --scenario: leave when it is over, with status 1 if an expectation failed")
+    ap.add_argument("--events", metavar="FILE", help="write what the device under test does to FILE, a JSON object a line")
     ap.add_argument("--model", help="the device name every deck announces (default CDJ-FAKEn)")
     ap.add_argument("--status-length", type=lambda x: int(x, 0), default=0x124, metavar="N",
                     help="the length of the Pro DJ Link status packets (default 0x124)")
@@ -81,6 +98,14 @@ def main(argv=None):
 
     numbers = [int(x) for x in a.numbers.split(",")] if a.numbers else list(range(1, a.decks + 1))
     world = World()
+    if a.events:
+        world.events = Events(a.events)
+    scenario = None
+    if a.scenario:
+        try:
+            scenario = Scenario.load(a.scenario)
+        except (OSError, ValueError, ScenarioError) as e:
+            ap.error("--scenario: %s" % e)
     for i, n in enumerate(numbers):
         world.decks[n] = Deck(world, n, 128.0 - 2 * i, "deck %d" % n)
     addresses, broadcast = None, "127.255.255.255"
@@ -96,7 +121,11 @@ def main(argv=None):
     Prolink(world, loaded=parse_loaded(a.loaded),
             titles=parse_titles(a.titles) if a.titles else None,
             model=a.model, status_length=a.status_length,
-            addresses=addresses, broadcast=broadcast, refuse_db=a.refuse_db).start()
+            addresses=addresses, broadcast=broadcast, refuse_db=a.refuse_db, strict=a.strict).start()
+    if a.audio_port:
+        heard = {int(x) for x in a.audio_decks.split(",")} if a.audio_decks else None
+        server = AudioServer(world, "127.0.0.1", a.audio_port, heard)
+        log("sound on tcp://127.0.0.1:%d (raw stereo 16-bit 44.1 kHz)" % server.port)
     log("broadcasting to %s" % broadcast)
     for n, deck in world.decks.items():
         wanted = [item.partition("=")[2] for item in a.init if int(item.partition("=")[0]) == n]
@@ -111,9 +140,25 @@ def main(argv=None):
                     deck.loop = (0.0, float(word[4:]))
     if a.http_port >= 0:
         serve(world, a.http_host, a.http_port)
+    failed = []
+    if scenario:
+        def play():
+            log("scenario %s: %d steps" % (scenario.name, len(scenario.steps)))
+            for step, ok, message in scenario.run(world, log=log):
+                if not ok:
+                    failed.append((step, message))
+            log("scenario %s: %s" % (scenario.name, "%d expectations failed" % len(failed) if failed else "done"))
+            if a.then_exit:
+                done.set()
+        done = threading.Event()
+        threading.Thread(target=play, daemon=True).start()
+        if a.then_exit:
+            done.wait()
+            return 1 if failed else 0
     log("running; Ctrl-C to stop")
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         pass
+    return 0

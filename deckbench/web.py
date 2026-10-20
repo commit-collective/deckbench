@@ -9,6 +9,12 @@
                                  sets the switch instead of toggling it
     POST /api/deck/<n>/loop/<beats>  a loop of that many beats from the beat the
                                  deck is in (0 ends it)
+    POST /api/deck/<n>/tempo/<bpm>   the pitch fader: the deck plays at that tempo
+    POST /api/deck/<n>/load/<id>     the deck loads that track (optional ?title=...&bpm=...)
+    POST /api/deck/<n>/unplug        the cable is pulled (plug: plugged in; silence/<seconds>: unplugged for a while)
+    POST /api/loss/<percent>         that share of the datagrams is lost (0 for none)
+    GET  /api/events?since=<n>       what the device under test did, from the n-th event on (see events.py)
+    POST /api/events/clear           forget them
 
 The page polls /api/state and counts the beat squares on from each deck's
 phase, so it needs nothing but a browser, on the machine or any that can reach
@@ -16,6 +22,7 @@ the port (by default it listens on 127.0.0.1 only).
 """
 import json
 import threading
+from urllib.parse import parse_qs, unquote, urlparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .core import log
@@ -246,11 +253,52 @@ def serve(world, host="127.0.0.1", port=8750):
                 self.send(200, PAGE, "text/html")
             elif path == "/api/state":
                 self.send(200, json.dumps(world.snapshot()))
+            elif path == "/api/events":
+                try:
+                    since = int(parse_qs(urlparse(self.path).query).get("since", ["0"])[0])
+                except ValueError:
+                    since = 0
+                self.send(200, json.dumps(world.events.since(since)))
             else:
                 self.send(404, '{"error": "not found"}')
 
         def do_POST(self):
             parts = self.path.split("?")[0].strip("/").split("/")
+            query = parse_qs(urlparse(self.path).query)
+            if parts == ["api", "events", "clear"]:
+                world.events.clear()
+                return self.send(200, "[]")
+            if len(parts) == 3 and parts[:2] == ["api", "loss"]:
+                try:
+                    world.set_loss(float(parts[2]))
+                except ValueError:
+                    return self.send(400, '{"error": "no such share"}')
+                return self.send(200, json.dumps(world.snapshot()))
+            if len(parts) in (4, 5) and parts[:2] == ["api", "deck"] and parts[3] in (
+                    "tempo", "load", "unplug", "plug", "silence"):
+                try:
+                    deck = world.decks[int(parts[2])]
+                except (ValueError, KeyError):
+                    return self.send(404, '{"error": "no such deck"}')
+                what = parts[3]
+                try:
+                    if what == "tempo" and len(parts) == 5:
+                        world.set_tempo(deck, float(parts[4]))
+                    elif what == "load" and len(parts) == 5:
+                        bpm = query.get("bpm", [None])[0]
+                        world.load_track(deck, int(parts[4]), unquote(query["title"][0]) if "title" in query else None,
+                                         float(bpm) if bpm else None)
+                    elif what == "unplug" and len(parts) == 4:
+                        world.set_unplugged(deck, True)
+                    elif what == "plug" and len(parts) == 4:
+                        world.set_unplugged(deck, False)
+                    elif what == "silence" and len(parts) == 5:
+                        world.silence(deck, float(parts[4]))
+                    else:
+                        return self.send(400, '{"error": "no such action"}')
+                except ValueError:
+                    return self.send(400, '{"error": "no such value"}')
+                return self.send(200, json.dumps(world.snapshot()))
             if len(parts) in (4, 5) and parts[:2] == ["api", "deck"]:
                 try:
                     deck = world.decks[int(parts[2])]

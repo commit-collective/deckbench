@@ -41,6 +41,13 @@ Options (`python -m deckbench --help`):
   default is track 100 + the deck's number, from itself, "Track of deck N"
 - `--bind ADDRESS,...`, `--netmask`, `--broadcast`: decks on a real network, with an
   address each (see [docs/real-network.md](docs/real-network.md)); default the loopback
+- `--strict`: the decks behave as a CDJ-2000NXS2 or an XDJ-1000MK2 does: they serve the players 1 to 4 that announced
+  themselves, a fifth device gets no answer and a unit that is not a player (a DJS-1000 in drum machine mode) has its
+  requests turned down
+- `--audio-port PORT`, `--audio-decks N,N`: the decks' sound on a TCP port, in real time (see [docs/audio.md](docs/audio.md))
+- `--scenario FILE`, `--then-exit`: play a timeline of what the decks do and what to expect of the device under test
+  (see [docs/scenarios.md](docs/scenarios.md))
+- `--events FILE`: what the device under test did, a JSON object a line
 - `--model NAME`: the device name the decks announce (default `CDJ-FAKEn`)
 - `--http-port PORT` (default 8750, -1 for none), `--http-host ADDRESS`
 
@@ -50,6 +57,13 @@ Options (`python -m deckbench --help`):
     POST /api/deck/<n>/<what>         a click on a switch: on, play, sync, master
     POST /api/deck/<n>/<what>/<0|1>   set the switch instead
     POST /api/deck/<n>/loop/<beats>   loop that many beats from the beat the deck is in (0: end it)
+
+    POST /api/deck/<n>/tempo/<bpm>    the pitch fader: the deck plays at that tempo
+    POST /api/deck/<n>/load/<id>      the deck loads that track (optional ?title=...&bpm=...), from its first beat
+    POST /api/deck/<n>/unplug         the cable is pulled (also plug, and silence/<seconds>)
+    POST /api/loss/<percent>          that share of the datagrams is lost (0 for none)
+    GET  /api/events?since=<n>        what the device under test did, from the n-th event on
+    POST /api/events/clear            forget them
 
 `/api/state` has, for each deck, its switches, its tempo, its name, its track
 and, while it plays, a `phase` ([time, beats into its bar, tempo]) to count the
@@ -69,9 +83,14 @@ It uses UDP 50000-50002 on the loopback: nothing else may listen there.
     deckbench/core.py             a deck, and the world of decks, whatever the protocol
     deckbench/protocols/prolink.py  Pro DJ Link
     deckbench/web.py              the page and the API
+    deckbench/events.py           what the device under test did, to wait for and check
+    deckbench/scenario.py         a timeline of what the decks do and what to expect
+    deckbench/audio.py            the decks' sound, in real time
     deckbench/cli.py              the command line
     docs/prolink.md               what it sends, and what a unit under test was found to need
     docs/real-network.md          showing the decks to a real unit on a real network
+    docs/scenarios.md             scenarios, faults, events and the strict decks
+    docs/audio.md                 the decks' sound
 
 A protocol is a module that gives the World what to show of the decks and
 takes part in the changes that concern it (`core.Protocol`).

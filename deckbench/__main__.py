@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT OR Apache-2.0
+import sys
 from .cli import main
 
-main()
+sys.exit(main())

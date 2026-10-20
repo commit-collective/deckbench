@@ -34,6 +34,7 @@ djl-analysis, Beat Link); docs/prolink.md has what is set, and what a unit was
 found to need.
 """
 import select
+import random
 import socket
 import struct
 import threading
@@ -121,9 +122,10 @@ def read_message(conn):
 class LinkDeck:
     """What a deck is to Pro DJ Link, beside what it is (core.Deck)."""
 
-    def __init__(self, net, deck, loaded, titles, model, address, broadcast, refuse_db=False):
+    def __init__(self, net, deck, loaded, titles, model, address, broadcast, refuse_db=False, strict=False):
         self.net = net
         self.refuse_db = refuse_db          # the database server turns requests down (as it does a stranger's)
+        self.strict = strict                # answers only the players it knows, as a CDJ-2000NXS2 does (see session())
         self.deck = deck
         self.address = address              # the address it is on
         self.broadcast = broadcast          # where its broadcasts go
@@ -227,6 +229,20 @@ class LinkDeck:
         return bytes(p)
 
     # -- UDP --
+    @property
+    def silent(self):
+        """The cable is pulled."""
+        return self.deck.unplugged
+
+    def send(self, sock, packet, addr):
+        """A datagram, unless the cable is pulled, and unless the network loses it (World.loss)."""
+        if self.deck.unplugged:
+            return
+        loss = self.net.world.loss
+        if loss and random.random() < loss:
+            return
+        sock.sendto(packet, addr)
+
     def announce(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -235,17 +251,17 @@ class LinkDeck:
         last_keep = 0.0
         while True:
             now = time.time()
-            if not self.deck.enabled:
+            if not self.deck.enabled or self.deck.unplugged:
                 last_keep = last_status = 0.0
                 time.sleep(0.1)
                 continue
             if now - last_keep >= 2.0:
-                s.sendto(self.keepalive(), (self.broadcast, ANNOUNCE_PORT))
+                self.send(s, self.keepalive(), (self.broadcast, ANNOUNCE_PORT))
                 last_keep = now
             if now - last_status >= 0.2:
                 with self.net.world.lock:
                     packet = self.status()
-                s.sendto(packet, (self.broadcast, UPDATE_PORT))
+                self.send(s, packet, (self.broadcast, UPDATE_PORT))
                 last_status = now
             time.sleep(0.05)
 
@@ -256,7 +272,7 @@ class LinkDeck:
         deck = self.deck
         sent = None                         # the beat (counted from the anchor) last sent
         while True:
-            if not (deck.enabled and deck.playing):
+            if not (deck.enabled and deck.playing) or deck.unplugged:
                 sent = None
                 time.sleep(0.05)
                 continue
@@ -268,7 +284,7 @@ class LinkDeck:
                 due = (beat + 1 - pos) * 60.0 / tempo
                 packet = self.beat(pos) if sent != beat else None
             if packet:
-                s.sendto(packet, (self.broadcast, BEAT_PORT))
+                self.send(s, packet, (self.broadcast, BEAT_PORT))
                 sent = beat
             time.sleep(min(max(due, 0.002), 0.02))
 
@@ -282,7 +298,7 @@ class LinkDeck:
         deck, world = self.deck, self.net.world
         while True:
             data, addr = s.recvfrom(2048)
-            if not deck.enabled or len(data) < 0x25 or data[:10] != MAGIC:
+            if not deck.enabled or deck.unplugged or len(data) < 0x25 or data[:10] != MAGIC:
                 continue
             kind, sender = data[0x0A], data[0x21]
             if kind not in (0x26, 0x2A):
@@ -290,6 +306,7 @@ class LinkDeck:
                     % (deck.name, kind, sender, len(data), data[0x1F:].hex()))
             if kind == 0x26:                                     # master hand-off request
                 with world.lock:
+                    world.events.add("handoff_request", deck=deck.number, sender=sender, granted=bool(deck.master))
                     if not deck.master:
                         log("%s: hand-off request from %d, but it is not the master"
                             % (deck.name, sender))
@@ -299,12 +316,13 @@ class LinkDeck:
                 reply = header(0x27, self.name) + bytes([
                     0x01, 0x00, self.number, 0x00, 0x08, 0x00, 0x00, 0x00, self.number,
                     0x00, 0x00, 0x00, 0x01])
-                out.sendto(bytes(reply), (addr[0], UPDATE_PORT))
+                self.send(out, bytes(reply), (addr[0], UPDATE_PORT))
                 threading.Timer(4.0, self.finish_handoff, args=(sender,)).start()
                 world.changed()
             elif kind == 0x2A:                                   # a sync command
                 command = data[0x2B] if len(data) > 0x2B else 0
                 log("%s: sync command %#x from %d" % (deck.name, command, sender))
+                world.events.add("sync_command", deck=deck.number, sender=sender, command=command)
                 if command == 0x10:
                     world.set_sync(deck, True)
                 elif command == 0x20:
@@ -357,7 +375,7 @@ class LinkDeck:
         srv.listen(5)
         while True:
             conn, _ = srv.accept()
-            if not self.deck.enabled:
+            if not self.deck.enabled or self.deck.unplugged:
                 conn.close()
                 continue
             try:
@@ -376,10 +394,18 @@ class LinkDeck:
         srv.listen(5)
         while True:
             conn, _ = srv.accept()
-            if not self.deck.enabled:
+            if not self.deck.enabled or self.deck.unplugged:
                 conn.close()
                 continue
             threading.Thread(target=self.session, args=(conn,), daemon=True).start()
+
+    def unknown_player(self, requester):
+        """Strict: a device is only a player this deck knows if it announced itself with that number (the unit under test
+        does, in player mode: in drum machine mode it has no number on the link, and the decks turn its requests down)."""
+        if not self.strict:
+            return False
+        unit = self.net.unit
+        return not (unit["number"] and requester == unit["number"])
 
     def session(self, conn):
         name = self.deck.name
@@ -389,10 +415,21 @@ class LinkDeck:
             while True:
                 txid, mtype, args = read_message(conn)
                 if mtype == 0x0000:                         # query context setup
+                    requester = args[0][1]
+                    self.net.world.events.add("db_connect", deck=self.number, requester=requester)
+                    if self.strict and not 1 <= requester <= 4:
+                        # A CDJ-2000NXS2 or an XDJ-1000MK2 serves the players 1 to 4 only: a device with any other
+                        # number (a fifth one) gets no answer at all.
+                        log("%s: no answer to device %d (strict: players 1 to 4 only)" % (name, requester))
+                        self.net.world.events.add("db_ignored", deck=self.number, requester=requester)
+                        break
                     conn.sendall(message(txid, 0x4000, [("n", 0), ("n", self.number)]))
-                    log("%s: query context for device %d" % (name, args[0][1]))
-                elif mtype == 0x2002 and self.refuse_db:    # as it answers a device it does not know
+                    log("%s: query context for device %d" % (name, requester))
+                elif mtype == 0x2002 and (self.refuse_db or self.unknown_player(dmst_requester(args))):
+                    # as it answers a device it does not know (a unit in drum machine mode is not a player)
                     log("%s: metadata request turned down" % name)
+                    self.net.world.events.add("metadata_request", deck=self.number, requester=dmst_requester(args),
+                                              rbid=args[1][1], answered=False)
                     conn.sendall(message(txid, 0x0100, []))
                 elif mtype == 0x2002:                       # track metadata request
                     dmst, rbid = args[0][1], args[1][1]
@@ -400,6 +437,8 @@ class LinkDeck:
                     title = self.titles.get((slot, rbid))
                     log("%s: metadata for id %d slot %d from device %d: %s"
                         % (name, rbid, slot, dmst >> 24, title))
+                    self.net.world.events.add("metadata_request", deck=self.number, requester=dmst >> 24, rbid=rbid,
+                                              answered=title is not None, title=title)
                     self.queries.append(rbid)
                     track = (rbid, title)
                     count = 11 if title is not None else 0xFFFFFFFF
@@ -424,13 +463,18 @@ class LinkDeck:
         conn.close()
 
 
+def dmst_requester(args):
+    """The device that asks, in the first argument of a metadata request (its number is the first byte)."""
+    return (args[0][1] >> 24) & 0xFF
+
+
 # ---- the protocol -----------------------------------------------------------
 
 class Prolink(Protocol):
     name = "prolink"
 
     def __init__(self, world, loaded=None, titles=None, model=None, status_length=0x124,
-                 addresses=None, broadcast=BROADCAST, refuse_db=False):
+                 addresses=None, broadcast=BROADCAST, refuse_db=False, strict=False):
         """world.decks must have the decks (core.Deck, by player number) already.
         loaded: {deck: (source player, slot, rekordbox id)}; titles: {source
         player: {(slot, id): title}}. A deck has by default the track 100 + its
@@ -438,7 +482,8 @@ class Prolink(Protocol):
         {deck: address} (default 127.0.0.<number>); broadcast: where the broadcasts
         go (default 127.255.255.255, that of the loopback). refuse_db: the database servers
         turn metadata requests down (as real decks do those of a device that is not a
-        player they know)."""
+        player they know). strict: the decks behave as a CDJ-2000NXS2 does: they answer the players 1 to 4 that announced
+        themselves and nobody else (a fifth device gets no answer, a unit that is not a player has its requests turned down)."""
         self.world = world
         self.status_length = status_length
         self.unit = {"number": 0, "ip": None, "master": False, "bpm": None}   # the unit under test
@@ -450,7 +495,7 @@ class Prolink(Protocol):
         for n, deck in world.decks.items():
             self.decks[n] = LinkDeck(self, deck, loaded.get(n, (n, 3, 100 + n)),
                                      known.get(n, {}), model,
-                                     (addresses or {}).get(n, "127.0.0.%d" % n), broadcast, refuse_db)
+                                     (addresses or {}).get(n, "127.0.0.%d" % n), broadcast, refuse_db, strict)
         world.protocols.append(self)
 
     def start(self):
@@ -477,8 +522,10 @@ class Prolink(Protocol):
                                                   data[0x24:0x28].hex()))
             for i in range(4):
                 deck = self.world.decks.get(i + 1)
-                if deck and deck.enabled and data[0x24 + i] in (0, 1):
-                    self.world.set_play(deck, data[0x24 + i] == 0)
+                if deck and deck.enabled and not deck.unplugged and data[0x24 + i] in (0, 1):
+                    action = "start" if data[0x24 + i] == 0 else "stop"
+                    self.world.events.add("fader_start", deck=i + 1, action=action, sender=data[0x21])
+                    self.world.set_play(deck, action == "start")
 
     # -- what the World asks --
     def external_master_bpm(self):
@@ -517,6 +564,13 @@ class Prolink(Protocol):
         link = self.decks.get(deck.number)
         if link:
             link.handing_to = 0xFF
+
+    def track_loaded(self, deck, rbid, title):
+        link = self.decks.get(deck.number)
+        if not link:
+            return
+        link.source, link.rbid = deck.number, rbid        # from its own database
+        link.titles[(link.slot, rbid)] = title if title is not None else "Track %d" % rbid
 
     def take_master(self, deck):
         link = self.decks.get(deck.number)
@@ -601,6 +655,7 @@ class Prolink(Protocol):
                         if unit["number"] != data[0x24]:
                             unit["number"] = data[0x24]
                             log("the unit under test is player %d" % data[0x24])
+                            world.events.add("unit_seen", number=data[0x24])
                         unit["ip"] = ".".join(str(b) for b in data[0x2C:0x30])
                     elif port == UPDATE_PORT and data[0x0A] == 0x0A and len(data) > 0x93:
                         master = bool(data[0x89] & 0x20)
@@ -613,6 +668,7 @@ class Prolink(Protocol):
                         if master != unit["master"]:
                             log("the unit under test %s the tempo master"
                                 % ("is now" if master else "is no longer"))
+                            world.events.add("unit_master", on=master)
                         unit["master"] = master
                         # The BPM field is the track's; the tempo it plays at is that
                         # times the pitch (0x100000 is no change), as on a CDJ.
