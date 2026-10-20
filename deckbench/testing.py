@@ -14,6 +14,7 @@ It takes the first free range of ports (`free_shift`), starts `python -m deckben
 """
 import json
 import os
+import shlex
 import socket
 import subprocess
 import sys
@@ -57,19 +58,25 @@ class BenchError(RuntimeError):
 
 class Bench:
     """A bench in a process of its own. `numbers`: the players. `on`: start them on. `init`: {deck: "play,sync,loop4"}.
-    `shift`: the ports' shift (None: the first free, 0: the real ones). `args`: more command line arguments."""
+    `shift`: the ports' shift (None: the first free, 0: the real ones). `args`: more command line arguments.
 
-    def __init__(self, numbers=(1, 2, 3, 4), on=False, init=None, shift=None, args=(), timeout=15.0):
+    `wsl`: run the bench inside WSL (on Windows), for a device that lives there, such as an emulator on the Linux loopback:
+    True for the default distribution or the name of one. The page and the API are then reached through WSL's localhost
+    forwarding. The ports are WSL's own, so shift 0 is the real ones of a device that listens there."""
+
+    def __init__(self, numbers=(1, 2, 3, 4), on=False, init=None, shift=None, args=(), timeout=15.0, wsl=None):
         self.numbers = list(numbers)
-        self.shift = free_shift() if shift is None else shift
+        self.shift = free_shift() if shift is None and not wsl else (0 if shift is None else shift)
         self.timeout = timeout
-        self.cmd = [sys.executable, "-m", "deckbench", "--numbers", ",".join(map(str, self.numbers)),
-                    "--http-port", "0", "--port-shift", str(self.shift)]
+        self.wsl = [] if not wsl else ["wsl.exe"] + (["-d", wsl] if isinstance(wsl, str) else []) + ["--"]
+        self.args = ["--numbers", ",".join(map(str, self.numbers)), "--http-port", "0", "--port-shift", str(self.shift)]
+        if self.wsl:
+            self.args += ["--http-host", "0.0.0.0"]               # WSL forwards localhost to what listens on any address
         if on:
-            self.cmd.append("--on")
+            self.args.append("--on")
         for deck, what in (init or {}).items():
-            self.cmd += ["--init", "%d=%s" % (deck, what)]
-        self.cmd += list(args)
+            self.args += ["--init", "%d=%s" % (deck, what)]
+        self.args += list(args)
         self.proc = None
         self.printed = ""
         self.info = {}
@@ -77,18 +84,31 @@ class Bench:
         self.ports = Ports.shifted(self.shift)
 
     # -- life --
+    def in_wsl(self, path):
+        """A Windows path as WSL sees it."""
+        out = subprocess.run(self.wsl + ["wslpath", "-a", path.replace("\\", "/")], capture_output=True, text=True, timeout=30)
+        if out.returncode or not out.stdout.strip():
+            raise BenchError("WSL did not answer (%s)" % (out.stdout + out.stderr).strip())
+        return out.stdout.strip().splitlines()[-1]
+
     def start(self):
         self.dir = tempfile.mkdtemp(prefix="deckbench-")
         ready = os.path.join(self.dir, "ready.json")
         self.log = open(os.path.join(self.dir, "output.txt"), "w+b")
-        self.proc = subprocess.Popen(self.cmd + ["--ready-file", ready], stdout=self.log, stderr=subprocess.STDOUT,
-                                     cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if self.wsl:
+            script = "cd %s && exec python3 -m deckbench %s --ready-file %s" % (
+                shlex.quote(self.in_wsl(root)), " ".join(shlex.quote(a) for a in self.args), shlex.quote(self.in_wsl(ready)))
+            self.proc = subprocess.Popen(self.wsl + ["bash", "-lc", script], stdout=self.log, stderr=subprocess.STDOUT)
+        else:
+            self.proc = subprocess.Popen([sys.executable, "-m", "deckbench"] + self.args + ["--ready-file", ready],
+                                         stdout=self.log, stderr=subprocess.STDOUT, cwd=root)
         end = time.time() + self.timeout
         while time.time() < end:
             if os.path.exists(ready):
                 with open(ready, encoding="utf-8") as f:
                     self.info = json.load(f)
-                self.url = self.info["http"]
+                self.url = self.info["http"].replace("//0.0.0.0:", "//127.0.0.1:")
                 return self
             if self.proc.poll() is not None:
                 break
@@ -98,6 +118,12 @@ class Bench:
         raise BenchError("the bench did not come up in %.0f s:\n%s" % (self.timeout, out))
 
     def stop(self):
+        if self.wsl:                                           # ending wsl.exe would leave the bench running in WSL
+            if self.info.get("pid"):
+                subprocess.run(self.wsl + ["kill", str(self.info["pid"])], capture_output=True, timeout=30)
+            else:                                              # it never said it was ready: find it by its ready file
+                name = os.path.basename(self.dir)
+                subprocess.run(self.wsl + ["pkill", "-f", "[%s]%s/ready.json" % (name[0], name[1:])], capture_output=True, timeout=30)
         if self.proc and self.proc.poll() is None:
             self.proc.terminate()
             try:

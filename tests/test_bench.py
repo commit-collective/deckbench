@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 """The bench in a process of its own, as a test of something else starts it (deckbench.testing)."""
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -60,6 +61,20 @@ class Command(unittest.TestCase):
                                  cwd=ROOT)
             self.assertEqual(out.returncode, 2)
             self.assertIn("--port-shift", out.stderr)
+
+
+@unittest.skipUnless(os.name == "nt" and shutil.which("wsl.exe"), "needs Windows with WSL")
+class InWsl(unittest.TestCase):
+    def test_runs_in_wsl_and_stops_there(self):
+        with Bench(numbers=[2, 3], on=True, init={2: "play"}, wsl=True) as bench:
+            self.assertEqual(bench.shift, 0)                          # WSL's own ports: the real ones
+            self.assertTrue(bench.state()["decks"]["2"]["play"])
+            bench.post("api/deck/2/tempo/121")
+            self.assertEqual(bench.state()["decks"]["2"]["bpm"], 121.0)
+            pid = bench.info["pid"]
+        gone = subprocess.run(["wsl.exe", "--", "bash", "-c", "kill -0 %d 2> /dev/null && echo alive" % pid],
+                              capture_output=True, text=True, timeout=30)
+        self.assertNotIn("alive", gone.stdout)
 
 
 if __name__ == "__main__":
