@@ -34,6 +34,7 @@ What a step does (`deck` is the player number where a deck is meant):
 `Scenario.run` does the steps at their times and gives the results: a list of (step, ok, message). Only `expect` can fail.
 """
 import json
+import threading
 import time
 
 DECK_ACTIONS = ("on", "off", "play", "stop", "sync", "unsync", "master", "release", "loop", "unloop", "load", "tempo",
@@ -71,20 +72,33 @@ class Scenario:
                     if need not in step:
                         raise ScenarioError("step %r: %s needs %s" % (step, do, need))
 
-    def run(self, world, clock=time.time, sleep=time.sleep, log=None):
-        """Runs the steps against the World, at their times (`clock` and `sleep` can be replaced to test). The results."""
+    def run(self, world, clock=time.time, sleep=time.sleep, log=None, on_step=None, cancel=None):
+        """Runs the steps against the World, at their times (`clock` and `sleep` can be replaced to test). The results.
+        `on_step(step, ok, message)` is called after each step, and the run ends early when `cancel()` is true."""
         results = []
         begin = clock()
         first_event = len(world.events.items)
         for step in self.steps:
-            wait = begin + float(step.get("at", 0)) - clock()
-            if wait > 0:
-                sleep(wait)
+            while True:
+                wait = begin + float(step.get("at", 0)) - clock()
+                if cancel and cancel():
+                    return results
+                if wait <= 0:
+                    break
+                sleep(min(wait, 0.2))
             ok, message = self.do(world, step, first_event)
             results.append((step, ok, message))
+            if on_step:
+                on_step(step, ok, message)
             if log:
                 log("%6.2f s  %s: %s%s" % (clock() - begin, step["do"], message or "ok", "" if ok else "  FAILED"))
         return results
+
+    @staticmethod
+    def describe(step):
+        """A step in a few words, for a list."""
+        extra = ", ".join("%s=%s" % (k, v) for k, v in step.items() if k not in ("at", "do", "deck"))
+        return "%s%s%s" % (step["do"], " deck %s" % step["deck"] if "deck" in step else "", " (%s)" % extra if extra else "")
 
     @staticmethod
     def do(world, step, first_event=0):
@@ -133,3 +147,48 @@ class Scenario:
                 return False, "no %s event %s within %s s" % (step["event"], step.get("match", {}), step.get("within", 5))
             return True, "%s at %.2f s" % (step["event"], found["t"])
         return True, ""
+
+
+class Runner:
+    """Plays one scenario at a time in a thread and keeps how far it is, for the page: `snapshot()`."""
+
+    def __init__(self, world):
+        self.world = world
+        self.lock = threading.Lock()
+        self.thread = None
+        self.stopping = False
+        self.state = {"running": False, "name": None, "total": 0, "results": [], "failed": 0, "stopped": False}
+
+    def start(self, data):
+        """Starts playing `data` (what a scenario file holds). ScenarioError if it is not one, RuntimeError if one plays."""
+        scenario = Scenario(data)
+        with self.lock:
+            if self.state["running"]:
+                raise RuntimeError("a scenario is playing")
+            self.stopping = False
+            self.state = {"running": True, "name": scenario.name, "total": len(scenario.steps), "results": [],
+                          "failed": 0, "stopped": False}
+        self.thread = threading.Thread(target=self._play, args=(scenario,), daemon=True)
+        self.thread.start()
+
+    def _on_step(self, step, ok, message):
+        with self.lock:
+            self.state["results"].append({"at": step.get("at", 0), "what": Scenario.describe(step), "ok": ok,
+                                          "message": message})
+            if not ok:
+                self.state["failed"] += 1
+
+    def _play(self, scenario):
+        try:
+            scenario.run(self.world, on_step=self._on_step, cancel=lambda: self.stopping)
+        finally:
+            with self.lock:
+                self.state["running"] = False
+                self.state["stopped"] = self.stopping
+
+    def stop(self):
+        self.stopping = True
+
+    def snapshot(self):
+        with self.lock:
+            return dict(self.state, results=list(self.state["results"]))

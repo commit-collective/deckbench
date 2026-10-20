@@ -13,6 +13,9 @@
     POST /api/deck/<n>/load/<id>     the deck loads that track (optional ?title=...&bpm=...)
     POST /api/deck/<n>/unplug        the cable is pulled (plug: plugged in; silence/<seconds>: unplugged for a while)
     POST /api/loss/<percent>         that share of the datagrams is lost (0 for none)
+    POST /api/scenario               plays the scenario in the body (JSON, see scenario.py); 409 if one plays
+    POST /api/scenario/stop          ends it
+    GET  /api/scenario               how far it is: running, name, total, results, failed, stopped
     GET  /api/events?since=<n>       what the device under test did, from the n-th event on (see events.py)
     POST /api/events/clear           forget them
 
@@ -26,6 +29,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .core import log
+from .scenario import Runner, ScenarioError
 
 PAGE = r"""<!doctype html>
 <html lang="en">
@@ -96,6 +100,9 @@ button.warn.on { background: var(--master); color: #0a0a0a; }
 .events .t { color: var(--dim); display: inline-block; min-width: 56px; }
 .events .k { color: var(--sync); display: inline-block; min-width: 130px; }
 .bench { color: var(--dim); font-size: 12px; margin-top: 4px; }
+textarea { width: 100%; font: 12px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: var(--bg);
+  color: var(--text); border: 1px solid var(--edge); border-radius: 6px; padding: 6px; resize: vertical; }
+.events .bad { color: var(--master); }
 </style>
 </head>
 <body>
@@ -109,6 +116,20 @@ button.warn.on { background: var(--master); color: #0a0a0a; }
     <input type="range" id="loss" min="0" max="100" step="5" value="0">
     <output id="lossout">0 %</output>
     <div class="bench" id="bench"></div>
+  </section>
+  <section class="panel">
+    <h2>Scenario <span style="float:right"><input type="file" id="scfile" accept=".json,application/json" style="display:none">
+      <button id="scload" class="n" style="min-width:60px;height:24px">OPEN</button>
+      <button id="scrun" class="n" style="min-width:52px;height:24px">RUN</button>
+      <button id="scstop" class="n warn" style="min-width:52px;height:24px" disabled>STOP</button></span></h2>
+    <textarea id="scenario" spellcheck="false" rows="7">{"name": "a loop and a stop", "steps": [
+  {"at": 0,   "deck": 2, "do": "on"},
+  {"at": 0.5, "deck": 2, "do": "play"},
+  {"at": 4,   "deck": 2, "do": "loop", "beats": 4},
+  {"at": 8,   "deck": 2, "do": "stop"}
+]}</textarea>
+    <div class="bench" id="scstatus">Steps and what they do: docs/scenarios.md</div>
+    <div class="events" id="scresults"></div>
   </section>
   <section class="panel">
     <h2>What the unit did <button id="clear" class="n" style="float:right;min-width:52px;height:24px">CLEAR</button></h2>
@@ -305,6 +326,46 @@ async function pollEvents() {
   setTimeout(pollEvents, 1000);
 }
 
+let scTimer = null;
+
+async function pollScenario() {
+  let s = null;
+  try { const r = await fetch("api/scenario"); if (r.ok) s = await r.json(); } catch (e) { /* the state's poll says it */ }
+  if (s) {
+    document.getElementById("scrun").disabled = s.running;
+    document.getElementById("scstop").disabled = !s.running;
+    document.getElementById("scstatus").textContent = !s.name ? "Steps and what they do: docs/scenarios.md" :
+      s.name + ": " + (s.running ? "playing, " + s.results.length + " of " + s.total + " steps" :
+      (s.stopped ? "stopped" : "done") + ", " + s.results.length + " of " + s.total + " steps" +
+      (s.failed ? ", " + s.failed + " expectation" + (s.failed > 1 ? "s" : "") + " failed" : ""));
+    document.getElementById("scresults").innerHTML = s.results.map(r => '<div class="' + (r.ok ? "" : "bad") + '"><span class="t">' +
+      r.at.toFixed(1) + ' s</span>' + esc(r.what) + (r.message ? ' &middot; ' + esc(r.message) : "") + (r.ok ? "" : " FAILED") + '</div>').join("");
+    if (!s.running) { scTimer = null; return; }
+  }
+  scTimer = setTimeout(pollScenario, 500);
+}
+
+document.getElementById("scrun").addEventListener("click", async () => {
+  const box = document.getElementById("scstatus");
+  try {
+    const r = await fetch("api/scenario", {method: "POST", body: document.getElementById("scenario").value});
+    const s = await r.json();
+    if (!r.ok) { box.textContent = s.error || "not accepted"; return; }
+  } catch (e) { return fail(); }
+  if (!scTimer) pollScenario();
+});
+document.getElementById("scstop").addEventListener("click", async () => {
+  try { await fetch("api/scenario/stop", {method: "POST"}); } catch (e) { fail(); }
+});
+document.getElementById("scload").addEventListener("click", () => document.getElementById("scfile").click());
+document.getElementById("scfile").addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { document.getElementById("scenario").value = reader.result; };
+  reader.readAsText(file);
+});
+
 document.getElementById("loss").addEventListener("input", e => {
   document.getElementById("lossout").textContent = e.target.value + " %";
 });
@@ -331,6 +392,7 @@ async function poll() {
 function frame() { beats(); requestAnimationFrame(frame); }
 poll();
 pollEvents();
+pollScenario();
 requestAnimationFrame(frame);
 </script>
 </body>
@@ -340,6 +402,7 @@ requestAnimationFrame(frame);
 
 def serve(world, host="127.0.0.1", port=8750):
     """Starts the server in a thread; returns it."""
+    runner = Runner(world)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
@@ -360,6 +423,8 @@ def serve(world, host="127.0.0.1", port=8750):
                 self.send(200, PAGE, "text/html")
             elif path == "/api/state":
                 self.send(200, json.dumps(world.snapshot()))
+            elif path == "/api/scenario":
+                self.send(200, json.dumps(runner.snapshot()))
             elif path == "/api/events":
                 try:
                     since = int(parse_qs(urlparse(self.path).query).get("since", ["0"])[0])
@@ -372,6 +437,21 @@ def serve(world, host="127.0.0.1", port=8750):
         def do_POST(self):
             parts = self.path.split("?")[0].strip("/").split("/")
             query = parse_qs(urlparse(self.path).query)
+            if parts == ["api", "scenario"]:
+                try:
+                    length = int(self.headers.get("Content-Length") or 0)
+                    data = json.loads(self.rfile.read(length).decode("utf-8"))
+                    runner.start(data)
+                except (ValueError, UnicodeDecodeError) as e:
+                    return self.send(400, json.dumps({"error": "not a scenario: %s" % e}))
+                except ScenarioError as e:
+                    return self.send(400, json.dumps({"error": str(e)}))
+                except RuntimeError as e:
+                    return self.send(409, json.dumps({"error": str(e)}))
+                return self.send(200, json.dumps(runner.snapshot()))
+            if parts == ["api", "scenario", "stop"]:
+                runner.stop()
+                return self.send(200, json.dumps(runner.snapshot()))
             if parts == ["api", "events", "clear"]:
                 world.events.clear()
                 return self.send(200, "[]")
@@ -437,6 +517,7 @@ def serve(world, host="127.0.0.1", port=8750):
             self.send(404, '{"error": "not found"}')
 
     server = ThreadingHTTPServer((host, port), Handler)
+    server.runner = runner
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()
     log("page and API on http://%s:%d/" % (host, server.server_address[1]))

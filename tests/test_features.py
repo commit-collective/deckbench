@@ -289,9 +289,56 @@ class Faults(unittest.TestCase):
     def test_the_page_has_the_controls(self):
         with urllib.request.urlopen(self.url, timeout=5) as r:
             page = r.read().decode("utf-8")
-        for words in ("TEMPO", "LOAD", "UNPLUG", "SILENCE 5 s", "Datagrams lost", "What the unit did", "api/events"):
+        for words in ("TEMPO", "LOAD", "UNPLUG", "SILENCE 5 s", "Datagrams lost", "What the unit did", "api/events",
+                      "api/scenario"):
             self.assertIn(words, page)
         self.assertIn("bench", self.api("api/state", post=False))       # how the bench was started, for the page
+
+    def post_json(self, path, body):
+        request = urllib.request.Request(self.url + path, data=body.encode("utf-8"), method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=5) as r:
+                return r.status, json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read())
+
+    def wait_for_scenario(self, seconds=8.0):
+        end = time.time() + seconds
+        while time.time() < end:
+            state = self.api("api/scenario", post=False)
+            if not state["running"]:
+                return state
+            time.sleep(0.2)
+        self.fail("the scenario is still playing")
+
+    def test_a_scenario_is_played_from_the_page_and_reports(self):
+        body = json.dumps({"name": "from the page", "steps": [
+            {"at": 0, "deck": 4, "do": "tempo", "bpm": 120},
+            {"at": 0.3, "deck": 4, "do": "load", "id": 55, "title": "Fifty-five"},
+            {"at": 0.4, "do": "expect", "event": "never_happens", "within": 0.3},
+        ]})
+        code, state = self.post_json("api/scenario", body)
+        self.assertEqual(code, 200)
+        self.assertTrue(state["running"])
+        code, again = self.post_json("api/scenario", body)
+        self.assertEqual(code, 409)                                   # one plays at a time
+        done = self.wait_for_scenario()
+        self.assertEqual((done["name"], done["total"], done["failed"]), ("from the page", 3, 1))
+        self.assertEqual([r["ok"] for r in done["results"]], [True, True, False])
+        self.assertEqual(self.world.decks[4].track, (55, "Fifty-five"))
+
+    def test_a_scenario_that_is_not_one_is_refused_and_one_can_be_stopped(self):
+        self.assertEqual(self.post_json("api/scenario", "not json")[0], 400)
+        code, error = self.post_json("api/scenario", json.dumps({"steps": [{"at": 0, "do": "dance"}]}))
+        self.assertEqual(code, 400)
+        self.assertIn("no such action", error["error"])
+        self.post_json("api/scenario", json.dumps({"name": "long", "steps": [
+            {"at": 0, "do": "log", "text": "begin"}, {"at": 30, "do": "log", "text": "end"}]}))
+        time.sleep(0.4)
+        self.api("api/scenario/stop")
+        done = self.wait_for_scenario(3.0)
+        self.assertTrue(done["stopped"])
+        self.assertEqual(len(done["results"]), 1)
 
     def test_a_scenario_drives_the_bench_and_checks_an_event(self):
         scenario = Scenario({"steps": [

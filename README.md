@@ -65,6 +65,7 @@ Options (`python -m deckbench --help`):
     POST /api/loss/<percent>          that share of the datagrams is lost (0 for none)
     GET  /api/events?since=<n>        what the device under test did, from the n-th event on
     POST /api/events/clear            forget them
+    POST /api/scenario                play the scenario in the body (JSON), one at a time; /stop ends it; GET gives how far it is
 
 `/api/state` has, for each deck, its switches, its tempo, its name, its track
 and, while it plays, a `phase` ([time, beats into its bar, tempo]) to count the
