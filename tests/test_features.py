@@ -286,6 +286,13 @@ class Faults(unittest.TestCase):
         self.api("api/events/clear")
         self.assertEqual(self.api("api/events", post=False), [])
 
+    def test_the_page_has_the_controls(self):
+        with urllib.request.urlopen(self.url, timeout=5) as r:
+            page = r.read().decode("utf-8")
+        for words in ("TEMPO", "LOAD", "UNPLUG", "SILENCE 5 s", "Datagrams lost", "What the unit did", "api/events"):
+            self.assertIn(words, page)
+        self.assertIn("bench", self.api("api/state", post=False))       # how the bench was started, for the page
+
     def test_a_scenario_drives_the_bench_and_checks_an_event(self):
         scenario = Scenario({"steps": [
             {"at": 0, "deck": 4, "do": "play"},

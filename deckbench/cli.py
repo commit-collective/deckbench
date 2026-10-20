@@ -122,10 +122,12 @@ def main(argv=None):
             titles=parse_titles(a.titles) if a.titles else None,
             model=a.model, status_length=a.status_length,
             addresses=addresses, broadcast=broadcast, refuse_db=a.refuse_db, strict=a.strict).start()
+    world.info["strict"] = a.strict
     if a.audio_port:
         heard = {int(x) for x in a.audio_decks.split(",")} if a.audio_decks else None
         server = AudioServer(world, "127.0.0.1", a.audio_port, heard)
         log("sound on tcp://127.0.0.1:%d (raw stereo 16-bit 44.1 kHz)" % server.port)
+        world.info["audio"] = "tcp://127.0.0.1:%d" % server.port
     log("broadcasting to %s" % broadcast)
     for n, deck in world.decks.items():
         wanted = [item.partition("=")[2] for item in a.init if int(item.partition("=")[0]) == n]

@@ -25,9 +25,10 @@ Python 3.8 or later, no packages to install.
 
     python -m deckbench --numbers 2,3,4 --on
 
-then open <http://127.0.0.1:8750/>: a row for each deck with ON, PLAY, SYNC and
-MASTER, the four beat squares of its bar and its BPM, and what is known of a
-DJS-1000 on the network. The decks of Pro DJ Link are at 127.0.0.<number>, so
+then open <http://127.0.0.1:8750/>: a deck is a block with ON, PLAY, SYNC and MASTER, the four beat squares of its bar
+and its BPM, its loops, its tempo (the pitch fader), a track to load and its cable (pull it, or silence it for a while).
+Under the decks, the share of datagrams lost and what the device under test did (the events), and a line for what is known of
+a DJS-1000 on the network. The decks of Pro DJ Link are at 127.0.0.<number>, so
 the client must see the machine's loopback: run both in one network namespace
 (on Windows, in WSL, which also reaches the page at `localhost`).
 

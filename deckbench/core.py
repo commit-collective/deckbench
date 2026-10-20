@@ -77,6 +77,7 @@ class World:
         self.listeners = []                  # called, with no argument, after a change
         self.events = Events()               # what the device under test did, to wait for and check (events.py)
         self.loss = 0.0                      # the share of the datagrams of all the decks that is lost, 0 to 1
+        self.info = {}                       # how the bench was started (strict, sound...), for the page to say
 
     # -- what the decks are, together --
     def master_deck(self):
@@ -135,7 +136,8 @@ class World:
                     entry.update(protocol.describe(d))
                 decks[str(n)] = entry
             info = {p.name: p.info() for p in self.protocols}
-        return {"now": time.time(), "decks": decks, "protocols": info, "loss": round(self.loss * 100, 1)}
+        return {"now": time.time(), "decks": decks, "protocols": info, "loss": round(self.loss * 100, 1),
+                "bench": dict(self.info)}
 
     # -- what is done to a deck --
     def set_enabled(self, deck, on):

@@ -80,6 +80,22 @@ button:focus-visible { outline: 2px solid var(--sync); outline-offset: 2px; }
 .unit { margin-top: 18px; color: var(--dim); font-size: 13px; }
 .unit b { color: var(--text); font-weight: 600; }
 .err { color: var(--master); }
+.tools { margin-top: 8px; gap: 8px 14px; }
+.tools .lbl { color: var(--dim); font-size: 12px; min-width: 64px; }
+.tools label { color: var(--dim); font-size: 12px; display: flex; align-items: center; gap: 4px; }
+input[type=number], input[type=text] { font: inherit; height: 28px; border: 1px solid var(--edge); border-radius: 6px;
+  background: var(--bg); color: var(--text); padding: 0 6px; }
+input[type=number] { width: 72px; }
+input[type=text] { width: 150px; }
+button.warn.on { background: var(--master); color: #0a0a0a; }
+.panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 12px; margin-top: 10px; }
+.panel h2 { font-size: 13px; margin: 0 0 8px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+.panel input[type=range] { width: 220px; vertical-align: middle; }
+.events { font: 12px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; max-height: 220px; overflow: auto; }
+.events div { white-space: nowrap; }
+.events .t { color: var(--dim); display: inline-block; min-width: 56px; }
+.events .k { color: var(--sync); display: inline-block; min-width: 130px; }
+.bench { color: var(--dim); font-size: 12px; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -87,6 +103,17 @@ button:focus-visible { outline: 2px solid var(--sync); outline-offset: 2px; }
   <h1>deckbench</h1>
   <p class="sub" id="sub">connecting&hellip;</p>
   <div id="decks"></div>
+  <section class="panel">
+    <h2>Network</h2>
+    <label for="loss">Datagrams lost</label>
+    <input type="range" id="loss" min="0" max="100" step="5" value="0">
+    <output id="lossout">0 %</output>
+    <div class="bench" id="bench"></div>
+  </section>
+  <section class="panel">
+    <h2>What the unit did <button id="clear" class="n" style="float:right;min-width:52px;height:24px">CLEAR</button></h2>
+    <div class="events" id="events"><div class="t">nothing yet</div></div>
+  </section>
   <p class="unit" id="unit"></p>
 </main>
 <script>
@@ -129,6 +156,31 @@ function build() {
       loops.appendChild(b);
     }
     d.appendChild(loops);
+    const tempo = document.createElement("div");
+    tempo.className = "line tools";
+    tempo.innerHTML = '<span class="lbl">TEMPO</span><input type="number" step="0.1" min="40" max="220" class="tempo" ' +
+      'title="the pitch fader: the BPM the deck plays at (a synced deck follows the master)">' +
+      '<span class="lbl" style="margin-left:8px">TRACK</span>' +
+      '<label>id <input type="number" min="1" class="tid" style="width:84px"></label>' +
+      '<label>title <input type="text" class="ttitle"></label>' +
+      '<label>BPM <input type="number" step="0.1" min="40" max="220" class="tbpm"></label>' +
+      '<button class="n load" style="min-width:56px" title="load that track: it starts from its first beat">LOAD</button>';
+    d.appendChild(tempo);
+    const cable = document.createElement("div");
+    cable.className = "line tools";
+    cable.innerHTML = '<span class="lbl">CABLE</span>' +
+      '<button class="warn unplug" data-what="cable" title="pull the cable: the deck says nothing and answers nothing">UNPLUG</button>' +
+      '<button class="n silence" data-what="silence" title="pull the cable for 5 seconds">SILENCE 5 s</button>';
+    d.appendChild(cable);
+    tempo.querySelector(".tempo").addEventListener("change", e => send(n, "tempo/" + e.target.value));
+    tempo.querySelector(".load").addEventListener("click", () => {
+      const id = tempo.querySelector(".tid").value;
+      if (!id) return;
+      const title = tempo.querySelector(".ttitle").value, bpm = tempo.querySelector(".tbpm").value;
+      send(n, "load/" + id + "?" + (title ? "title=" + encodeURIComponent(title) + "&" : "") + (bpm ? "bpm=" + bpm : ""));
+    });
+    cable.querySelector(".unplug").addEventListener("click", () => send(n, state.decks[n].unplugged ? "plug" : "unplug"));
+    cable.querySelector(".silence").addEventListener("click", () => send(n, "silence/5"));
     root.appendChild(d);
   }
 }
@@ -158,6 +210,7 @@ function render() {
       const what = b.dataset.what;
       b.classList.toggle("on", what === "loop" ? d.on && d.loop === +b.dataset.beats
                                                : !!d[what] && (what === "on" || d.on));
+      if (what === "cable" || what === "silence" || b.classList.contains("load")) continue;
       b.disabled = what !== "on" && !d.on;
       if (what === "on") {                        // the unit's own number: a clash, left off
         const mine = !!unit && unit.number === +el.id.slice(4);
@@ -166,7 +219,20 @@ function render() {
       }
     }
     el.querySelector(".bpm").textContent = d.on ? d.bpm.toFixed(1) + " BPM" : "";
+    const tempo = el.querySelector(".tempo");
+    if (document.activeElement !== tempo) tempo.value = d.bpm.toFixed(1);
+    const cable = el.querySelector(".unplug");
+    cable.classList.toggle("on", !!d.unplugged);
+    cable.textContent = d.unplugged ? "PLUG IN" : "UNPLUG";
+    cable.disabled = false;
+    el.querySelector(".silence").disabled = !!d.unplugged;
   }
+  const loss = document.getElementById("loss");
+  if (document.activeElement !== loss) loss.value = state.loss;
+  document.getElementById("lossout").textContent = state.loss + " %";
+  const info = state.bench || {};
+  document.getElementById("bench").textContent = [info.strict ? "strict: players 1 to 4 only" : "",
+    info.audio ? "sound on " + info.audio : ""].filter(Boolean).join("  \u00b7  ");
   beats();
   const sub = document.getElementById("sub");
   sub.textContent = "Pro DJ Link decks on this machine's loopback; click a switch.";
@@ -211,6 +277,46 @@ async function loop(n, beats) {
   try { await load("api/deck/" + n + "/loop/" + now, {method: "POST"}); render(); } catch (e) { fail(); }
 }
 
+async function send(n, path) {
+  try { await load("api/deck/" + n + "/" + path, {method: "POST"}); render(); } catch (e) { fail(); }
+}
+
+let seen = 0, listed = [];
+
+function describe(e) {
+  const rest = Object.entries(e).filter(([k]) => !["n", "t", "kind"].includes(k)).map(([k, v]) => k + "=" + v);
+  return rest.join(" ");
+}
+
+async function pollEvents() {
+  try {
+    const r = await fetch("api/events?since=" + seen);
+    if (r.ok) {
+      const items = await r.json();
+      if (items.length) {
+        seen = items[items.length - 1].n + 1;
+        listed = listed.concat(items).slice(-60);
+        const box = document.getElementById("events");
+        box.innerHTML = listed.slice().reverse().map(e => '<div><span class="t">' + e.t.toFixed(1) + ' s</span>' +
+          '<span class="k">' + esc(e.kind) + '</span>' + esc(describe(e)) + '</div>').join("");
+      }
+    }
+  } catch (e) { /* the state's poll says it */ }
+  setTimeout(pollEvents, 1000);
+}
+
+document.getElementById("loss").addEventListener("input", e => {
+  document.getElementById("lossout").textContent = e.target.value + " %";
+});
+document.getElementById("loss").addEventListener("change", async e => {
+  try { await load("api/loss/" + e.target.value, {method: "POST"}); render(); } catch (x) { fail(); }
+});
+document.getElementById("clear").addEventListener("click", async () => {
+  try { await fetch("api/events/clear", {method: "POST"}); } catch (e) { return; }
+  seen = 0; listed = [];
+  document.getElementById("events").innerHTML = '<div class="t">nothing yet</div>';
+});
+
 function fail() {
   const sub = document.getElementById("sub");
   sub.textContent = "The bench does not answer.";
@@ -224,6 +330,7 @@ async function poll() {
 
 function frame() { beats(); requestAnimationFrame(frame); }
 poll();
+pollEvents();
 requestAnimationFrame(frame);
 </script>
 </body>
