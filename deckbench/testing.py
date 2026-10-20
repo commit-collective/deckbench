@@ -167,3 +167,41 @@ class Bench:
                 return state
             time.sleep(0.2)
         raise BenchError("the scenario did not end in %.0f s" % timeout)
+
+
+class FakeUnit:
+    """A device that calls itself DJS-1000 on the link, to test the bench's side of a unit under test (what it hears of it,
+    and the scenarios that expect things of it) with no emulator. `ports` is a Ports. It sends to the loopback's broadcast."""
+
+    def __init__(self, ports, number=1, address="127.0.0.1", broadcast="127.255.255.255", name=b"DJS-1000"):
+        self.ports, self.number, self.address, self.broadcast, self.name = ports, number, address, broadcast, name
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        self.counter = 0
+
+    def announce(self):
+        from .protocols.prolink import header
+        p = bytearray(0x36)
+        p[:0x1F] = header(0x06, self.name)
+        p[0x24] = self.number
+        p[0x2C:0x30] = bytes(int(x) for x in self.address.split("."))
+        self.sock.sendto(bytes(p), (self.broadcast, self.ports.announce))
+
+    def status(self, master=False, synced=False, playing=False, bpm=120.0, pitch=0x100000, beat=1, on_air=False):
+        """One status packet, as the unit's flags say: bit 6 plays, bit 5 master, bit 4 sync, bit 3 on air."""
+        import struct
+        from .protocols.prolink import header
+        p = bytearray(0x124)
+        p[:0x1F] = header(0x0A, self.name)
+        p[0x21] = self.number
+        self.counter += 1
+        p[0x84:0x88] = struct.pack(">I", self.counter)
+        p[0x89] = 0x84 | (0x40 if playing else 0) | (0x20 if master else 0) | (0x10 if synced else 0) | (0x08 if on_air else 0)
+        p[0x8C:0x90] = struct.pack(">I", pitch)
+        p[0x92:0x94] = struct.pack(">H", int(round(bpm * 100)))
+        p[0x9F] = 0xFF
+        p[0xA6] = beat
+        self.sock.sendto(bytes(p), (self.broadcast, self.ports.update))
+
+    def close(self):
+        self.sock.close()

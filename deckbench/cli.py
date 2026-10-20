@@ -10,6 +10,7 @@ import time
 
 from . import __version__
 from .core import Deck, World, log
+from .adapters import make as make_adapter
 from .audio import AudioServer
 from .events import Events
 from .protocols.prolink import Ports, PortError, Prolink
@@ -78,6 +79,10 @@ def main(argv=None):
     ap.add_argument("--scenario", metavar="FILE", help="play a scenario (see deckbench/scenario.py) once it runs")
     ap.add_argument("--then-exit", action="store_true",
                     help="with --scenario: leave when it is over, with status 1 if an expectation failed")
+    ap.add_argument("--adapter", action="append", default=[], metavar="NAME[:ARGS]",
+                    help="what the device under test shows beyond the network, so a scenario can expect a lamp and press a "
+                         "control (see deckbench/adapters). There is djs1000-emu[:HOST:PORT], the emulator's link "
+                         "(default 127.0.0.1:7310)")
     ap.add_argument("--events", metavar="FILE", help="write what the device under test does to FILE, a JSON object a line")
     ap.add_argument("--model", help="the device name every deck announces (default CDJ-FAKEn)")
     ap.add_argument("--status-length", type=lambda x: int(x, 0), default=0x124, metavar="N",
@@ -106,6 +111,12 @@ def main(argv=None):
     a = ap.parse_args(argv)
 
     numbers = [int(x) for x in a.numbers.split(",")] if a.numbers else list(range(1, a.decks + 1))
+    adapters = []
+    for spec in a.adapter:
+        try:
+            adapters.append((make_adapter(spec), spec))
+        except ValueError as e:
+            ap.error("--adapter: %s" % e)
     world = World()
     if a.events:
         world.events = Events(a.events)
@@ -154,7 +165,11 @@ def main(argv=None):
             for word in what.split(","):
                 if word.startswith("loop") and word[4:].isdigit():
                     deck.loop = (0.0, float(word[4:]))
-    world.info.update(version=__version__, broadcast=broadcast, pid=os.getpid(), numbers=numbers,
+    for adapter, spec in adapters:
+        world.adapters.append(adapter)
+        adapter.start(world)
+        log("adapter %s" % spec)
+    world.info.update(version=__version__, adapters=[x.name for x in world.adapters], broadcast=broadcast, pid=os.getpid(), numbers=numbers,
                       ports={"announce": link.ports.announce, "beat": link.ports.beat, "update": link.ports.update,
                              "query": link.ports.query, "db": link.ports.db})
     server = serve(world, a.http_host, a.http_port) if a.http_port >= 0 else None
@@ -172,14 +187,15 @@ def main(argv=None):
             for step, ok, message in scenario.run(world, log=log):
                 if not ok:
                     failed.append((step, message))
-            log("scenario %s: %s" % (scenario.name, "%d expectations failed" % len(failed) if failed else "done"))
+            log("scenario %s: %s" % (scenario.name, "skipped, %s" % scenario.skipped if scenario.skipped
+                                      else "%d expectations failed" % len(failed) if failed else "done"))
             if a.then_exit:
                 done.set()
         done = threading.Event()
         threading.Thread(target=play, daemon=True).start()
         if a.then_exit:
             done.wait()
-            return 1 if failed else 0
+            return 3 if scenario.skipped else 1 if failed else 0
     log("running; Ctrl-C to stop")
     try:
         while True:

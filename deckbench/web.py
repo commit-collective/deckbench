@@ -22,6 +22,8 @@
     GET  /api/examples               the scenarios that come with the bench: [{file, name, text}]
     GET  /api/stream                 the same as server-sent events: `state` (when the decks change, and every second),
                                      `event` (each event of the device under test), `scenario` (how far it is)
+    GET  /api/unit                   what is known of the device under test: the network's word and the adapters' (lamps...)
+    POST /api/unit/press/<control>   press a control of the device under test through an adapter (sync, master)
     POST /api/settings/<name>/<value>  strict and refuse_db (0 or 1), model (the name the decks announce)
     POST /api/deck/<n>/load/<id>     also ?source=<player>&slot=<n>: the track is in that player's database
 
@@ -120,6 +122,8 @@ def serve(world, host="127.0.0.1", port=8750):
                     self.send(200, f.read(), KINDS.get(os.path.splitext(name)[1], "application/octet-stream"))
             elif path == "/api/state":
                 self.send(200, json.dumps(world.snapshot()))
+            elif path == "/api/unit":
+                self.send(200, json.dumps(world.unit_state()))
             elif path == "/api/examples":
                 self.send(200, json.dumps(examples()))
             elif path == "/api/ready":
@@ -138,6 +142,11 @@ def serve(world, host="127.0.0.1", port=8750):
         def do_POST(self):
             parts = self.path.split("?")[0].strip("/").split("/")
             query = parse_qs(urlparse(self.path).query)
+            if len(parts) == 4 and parts[:3] == ["api", "unit", "press"]:
+                ok, why = world.press_unit(control=unquote(parts[3]))
+                if not ok:
+                    return self.send(409 if "not connected" in why else 400, json.dumps({"error": why}))
+                return self.send(200, json.dumps({"ok": True}))
             if len(parts) == 4 and parts[:2] == ["api", "settings"]:
                 value = unquote(parts[3])
                 if not any(p.set_option(parts[2], value) for p in world.protocols):

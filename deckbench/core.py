@@ -69,6 +69,10 @@ class Deck:
         return self.world.master_bpm() or self.base_bpm
 
 
+# What of the device under test changes all the time: not in the snapshot, or the page would be sent a new one at every beat.
+VOLATILE = ("age", "beat")
+
+
 class World:
     def __init__(self):
         self.decks = {}
@@ -78,6 +82,33 @@ class World:
         self.events = Events()               # what the device under test did, to wait for and check (events.py)
         self.loss = 0.0                      # the share of the datagrams of all the decks that is lost, 0 to 1
         self.info = {}                       # how the bench was started (strict, sound...), for the page to say
+        self.adapters = []                   # what the device under test shows beyond the network (adapters/)
+
+    # -- the device under test --
+    def unit_state(self):
+        """What is known of the device under test: from the network (each protocol) and from the adapters, one flat dict."""
+        state = {}
+        for protocol in self.protocols:
+            state.update(protocol.unit_state())
+        for adapter in self.adapters:
+            state.update(adapter.state())
+        return state
+
+    def press_unit(self, control=None, line=None):
+        """Presses a control of the device under test through an adapter that has it (or sends a raw command line).
+        (True, "") or (False, why)."""
+        if not self.adapters:
+            return False, "no adapter: start the bench with --adapter"
+        why = "no adapter has a control %r" % control
+        for adapter in self.adapters:
+            if line is not None:
+                ok, why = adapter.send(line)
+            elif control in adapter.controls:
+                ok, why = adapter.press(control)
+            else:
+                continue
+            return ok, why
+        return False, why
 
     # -- what the decks are, together --
     def master_deck(self):
@@ -137,7 +168,9 @@ class World:
                 decks[str(n)] = entry
             info = {p.name: p.info() for p in self.protocols}
         return {"now": time.time(), "decks": decks, "protocols": info, "loss": round(self.loss * 100, 1),
-                "bench": dict(self.info)}
+                "bench": dict(self.info), "unit_state": {k: v for k, v in self.unit_state().items() if k not in VOLATILE},
+                "adapters": [{"name": a.name, "connected": a.connected(), "controls": list(a.controls)}
+                             for a in self.adapters]}
 
     # -- what is done to a deck --
     def set_enabled(self, deck, on):
@@ -297,6 +330,10 @@ class Protocol:
         """The deck has loaded a track (its rekordbox id, its title if one was given, the player it comes from and the
         slot, if they were given: otherwise it is from the deck's own database)."""
         pass
+
+    def unit_state(self):
+        """What the network says of the device under test: a flat dict (`heard` says whether it was seen at all)."""
+        return {}
 
     def settings(self):
         """What can be changed while the bench runs: a dict of name: value."""

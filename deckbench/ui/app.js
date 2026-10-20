@@ -392,12 +392,17 @@ function renderScenario() {
   const done = s.results.length, bar = $("scbar");
   bar.firstChild.style.width = s.total ? Math.round(100 * done / s.total) + "%" : "0";
   bar.classList.toggle("failed", !s.running && s.failed > 0);
-  bar.classList.toggle("done", !s.running && !!s.name && s.failed === 0 && !s.stopped);
+  bar.classList.toggle("done", !s.running && !!s.name && s.failed === 0 && !s.stopped && !s.skipped);
   const note = $("scstatus");
   note.className = "note" + (!s.running && s.name ? (s.failed ? " bad" : s.stopped ? "" : " good") : "");
+  if (s.skipped) { note.className = "note"; note.textContent = s.name + ": skipped, " + s.skipped; return renderResults(s); }
   note.textContent = !s.name ? "Steps and what they do: docs/scenarios.md" :
     s.name + ": " + (s.running ? "playing, " : s.stopped ? "stopped, " : "done, ") + done + " of " + s.total + " steps" +
     (s.failed ? ", " + s.failed + " expectation" + (s.failed > 1 ? "s" : "") + " failed" : !s.running && !s.stopped ? ", all expectations met" : "");
+  renderResults(s);
+}
+
+function renderResults(s) {
   const box = $("scresults");
   box.textContent = "";
   for (const r of s.results) box.append(h("div", {class: r.ok ? "" : "bad"}, h("span", {class: "t"}, r.at.toFixed(1) + " s"),
@@ -481,12 +486,24 @@ function renderNetwork() {
   const s = S.state, loss = $("loss");
   if (document.activeElement !== loss) loss.value = s.loss;
   $("lossout").textContent = s.loss + " %";
-  const unit = unitOf(s), box = $("unit");
+  const unit = unitOf(s), box = $("unit"), seen = s.unit_state || {}, yes = (v) => (v ? "yes" : "no");
   box.textContent = "";
   if (unit) {
-    box.append(h("table", {class: "kv"}, kv([["Player", String(unit.number)], ["Address", unit.ip || "?"],
-      ["Tempo master", unit.master ? "yes" : "no"], ["Tempo", unit.bpm ? unit.bpm.toFixed(1) + " BPM" : "-"]])));
+    const rows = [["Player", String(unit.number)], ["Address", unit.ip || "?"], ["Tempo master", yes(seen.master)],
+      ["Synced", yes(seen.synced)], ["Playing", yes(seen.playing)],
+      ["Tempo", unit.bpm ? unit.bpm.toFixed(1) + " BPM" + (seen.pitch_percent ? " (pitch " + (seen.pitch_percent > 0 ? "+" : "") + seen.pitch_percent + " %)" : "") : "-"]];
+    if ("lamp.sync" in seen) rows.push(["SYNC lamp", seen["lamp.sync"] ? "lit" : "off"], ["MASTER lamp", seen["lamp.master"] ? "lit" : "off"]);
+    box.append(h("table", {class: "kv"}, kv(rows)));
   } else box.append(h("p", {class: "hint"}, "No device has announced itself with a player number yet. A DJS-1000 on this network shows here, with its address and whether it is the tempo master."));
+  const adapters = s.adapters || [], pad = $("unitpress");
+  pad.textContent = "";
+  for (const a of adapters) {
+    pad.append(h("span", {class: "hint"}, a.name + (a.connected ? " connected" : " not connected") + (a.controls.length ? ". Press: " : "")));
+    for (const control of a.controls) {
+      pad.append(h("button", {class: "btn small", disabled: !a.connected, title: "Press " + control + " on the device under test",
+        onclick: () => act("api/unit/press/" + control)}, control.toUpperCase()));
+    }
+  }
   const table = $("nettable");
   table.textContent = "";
   table.append(...kv(Object.entries(s.decks).map(([n, d]) => ["Deck " + n,

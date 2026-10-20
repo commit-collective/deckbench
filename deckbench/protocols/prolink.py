@@ -514,7 +514,8 @@ class Prolink(Protocol):
         self.world = world
         self.ports = ports
         self.status_length = status_length
-        self.unit = {"number": 0, "ip": None, "master": False, "bpm": None}   # the unit under test
+        self.unit = {"number": 0, "ip": None, "master": False, "bpm": None, "synced": False, "playing": False,
+                     "on_air": False, "beat": 0, "seen": 0.0}   # the unit under test
         loaded = dict(loaded or {})
         known = {n: {(3, 100 + n): "Track of deck %d" % n} for n in world.decks}
         for src, entries in (titles or {}).items():
@@ -605,6 +606,19 @@ class Prolink(Protocol):
 
     def info(self):
         return {"unit": dict(self.unit) if self.unit["number"] else None, "settings": self.settings()}
+
+    def unit_state(self):
+        u = self.unit
+        if not u["number"]:
+            return {"heard": False}
+        state = {"heard": True}
+        for key in ("number", "ip", "master", "synced", "playing", "on_air", "beat", "bpm", "track_bpm", "pitch"):
+            if u.get(key) is not None:
+                state[key] = u[key]
+        if "pitch" in state:
+            state["pitch_percent"] = round((state["pitch"] / PITCH_NORMAL - 1) * 100, 2)
+        state["age"] = round(time.time() - u["seen"], 2) if u["seen"] else None
+        return state
 
     def allow_enable(self, deck):
         # A deck with the unit's own number is a clash: the unit then links to no deck at all.
@@ -755,6 +769,13 @@ class Prolink(Protocol):
                                 % ("is now" if master else "is no longer"))
                             world.events.add("unit_master", on=master)
                         unit["master"] = master
+                        unit["seen"], unit["beat"] = time.time(), data[0xA6]
+                        for key, bit, kind in (("playing", 0x40, "unit_play"), ("synced", 0x10, "unit_sync"),
+                                               ("on_air", 0x08, None)):
+                            value = bool(data[0x89] & bit)
+                            if value != unit[key] and kind:
+                                world.events.add(kind, on=value)
+                            unit[key] = value
                         # The BPM field is the track's; the tempo it plays at is that
                         # times the pitch (0x100000 is no change), as on a CDJ.
                         unit["track_bpm"] = struct.unpack(">H", data[0x92:0x94])[0] / 100.0

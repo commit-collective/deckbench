@@ -30,16 +30,29 @@ What a step does (`deck` is the player number where a deck is meant):
   log              `text` goes to the log
   expect           an event of the device under test (see events.py) is there within `within` seconds (default 5):
                    `event` is its kind and `match` what it has (e.g. {"deck": 2}). Events since the scenario began count.
+  expect_unit      what is known of the device under test (the network's word and an adapter's: `heard`, `master`,
+                   `synced`, `playing`, `bpm`, `lamp.sync`...) matches `match` within `within` seconds (default 5).
+                   With `for`, it must then go on matching for that many seconds. See matching.py for the values.
+  expect_deck      the same for a deck's own state (`on`, `play`, `sync`, `master`, `bpm`, `loop`, `unplugged`, `track_rbid`),
+                   within `within` seconds (default 2)
+  unit             press a control of the device under test through the adapter: `press` (its name) or `send` (a raw line)
 
-`Scenario.run` does the steps at their times and gives the results: a list of (step, ok, message). Only `expect` can fail.
+A scenario can say what it `requires`: "unit" (the device has announced itself on the link, waited for up to `unit_wait`
+seconds, 10 by default) and "adapter" (an adapter is connected). If one is missing the scenario is skipped, not failed.
+
+`Scenario.run` does the steps at their times and gives the results: a list of (step, ok, message). Only the expectations and
+`unit` can fail.
 """
 import json
 import threading
 import time
 
+from .matching import explain, matches
+
 DECK_ACTIONS = ("on", "off", "play", "stop", "sync", "unsync", "master", "release", "loop", "unloop", "load", "tempo",
                 "unplug", "plug", "silence")
-ACTIONS = DECK_ACTIONS + ("loss", "log", "expect")
+ACTIONS = DECK_ACTIONS + ("loss", "log", "expect", "expect_unit", "expect_deck", "unit")
+REQUIRES = ("unit", "adapter")
 
 
 class ScenarioError(ValueError):
@@ -49,6 +62,12 @@ class ScenarioError(ValueError):
 class Scenario:
     def __init__(self, data):
         self.name = data.get("name", "scenario")
+        self.requires = list(data.get("requires", []))
+        for need in self.requires:
+            if need not in REQUIRES:
+                raise ScenarioError("requires %r: there is only %s" % (need, ", ".join(REQUIRES)))
+        self.unit_wait = float(data.get("unit_wait", 10))
+        self.skipped = None                 # why it was not run, if it was not
         self.steps = sorted((dict(s) for s in data.get("steps", [])), key=lambda s: float(s.get("at", 0)))
         for step in self.steps:
             self.check(step)
@@ -66,7 +85,8 @@ class Scenario:
         if do in DECK_ACTIONS and "deck" not in step:
             raise ScenarioError("step %r: %s needs a deck" % (step, do))
         for key, kinds in (("loop", ("beats",)), ("load", ("id",)), ("tempo", ("bpm",)), ("silence", ("seconds",)),
-                           ("loss", ("percent",)), ("log", ("text",)), ("expect", ("event",))):
+                           ("loss", ("percent",)), ("log", ("text",)), ("expect", ("event",)),
+                           ("expect_unit", ("match",)), ("expect_deck", ("match", "deck"))):
             if do == key:
                 for need in kinds:
                     if need not in step:
@@ -76,6 +96,9 @@ class Scenario:
         """Runs the steps against the World, at their times (`clock` and `sleep` can be replaced to test). The results.
         `on_step(step, ok, message)` is called after each step, and the run ends early when `cancel()` is true."""
         results = []
+        self.skipped = self.unmet(world, clock, sleep, cancel)
+        if self.skipped:
+            return results
         begin = clock()
         first_event = len(world.events.items)
         for step in self.steps:
@@ -93,6 +116,37 @@ class Scenario:
             if log:
                 log("%6.2f s  %s: %s%s" % (clock() - begin, step["do"], message or "ok", "" if ok else "  FAILED"))
         return results
+
+    def unmet(self, world, clock=time.time, sleep=time.sleep, cancel=None):
+        """What the scenario requires that is not there (a sentence), or None."""
+        if "adapter" in self.requires and not any(a.connected() for a in world.adapters):
+            return "it needs an adapter that is connected (--adapter), and none is"
+        if "unit" in self.requires:
+            end = clock() + self.unit_wait
+            while not world.unit_state().get("heard"):
+                if clock() >= end or (cancel and cancel()):
+                    return "it needs the device under test to be on the link, and none announced itself in %g s" % self.unit_wait
+                sleep(0.1)
+        return None
+
+    @staticmethod
+    def wait_for(read, match, within, hold=0.0, clock=time.time, sleep=time.sleep):
+        """Waits until `read()` (a dict) matches, for `within` seconds, and then, if `hold`, for that long more.
+        (True, message) or (False, what is wrong)."""
+        end = clock() + within
+        state = read()
+        while not matches(state, match):
+            if clock() >= end:
+                return False, "within %g s: %s" % (within, explain(state, match))
+            sleep(0.05)
+            state = read()
+        began = clock()
+        while clock() - began < hold:
+            sleep(0.05)
+            state = read()
+            if not matches(state, match):
+                return False, "held %.1f of %g s: %s" % (clock() - began, hold, explain(state, match))
+        return True, "after %.2f s" % (clock() - (end - within)) if not hold else "held %g s" % hold
 
     @staticmethod
     def describe(step):
@@ -127,7 +181,7 @@ class Scenario:
         elif do == "unloop":
             world.set_loop(deck, 0)
         elif do == "load":
-            world.load_track(deck, int(step["id"]), step.get("title"), step.get("bpm"))
+            world.load_track(deck, int(step["id"]), step.get("title"), step.get("bpm"), step.get("source"), step.get("slot"))
         elif do == "tempo":
             world.set_tempo(deck, float(step["bpm"]))
         elif do == "unplug":
@@ -141,6 +195,21 @@ class Scenario:
         elif do == "log":
             from .core import log as write
             write(step["text"])
+        elif do == "unit":
+            if "press" in step:
+                return world.press_unit(control=step["press"])
+            if "send" in step:
+                return world.press_unit(line=step["send"])
+            return False, "unit needs press or send"
+        elif do == "expect_unit":
+            return Scenario.wait_for(world.unit_state, step["match"], float(step.get("within", 5)), float(step.get("for", 0)))
+        elif do == "expect_deck":
+            def read():
+                state = {}
+                snap = world.snapshot()["decks"].get(str(step["deck"]), {})
+                state.update(snap)
+                return state
+            return Scenario.wait_for(read, step["match"], float(step.get("within", 2)), float(step.get("for", 0)))
         elif do == "expect":
             found = world.events.wait(step["event"], float(step.get("within", 5)), first_event, **step.get("match", {}))
             if not found:
@@ -157,7 +226,8 @@ class Runner:
         self.lock = threading.Lock()
         self.thread = None
         self.stopping = False
-        self.state = {"running": False, "name": None, "total": 0, "results": [], "failed": 0, "stopped": False}
+        self.state = {"running": False, "name": None, "total": 0, "results": [], "failed": 0, "stopped": False,
+                      "skipped": None}
 
     def start(self, data):
         """Starts playing `data` (what a scenario file holds). ScenarioError if it is not one, RuntimeError if one plays."""
@@ -167,7 +237,7 @@ class Runner:
                 raise RuntimeError("a scenario is playing")
             self.stopping = False
             self.state = {"running": True, "name": scenario.name, "total": len(scenario.steps), "results": [],
-                          "failed": 0, "stopped": False}
+                          "failed": 0, "stopped": False, "skipped": None}
         self.thread = threading.Thread(target=self._play, args=(scenario,), daemon=True)
         self.thread.start()
 
@@ -185,6 +255,7 @@ class Runner:
             with self.lock:
                 self.state["running"] = False
                 self.state["stopped"] = self.stopping
+                self.state["skipped"] = scenario.skipped
 
     def stop(self):
         self.stopping = True
