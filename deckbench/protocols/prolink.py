@@ -45,7 +45,30 @@ from ..core import Protocol, log
 MAGIC = bytes([0x51, 0x73, 0x70, 0x74, 0x31, 0x57, 0x6D, 0x4A, 0x4F, 0x4C])
 BROADCAST = "127.255.255.255"
 DB_PORT = 1051
+QUERY_PORT = 12523
 BEAT_PORT, UPDATE_PORT, ANNOUNCE_PORT = 50001, 50002, 50000
+
+
+class PortError(OSError):
+    """A port the decks need is taken, or not allowed to this program."""
+
+
+class Ports:
+    """The ports of the protocol. The real ones by default. `Ports.shifted(n)` moves them all by n, to run the bench
+    beside something that holds the real ones, or where the system keeps them back (Windows can reserve
+    UDP 50000-50059). A unit on the real ports does not hear decks on shifted ones."""
+
+    def __init__(self, shift=0):
+        self.shift = shift
+        self.announce, self.beat, self.update = ANNOUNCE_PORT + shift, BEAT_PORT + shift, UPDATE_PORT + shift
+        self.query, self.db = QUERY_PORT + shift, DB_PORT + shift
+
+    @classmethod
+    def shifted(cls, n):
+        return cls(n)
+
+
+DEFAULT_PORTS = Ports()
 PITCH_NORMAL = 0x100000
 
 
@@ -122,8 +145,10 @@ def read_message(conn):
 class LinkDeck:
     """What a deck is to Pro DJ Link, beside what it is (core.Deck)."""
 
-    def __init__(self, net, deck, loaded, titles, model, address, broadcast, refuse_db=False, strict=False):
+    def __init__(self, net, deck, loaded, titles, model, address, broadcast, refuse_db=False, strict=False,
+                 ports=DEFAULT_PORTS):
         self.net = net
+        self.ports = ports
         self.refuse_db = refuse_db          # the database server turns requests down (as it does a stranger's)
         self.strict = strict                # answers only the players it knows, as a CDJ-2000NXS2 does (see session())
         self.deck = deck
@@ -256,12 +281,12 @@ class LinkDeck:
                 time.sleep(0.1)
                 continue
             if now - last_keep >= 2.0:
-                self.send(s, self.keepalive(), (self.broadcast, ANNOUNCE_PORT))
+                self.send(s, self.keepalive(), (self.broadcast, self.ports.announce))
                 last_keep = now
             if now - last_status >= 0.2:
                 with self.net.world.lock:
                     packet = self.status()
-                self.send(s, packet, (self.broadcast, UPDATE_PORT))
+                self.send(s, packet, (self.broadcast, self.ports.update))
                 last_status = now
             time.sleep(0.05)
 
@@ -284,7 +309,7 @@ class LinkDeck:
                 due = (beat + 1 - pos) * 60.0 / tempo
                 packet = self.beat(pos) if sent != beat else None
             if packet:
-                self.send(s, packet, (self.broadcast, BEAT_PORT))
+                self.send(s, packet, (self.broadcast, self.ports.beat))
                 sent = beat
             time.sleep(min(max(due, 0.002), 0.02))
 
@@ -292,7 +317,7 @@ class LinkDeck:
         """Master hand-off requests and sync commands, sent to this deck."""
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((self.address, BEAT_PORT))
+        s.bind((self.address, self.ports.beat))
         out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         out.bind((self.address, 0))
         deck, world = self.deck, self.net.world
@@ -316,7 +341,7 @@ class LinkDeck:
                 reply = header(0x27, self.name) + bytes([
                     0x01, 0x00, self.number, 0x00, 0x08, 0x00, 0x00, 0x00, self.number,
                     0x00, 0x00, 0x00, 0x01])
-                self.send(out, bytes(reply), (addr[0], UPDATE_PORT))
+                self.send(out, bytes(reply), (addr[0], self.ports.update))
                 threading.Timer(4.0, self.finish_handoff, args=(sender,)).start()
                 world.changed()
             elif kind == 0x2A:                                   # a sync command
@@ -371,7 +396,7 @@ class LinkDeck:
     def serve_port(self):
         srv = socket.socket()
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind((self.address, 12523))
+        srv.bind((self.address, self.ports.query))
         srv.listen(5)
         while True:
             conn, _ = srv.accept()
@@ -381,7 +406,7 @@ class LinkDeck:
             try:
                 length = struct.unpack(">I", read_exact(conn, 4))[0]
                 if read_exact(conn, length) == b"RemoteDBServer\0":
-                    conn.sendall(struct.pack(">H", DB_PORT))
+                    conn.sendall(struct.pack(">H", self.ports.db))
                     log("%s: told the database port" % self.deck.name)
             except (EOFError, OSError):
                 pass
@@ -390,7 +415,7 @@ class LinkDeck:
     def serve_db(self):
         srv = socket.socket()
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind((self.address, DB_PORT))
+        srv.bind((self.address, self.ports.db))
         srv.listen(5)
         while True:
             conn, _ = srv.accept()
@@ -474,7 +499,7 @@ class Prolink(Protocol):
     name = "prolink"
 
     def __init__(self, world, loaded=None, titles=None, model=None, status_length=0x124,
-                 addresses=None, broadcast=BROADCAST, refuse_db=False, strict=False):
+                 addresses=None, broadcast=BROADCAST, refuse_db=False, strict=False, ports=DEFAULT_PORTS):
         """world.decks must have the decks (core.Deck, by player number) already.
         loaded: {deck: (source player, slot, rekordbox id)}; titles: {source
         player: {(slot, id): title}}. A deck has by default the track 100 + its
@@ -483,8 +508,10 @@ class Prolink(Protocol):
         go (default 127.255.255.255, that of the loopback). refuse_db: the database servers
         turn metadata requests down (as real decks do those of a device that is not a
         player they know). strict: the decks behave as a CDJ-2000NXS2 does: they answer the players 1 to 4 that announced
-        themselves and nobody else (a fifth device gets no answer, a unit that is not a player has its requests turned down)."""
+        themselves and nobody else (a fifth device gets no answer, a unit that is not a player has its requests turned down).
+        ports: a Ports, the real ones by default."""
         self.world = world
+        self.ports = ports
         self.status_length = status_length
         self.unit = {"number": 0, "ip": None, "master": False, "bpm": None}   # the unit under test
         loaded = dict(loaded or {})
@@ -495,10 +522,41 @@ class Prolink(Protocol):
         for n, deck in world.decks.items():
             self.decks[n] = LinkDeck(self, deck, loaded.get(n, (n, 3, 100 + n)),
                                      known.get(n, {}), model,
-                                     (addresses or {}).get(n, "127.0.0.%d" % n), broadcast, refuse_db, strict)
+                                     (addresses or {}).get(n, "127.0.0.%d" % n), broadcast, refuse_db, strict, ports)
         world.protocols.append(self)
 
+    def check_ports(self):
+        """Binds every port the decks need once, to say so at once if one cannot be had (the threads that serve
+        them would die unseen). Raises PortError."""
+        for link in self.decks.values():
+            for kind, port in ((socket.SOCK_DGRAM, self.ports.beat), (socket.SOCK_STREAM, self.ports.query),
+                               (socket.SOCK_STREAM, self.ports.db)):
+                s = socket.socket(socket.AF_INET, kind)
+                try:
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    s.bind((link.address, port))
+                except OSError as e:
+                    proto = "UDP" if kind == socket.SOCK_DGRAM else "TCP"
+                    raise PortError("%s %d on %s: %s. Something else holds it, or the system keeps it back "
+                                    "(on Windows: netsh interface ipv4 show excludedportrange protocol=udp). "
+                                    "--port-shift moves every port of the decks, for a bench beside it or for the tests."
+                                    % (proto, port, link.address, e.strerror or e)) from e
+                finally:
+                    s.close()
+        for port in (self.ports.announce, self.ports.update):
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(("0.0.0.0", port))
+            except OSError as e:
+                raise PortError("UDP %d: %s. The system keeps it back or another program holds it exclusively "
+                                "(on Windows: netsh interface ipv4 show excludedportrange protocol=udp). "
+                                "--port-shift moves every port of the decks." % (port, e.strerror or e)) from e
+            finally:
+                s.close()
+
     def start(self):
+        self.check_ports()
         for n, link in self.decks.items():
             deck = link.deck
             for target in (link.announce, link.beats, link.control, link.serve_port, link.serve_db):
@@ -513,7 +571,7 @@ class Prolink(Protocol):
         of the players 1 to 4, 0 start, 1 stop, 2 leave it."""
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(("", BEAT_PORT))
+        s.bind(("", self.ports.beat))
         while True:
             data, addr = s.recvfrom(2048)
             if len(data) < 0x28 or data[:10] != MAGIC or data[0x0A] != 0x02:
@@ -592,7 +650,7 @@ class Prolink(Protocol):
                     0x01, 0x00, link.number, 0x00, 0x04, 0x00, 0x00, 0x00, link.number])
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 s.bind((link.address, 0))
-                s.sendto(bytes(request), (self.unit["ip"], BEAT_PORT))
+                s.sendto(bytes(request), (self.unit["ip"], self.ports.beat))
                 s.close()
                 link.pending = True
                 log("%s asks the unit under test to yield the master role" % deck.name)
@@ -621,7 +679,7 @@ class Prolink(Protocol):
         the tempo master and at what tempo; and passes the master role when the
         unit takes it from a deck that has agreed to yield it."""
         socks = []
-        for port in (ANNOUNCE_PORT, UPDATE_PORT):
+        for port in (self.ports.announce, self.ports.update):
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
@@ -637,9 +695,9 @@ class Prolink(Protocol):
         for link in self.decks.values():
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind((link.address, UPDATE_PORT))
+            s.bind((link.address, self.ports.update))
             s.settimeout(0.5)
-            socks.append((s, UPDATE_PORT))
+            socks.append((s, self.ports.update))
         world, unit = self.world, self.unit
         while True:
             ready, _, _ = select.select([s for s, _ in socks], [], [], 0.5)
@@ -651,13 +709,13 @@ class Prolink(Protocol):
                 if not (data[0x0B:0x0F] == b"DJS-" or data[0x0C:0x10] == b"DJS-"):
                     continue
                 with world.lock:
-                    if port == ANNOUNCE_PORT and data[0x0A] == 0x06:
+                    if port == self.ports.announce and data[0x0A] == 0x06:
                         if unit["number"] != data[0x24]:
                             unit["number"] = data[0x24]
                             log("the unit under test is player %d" % data[0x24])
                             world.events.add("unit_seen", number=data[0x24])
                         unit["ip"] = ".".join(str(b) for b in data[0x2C:0x30])
-                    elif port == UPDATE_PORT and data[0x0A] == 0x0A and len(data) > 0x93:
+                    elif port == self.ports.update and data[0x0A] == 0x0A and len(data) > 0x93:
                         master = bool(data[0x89] & 0x20)
                         unit["syncn"] = struct.unpack(">I", data[0x84:0x88])[0]
                         seen = (data[0x89], data[0x9E], data[0x9F], unit["syncn"])

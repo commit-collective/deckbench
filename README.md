@@ -49,6 +49,9 @@ Options (`python -m deckbench --help`):
 - `--scenario FILE`, `--then-exit`: play a timeline of what the decks do and what to expect of the device under test
   (see [docs/scenarios.md](docs/scenarios.md))
 - `--events FILE`: what the device under test did, a JSON object a line
+- `--port-shift N`: move every port of the decks by N (UDP 50000-50002, TCP 12523 and 1051). For a bench beside something that
+  holds the real ports, or where the system keeps them back (Windows can reserve UDP 50000-50059, see
+  `netsh interface ipv4 show excludedportrange protocol=udp`). A unit on the real ports does not hear such decks
 - `--model NAME`: the device name the decks announce (default `CDJ-FAKEn`)
 - `--http-port PORT` (default 8750, -1 for none), `--http-host ADDRESS`
 
@@ -78,7 +81,8 @@ beats on from, and for each protocol what it knows of the other side.
 Starts the bench in the process and checks, from a small client, the
 keep-alives, the status packets' fields, the beats, sync and master, the
 hand-off to a player that asks, the sync commands, the database and the API.
-It uses UDP 50000-50002 on the loopback: nothing else may listen there.
+It runs on Linux, Windows and macOS (macOS needs the aliases 127.0.0.2 and up on `lo0`).
+The tests do not use the real ports: they take the first free range, or the shift in `DECKBENCH_PORT_SHIFT`.
 
 ## Layout
 

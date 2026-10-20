@@ -10,7 +10,7 @@ from . import __version__
 from .core import Deck, World, log
 from .audio import AudioServer
 from .events import Events
-from .protocols.prolink import Prolink
+from .protocols.prolink import Ports, PortError, Prolink
 from .scenario import Scenario, ScenarioError
 from .web import serve
 
@@ -90,6 +90,10 @@ def main(argv=None):
     ap.add_argument("--broadcast", metavar="ADDRESS",
                     help="the network's broadcast address (default: from the first --bind "
                          "address and --netmask)")
+    ap.add_argument("--port-shift", type=int, default=0, metavar="N",
+                    help="move every port of the decks by N (UDP 50000-50002, TCP 12523 and 1051), to run beside "
+                         "something that holds the real ones or where the system keeps them back. A unit on the real "
+                         "ports does not hear them (default 0)")
     ap.add_argument("--http-port", type=int, default=8750, metavar="PORT",
                     help="the page and API's port (default 8750, 0 for any, -1 for none)")
     ap.add_argument("--http-host", default="127.0.0.1", metavar="ADDRESS",
@@ -118,10 +122,15 @@ def main(argv=None):
         broadcast = a.broadcast or broadcast_of(given[0], a.netmask)
     elif a.broadcast:
         broadcast = a.broadcast
-    Prolink(world, loaded=parse_loaded(a.loaded),
-            titles=parse_titles(a.titles) if a.titles else None,
-            model=a.model, status_length=a.status_length,
-            addresses=addresses, broadcast=broadcast, refuse_db=a.refuse_db, strict=a.strict).start()
+    link = Prolink(world, loaded=parse_loaded(a.loaded),
+                   titles=parse_titles(a.titles) if a.titles else None,
+                   model=a.model, status_length=a.status_length,
+                   addresses=addresses, broadcast=broadcast, refuse_db=a.refuse_db, strict=a.strict,
+                   ports=Ports.shifted(a.port_shift))
+    try:
+        link.start()
+    except PortError as e:
+        ap.exit(2, "deckbench: %s\n" % e)
     world.info["strict"] = a.strict
     if a.audio_port:
         heard = {int(x) for x in a.audio_decks.split(",")} if a.audio_decks else None

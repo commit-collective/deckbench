@@ -3,10 +3,9 @@
 
     python -m unittest discover -s tests
 
-Starts the bench in this process (decks 2 and 3, and the page) and listens on
-UDP 50000-50002 on the loopback, so nothing else that uses those ports (an
-emulator, another bench) may run. Needs a loopback with all of 127.0.0.0/8
-(Linux has it; macOS needs aliases).
+Starts the bench in this process (decks 2 and 3, and the page) on ports of its
+own (see _ports.py), so a running emulator or bench does not matter. Needs a
+loopback with all of 127.0.0.0/8 (Linux and Windows have it, macOS needs aliases).
 """
 import json
 import socket
@@ -18,7 +17,8 @@ import urllib.request
 
 from deckbench.core import Deck, World
 from deckbench.protocols import prolink
-from deckbench.protocols.prolink import (ANNOUNCE_PORT, BEAT_PORT, MAGIC, UPDATE_PORT, Prolink,
+from _ports import PORTS
+from deckbench.protocols.prolink import (MAGIC, Prolink,
                                          message, num, read_exact, read_message)
 from deckbench.web import serve
 
@@ -68,11 +68,11 @@ class Bench(unittest.TestCase):
         for i, n in enumerate((2, 3)):
             cls.world.decks[n] = Deck(cls.world, n, 128.0 - 2 * i, "deck %d" % n)
         titles = {2: {(3, 202): "Café del Mar"}}
-        cls.prolink = Prolink(cls.world, loaded={3: (2, 3, 202)}, titles=titles)
+        cls.prolink = Prolink(cls.world, loaded={3: (2, 3, 202)}, titles=titles, ports=PORTS)
         cls.prolink.start()
         cls.server = serve(cls.world, "127.0.0.1", 0)
         cls.url = "http://127.0.0.1:%d/" % cls.server.server_address[1]
-        cls.keepalives, cls.statuses, cls.beats = listen(ANNOUNCE_PORT), listen(UPDATE_PORT), listen(BEAT_PORT)
+        cls.keepalives, cls.statuses, cls.beats = listen(PORTS.announce), listen(PORTS.update), listen(PORTS.beat)
 
     @classmethod
     def tearDownClass(cls):
@@ -158,7 +158,7 @@ class Bench(unittest.TestCase):
         packet[0x24:0x28] = bytes((2, 1, 0, 2))             # leave 1, stop 2, start 3, leave 4
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        s.sendto(bytes(packet), ("127.255.255.255", BEAT_PORT))
+        s.sendto(bytes(packet), ("127.255.255.255", PORTS.beat))
         time.sleep(0.5)
         decks = self.api("api/state")["decks"]
         self.assertFalse(decks["2"]["play"])
@@ -227,12 +227,16 @@ class Bench(unittest.TestCase):
             self.switch(n, "on", True)
         self.switch(2, "master", True)
         collect(self.statuses, 0.3)
+        # The answer goes to the asker's own address: its socket is the one to read it from (another one bound to
+        # every address would not get it on Windows, where the most specific socket wins).
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.bind(("127.0.0.9", 0))
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(("127.0.0.9", PORTS.update))
+        s.settimeout(0.3)
         request = prolink.header(0x26, b"TEST") + bytes([0x01, 0x00, 9, 0x00, 0x04, 0, 0, 0, 9])
-        s.sendto(bytes(request), ("127.0.0.2", BEAT_PORT))
+        s.sendto(bytes(request), ("127.0.0.2", PORTS.beat))
+        reply = collect(s, 2.0, lambda d: d[0x0A] == 0x27, fresh=False)
         s.close()
-        reply = collect(self.statuses, 2.0, lambda d: d[0x0A] == 0x27, fresh=False)
         self.assertTrue(reply, "no answer to the request")
         self.assertEqual((reply[0][0x21], reply[0][-1]), (2, 1))                # yields: 1
         self.assertEqual(self.status_of(2)[0x9F], 9)                            # Mh: to player 9
@@ -248,7 +252,7 @@ class Bench(unittest.TestCase):
 
         def command(code):
             p = bytearray(prolink.header(0x2A, b"TEST")) + bytes([0x01, 0, 9, 0, 0x08, 0, 0, 0, 9, 0, 0, 0, code])
-            s.sendto(bytes(p), ("127.0.0.3", BEAT_PORT))
+            s.sendto(bytes(p), ("127.0.0.3", PORTS.beat))
             time.sleep(0.5)
             return self.api("api/state")["decks"]["3"]
 
@@ -262,10 +266,10 @@ class Bench(unittest.TestCase):
     # -- the database --
     def test_database_gives_the_title(self):
         self.switch(2, "on", True)
-        with socket.create_connection(("127.0.0.2", 12523), timeout=3) as c:
+        with socket.create_connection(("127.0.0.2", PORTS.query), timeout=3) as c:
             c.sendall(struct.pack(">I", 15) + b"RemoteDBServer\0")
             port = struct.unpack(">H", read_exact(c, 2))[0]
-        self.assertEqual(port, prolink.DB_PORT)
+        self.assertEqual(port, PORTS.db)
         with socket.create_connection(("127.0.0.2", port), timeout=3) as c:
             c.sendall(num(1))
             self.assertEqual(read_exact(c, 5), num(1))
