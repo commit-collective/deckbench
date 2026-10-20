@@ -20,6 +20,7 @@ class Events:
         self.items = []
         self.cond = threading.Condition()
         self.began = time.time()
+        self.generation = 0                  # counts the times they were cleared
         self.file = open(path, "a", encoding="utf-8") if path else None
 
     def add(self, kind, **data):
@@ -62,4 +63,5 @@ class Events:
     def clear(self):
         with self.cond:
             self.items = []
+            self.generation += 1
             self.began = time.time()

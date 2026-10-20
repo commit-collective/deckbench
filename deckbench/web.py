@@ -19,391 +19,47 @@
     GET  /api/scenario               how far it is: running, name, total, results, failed, stopped
     GET  /api/events?since=<n>       what the device under test did, from the n-th event on (see events.py)
     POST /api/events/clear           forget them
+    GET  /api/examples               the scenarios that come with the bench: [{file, name, text}]
+    GET  /api/stream                 the same as server-sent events: `state` (when the decks change, and every second),
+                                     `event` (each event of the device under test), `scenario` (how far it is)
+    POST /api/settings/<name>/<value>  strict and refuse_db (0 or 1), model (the name the decks announce)
+    POST /api/deck/<n>/load/<id>     also ?source=<player>&slot=<n>: the track is in that player's database
 
-The page polls /api/state and counts the beat squares on from each deck's
-phase, so it needs nothing but a browser, on the machine or any that can reach
-the port (by default it listens on 127.0.0.1 only).
+The page (deckbench/ui: index.html, app.css, app.js, no build step and no packages) follows /api/stream and counts the
+beat squares on from each deck's phase, so it needs nothing but a browser, on the machine or any that can reach the port
+(by default it listens on 127.0.0.1 only).
 """
 import json
+import os
 import threading
+import time
 from urllib.parse import parse_qs, unquote, urlparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .core import log
 from .scenario import Runner, ScenarioError
 
-PAGE = r"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>deckbench</title>
-<style>
-:root {
-  --bg: #101114; --panel: #1a1b1f; --edge: #2c2e34; --text: #e1e4e8; --dim: #969aa2;
-  --off: #28292d; --on: #96dc78; --play: #78d278; --sync: #6eaaf0; --master: #f0a03c; --loop: #c88cf0;
-  --beat1: #eb2828; --beat: #3c82eb; --unlit: #1e1f23;
-  color-scheme: dark;
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --bg: #f4f5f7; --panel: #ffffff; --edge: #d5d8de; --text: #1b1d21; --dim: #626874;
-    --off: #e6e8ec; --unlit: #e3e5ea; color-scheme: light;
-  }
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text);
-  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
-main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
-h1 { font-size: 18px; margin: 0 0 4px; font-weight: 600; }
-.sub { color: var(--dim); margin: 0 0 20px; }
-.deck { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px;
-  padding: 12px; margin-bottom: 10px; }
-.deck.off { opacity: .8; }
-.line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.title { color: var(--dim); font-size: 12px; margin-bottom: 8px; }
-.title b { color: var(--text); font-weight: 600; }
-button { font: inherit; min-width: 64px; height: 30px; border: 0; border-radius: 6px;
-  background: var(--off); color: var(--dim); cursor: pointer; }
-button.on { color: #0a0a0a; }
-button[data-what=on].on { background: var(--on); }
-button[data-what=play].on { background: var(--play); }
-button[data-what=sync].on { background: var(--sync); }
-button[data-what=master].on { background: var(--master); }
-button[data-what=loop].on { background: var(--loop); }
-button.n { min-width: 36px; }
-.loops { margin-top: 6px; }
-.loops .lbl { color: var(--dim); font-size: 12px; min-width: 64px; }
-button:disabled { opacity: .45; cursor: default; }
-button:focus-visible { outline: 2px solid var(--sync); outline-offset: 2px; }
-.beats { display: flex; gap: 4px; margin-left: 10px; }
-.beats i { width: 22px; height: 22px; border-radius: 4px; background: var(--unlit);
-  border: 1px solid var(--edge); }
-.beats i.lit { background: var(--beat); border-color: var(--beat); }
-.beats i.lit.first { background: var(--beat1); border-color: var(--beat1); }
-.bpm { margin-left: 10px; color: var(--dim); font-variant-numeric: tabular-nums; min-width: 80px; }
-.unit { margin-top: 18px; color: var(--dim); font-size: 13px; }
-.unit b { color: var(--text); font-weight: 600; }
-.err { color: var(--master); }
-.tools { margin-top: 8px; gap: 8px 14px; }
-.tools .lbl { color: var(--dim); font-size: 12px; min-width: 64px; }
-.tools label { color: var(--dim); font-size: 12px; display: flex; align-items: center; gap: 4px; }
-input[type=number], input[type=text] { font: inherit; height: 28px; border: 1px solid var(--edge); border-radius: 6px;
-  background: var(--bg); color: var(--text); padding: 0 6px; }
-input[type=number] { width: 72px; }
-input[type=text] { width: 150px; }
-button.warn.on { background: var(--master); color: #0a0a0a; }
-.panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 12px; margin-top: 10px; }
-.panel h2 { font-size: 13px; margin: 0 0 8px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
-.panel input[type=range] { width: 220px; vertical-align: middle; }
-.events { font: 12px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; max-height: 220px; overflow: auto; }
-.events div { white-space: nowrap; }
-.events .t { color: var(--dim); display: inline-block; min-width: 56px; }
-.events .k { color: var(--sync); display: inline-block; min-width: 130px; }
-.bench { color: var(--dim); font-size: 12px; margin-top: 4px; }
-textarea { width: 100%; font: 12px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: var(--bg);
-  color: var(--text); border: 1px solid var(--edge); border-radius: 6px; padding: 6px; resize: vertical; }
-.events .bad { color: var(--master); }
-</style>
-</head>
-<body>
-<main>
-  <h1>deckbench</h1>
-  <p class="sub" id="sub">connecting&hellip;</p>
-  <div id="decks"></div>
-  <section class="panel">
-    <h2>Network</h2>
-    <label for="loss">Datagrams lost</label>
-    <input type="range" id="loss" min="0" max="100" step="5" value="0">
-    <output id="lossout">0 %</output>
-    <div class="bench" id="bench"></div>
-  </section>
-  <section class="panel">
-    <h2>Scenario <span style="float:right"><input type="file" id="scfile" accept=".json,application/json" style="display:none">
-      <button id="scload" class="n" style="min-width:60px;height:24px">OPEN</button>
-      <button id="scrun" class="n" style="min-width:52px;height:24px">RUN</button>
-      <button id="scstop" class="n warn" style="min-width:52px;height:24px" disabled>STOP</button></span></h2>
-    <textarea id="scenario" spellcheck="false" rows="7">{"name": "a loop and a stop", "steps": [
-  {"at": 0,   "deck": 2, "do": "on"},
-  {"at": 0.5, "deck": 2, "do": "play"},
-  {"at": 4,   "deck": 2, "do": "loop", "beats": 4},
-  {"at": 8,   "deck": 2, "do": "stop"}
-]}</textarea>
-    <div class="bench" id="scstatus">Steps and what they do: docs/scenarios.md</div>
-    <div class="events" id="scresults"></div>
-  </section>
-  <section class="panel">
-    <h2>What the unit did <button id="clear" class="n" style="float:right;min-width:52px;height:24px">CLEAR</button></h2>
-    <div class="events" id="events"><div class="t">nothing yet</div></div>
-  </section>
-  <p class="unit" id="unit"></p>
-</main>
-<script>
-const WHAT = [["on", "ON"], ["play", "PLAY"], ["sync", "SYNC"], ["master", "MASTER"]];
-const LOOPS = [1, 2, 4, 8, 16, 32];
-let offset = 0, state = null, built = "";
+UI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
+KINDS = {".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml",
+         ".png": "image/png", ".ico": "image/x-icon"}
 
-function build() {
-  const keys = Object.keys(state.decks);
-  if (keys.join() === built) return;
-  built = keys.join();
-  const root = document.getElementById("decks");
-  root.textContent = "";
-  for (const n of keys) {
-    const d = document.createElement("section");
-    d.className = "deck"; d.id = "deck" + n;
-    d.innerHTML = '<div class="title"></div><div class="line"></div>';
-    const line = d.querySelector(".line");
-    for (const [what, label] of WHAT) {
-      const b = document.createElement("button");
-      b.dataset.what = what; b.dataset.n = n; b.textContent = label;
-      b.addEventListener("click", () => click(n, what));
-      line.appendChild(b);
-    }
-    const beats = document.createElement("div");
-    beats.className = "beats";
-    for (let k = 0; k < 4; k++) beats.appendChild(document.createElement("i"));
-    line.appendChild(beats);
-    const bpm = document.createElement("span");
-    bpm.className = "bpm";
-    line.appendChild(bpm);
-    const loops = document.createElement("div");
-    loops.className = "line loops";
-    loops.innerHTML = '<span class="lbl">LOOP</span>';
-    for (const beats of LOOPS) {
-      const b = document.createElement("button");
-      b.dataset.what = "loop"; b.dataset.beats = beats; b.className = "n";
-      b.textContent = beats; b.title = beats + " beats from where the deck is; again to end it";
-      b.addEventListener("click", () => loop(n, beats));
-      loops.appendChild(b);
-    }
-    d.appendChild(loops);
-    const tempo = document.createElement("div");
-    tempo.className = "line tools";
-    tempo.innerHTML = '<span class="lbl">TEMPO</span><input type="number" step="0.1" min="40" max="220" class="tempo" ' +
-      'title="the pitch fader: the BPM the deck plays at (a synced deck follows the master)">' +
-      '<span class="lbl" style="margin-left:8px">TRACK</span>' +
-      '<label>id <input type="number" min="1" class="tid" style="width:84px"></label>' +
-      '<label>title <input type="text" class="ttitle"></label>' +
-      '<label>BPM <input type="number" step="0.1" min="40" max="220" class="tbpm"></label>' +
-      '<button class="n load" style="min-width:56px" title="load that track: it starts from its first beat">LOAD</button>';
-    d.appendChild(tempo);
-    const cable = document.createElement("div");
-    cable.className = "line tools";
-    cable.innerHTML = '<span class="lbl">CABLE</span>' +
-      '<button class="warn unplug" data-what="cable" title="pull the cable: the deck says nothing and answers nothing">UNPLUG</button>' +
-      '<button class="n silence" data-what="silence" title="pull the cable for 5 seconds">SILENCE 5 s</button>';
-    d.appendChild(cable);
-    tempo.querySelector(".tempo").addEventListener("change", e => send(n, "tempo/" + e.target.value));
-    tempo.querySelector(".load").addEventListener("click", () => {
-      const id = tempo.querySelector(".tid").value;
-      if (!id) return;
-      const title = tempo.querySelector(".ttitle").value, bpm = tempo.querySelector(".tbpm").value;
-      send(n, "load/" + id + "?" + (title ? "title=" + encodeURIComponent(title) + "&" : "") + (bpm ? "bpm=" + bpm : ""));
-    });
-    cable.querySelector(".unplug").addEventListener("click", () => send(n, state.decks[n].unplugged ? "plug" : "unplug"));
-    cable.querySelector(".silence").addEventListener("click", () => send(n, "silence/5"));
-    root.appendChild(d);
-  }
-}
 
-function beat(d) {
-  if (!d.phase) return 0;
-  const [t, pos, bpm] = d.phase;
-  const now = Date.now() / 1000 + offset;
-  let at = pos + (now - t) * bpm / 60;
-  if (d.loop && at >= d.loop_from + d.loop) at = d.loop_from + (at - d.loop_from) % d.loop;
-  return Math.floor(at) % 4 + 1;
-}
-
-function render() {
-  if (!state) return;
-  build();
-  for (const [n, d] of Object.entries(state.decks)) {
-    const el = document.getElementById("deck" + n);
-    if (!el) continue;
-    const link = state.protocols.prolink, unit = link && link.unit;
-    el.classList.toggle("off", !d.on);
-    const track = d.track ? ' &middot; ' + esc(d.track) : "";
-    el.querySelector(".title").innerHTML = '<b>' + esc(d.name) + '</b>' + track +
-      (d.model ? ' &middot; ' + esc(d.model) : "") +
-      (d.address ? ' &middot; ' + esc(d.address) : "");
-    for (const b of el.querySelectorAll("button")) {
-      const what = b.dataset.what;
-      b.classList.toggle("on", what === "loop" ? d.on && d.loop === +b.dataset.beats
-                                               : !!d[what] && (what === "on" || d.on));
-      if (what === "cable" || what === "silence" || b.classList.contains("load")) continue;
-      b.disabled = what !== "on" && !d.on;
-      if (what === "on") {                        // the unit's own number: a clash, left off
-        const mine = !!unit && unit.number === +el.id.slice(4);
-        b.disabled = mine && !d.on;
-        b.title = mine && !d.on ? "this is the unit's own number: a deck here is a clash" : "";
-      }
-    }
-    el.querySelector(".bpm").textContent = d.on ? d.bpm.toFixed(1) + " BPM" : "";
-    const tempo = el.querySelector(".tempo");
-    if (document.activeElement !== tempo) tempo.value = d.bpm.toFixed(1);
-    const cable = el.querySelector(".unplug");
-    cable.classList.toggle("on", !!d.unplugged);
-    cable.textContent = d.unplugged ? "PLUG IN" : "UNPLUG";
-    cable.disabled = false;
-    el.querySelector(".silence").disabled = !!d.unplugged;
-  }
-  const loss = document.getElementById("loss");
-  if (document.activeElement !== loss) loss.value = state.loss;
-  document.getElementById("lossout").textContent = state.loss + " %";
-  const info = state.bench || {};
-  document.getElementById("bench").textContent = [info.strict ? "strict: players 1 to 4 only" : "",
-    info.audio ? "sound on " + info.audio : ""].filter(Boolean).join("  \u00b7  ");
-  beats();
-  const sub = document.getElementById("sub");
-  sub.textContent = "Pro DJ Link decks on this machine's loopback; click a switch.";
-  sub.classList.remove("err");
-  const link = state.protocols.prolink, unit = link && link.unit, u = document.getElementById("unit");
-  u.innerHTML = unit
-    ? 'Unit under test: <b>player ' + unit.number + '</b>' + (unit.master ? ', tempo master' : '') +
-      (unit.bpm ? ', ' + unit.bpm.toFixed(1) + ' BPM' : '') + ' (' + esc(unit.ip || "?") + ')'
-    : 'No DJS-1000 heard on the network yet.';
-}
-
-function beats() {
-  if (!state) return;
-  for (const [n, d] of Object.entries(state.decks)) {
-    const el = document.getElementById("deck" + n);
-    if (!el) continue;
-    const cur = d.on ? beat(d) : 0;
-    el.querySelectorAll(".beats i").forEach((s, k) => {
-      s.classList.toggle("lit", cur === k + 1);
-      s.classList.toggle("first", k === 0);
-    });
-  }
-}
-
-function esc(s) {
-  return String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
-}
-
-async function load(url, options) {
-  const r = await fetch(url, options);
-  if (!r.ok) throw new Error(r.status);
-  state = await r.json();
-  offset = state.now - Date.now() / 1000;
-}
-
-async function click(n, what) {
-  try { await load("api/deck/" + n + "/" + what, {method: "POST"}); render(); } catch (e) { fail(); }
-}
-
-async function loop(n, beats) {
-  const d = state.decks[n], now = d && d.loop === beats ? 0 : beats;     // again: ends it
-  try { await load("api/deck/" + n + "/loop/" + now, {method: "POST"}); render(); } catch (e) { fail(); }
-}
-
-async function send(n, path) {
-  try { await load("api/deck/" + n + "/" + path, {method: "POST"}); render(); } catch (e) { fail(); }
-}
-
-let seen = 0, listed = [];
-
-function describe(e) {
-  const rest = Object.entries(e).filter(([k]) => !["n", "t", "kind"].includes(k)).map(([k, v]) => k + "=" + v);
-  return rest.join(" ");
-}
-
-async function pollEvents() {
-  try {
-    const r = await fetch("api/events?since=" + seen);
-    if (r.ok) {
-      const items = await r.json();
-      if (items.length) {
-        seen = items[items.length - 1].n + 1;
-        listed = listed.concat(items).slice(-60);
-        const box = document.getElementById("events");
-        box.innerHTML = listed.slice().reverse().map(e => '<div><span class="t">' + e.t.toFixed(1) + ' s</span>' +
-          '<span class="k">' + esc(e.kind) + '</span>' + esc(describe(e)) + '</div>').join("");
-      }
-    }
-  } catch (e) { /* the state's poll says it */ }
-  setTimeout(pollEvents, 1000);
-}
-
-let scTimer = null;
-
-async function pollScenario() {
-  let s = null;
-  try { const r = await fetch("api/scenario"); if (r.ok) s = await r.json(); } catch (e) { /* the state's poll says it */ }
-  if (s) {
-    document.getElementById("scrun").disabled = s.running;
-    document.getElementById("scstop").disabled = !s.running;
-    document.getElementById("scstatus").textContent = !s.name ? "Steps and what they do: docs/scenarios.md" :
-      s.name + ": " + (s.running ? "playing, " + s.results.length + " of " + s.total + " steps" :
-      (s.stopped ? "stopped" : "done") + ", " + s.results.length + " of " + s.total + " steps" +
-      (s.failed ? ", " + s.failed + " expectation" + (s.failed > 1 ? "s" : "") + " failed" : ""));
-    document.getElementById("scresults").innerHTML = s.results.map(r => '<div class="' + (r.ok ? "" : "bad") + '"><span class="t">' +
-      r.at.toFixed(1) + ' s</span>' + esc(r.what) + (r.message ? ' &middot; ' + esc(r.message) : "") + (r.ok ? "" : " FAILED") + '</div>').join("");
-    if (!s.running) { scTimer = null; return; }
-  }
-  scTimer = setTimeout(pollScenario, 500);
-}
-
-document.getElementById("scrun").addEventListener("click", async () => {
-  const box = document.getElementById("scstatus");
-  try {
-    const r = await fetch("api/scenario", {method: "POST", body: document.getElementById("scenario").value});
-    const s = await r.json();
-    if (!r.ok) { box.textContent = s.error || "not accepted"; return; }
-  } catch (e) { return fail(); }
-  if (!scTimer) pollScenario();
-});
-document.getElementById("scstop").addEventListener("click", async () => {
-  try { await fetch("api/scenario/stop", {method: "POST"}); } catch (e) { fail(); }
-});
-document.getElementById("scload").addEventListener("click", () => document.getElementById("scfile").click());
-document.getElementById("scfile").addEventListener("change", e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => { document.getElementById("scenario").value = reader.result; };
-  reader.readAsText(file);
-});
-
-document.getElementById("loss").addEventListener("input", e => {
-  document.getElementById("lossout").textContent = e.target.value + " %";
-});
-document.getElementById("loss").addEventListener("change", async e => {
-  try { await load("api/loss/" + e.target.value, {method: "POST"}); render(); } catch (x) { fail(); }
-});
-document.getElementById("clear").addEventListener("click", async () => {
-  try { await fetch("api/events/clear", {method: "POST"}); } catch (e) { return; }
-  seen = 0; listed = [];
-  document.getElementById("events").innerHTML = '<div class="t">nothing yet</div>';
-});
-
-function fail() {
-  const sub = document.getElementById("sub");
-  sub.textContent = "The bench does not answer.";
-  sub.classList.add("err");
-}
-
-async function poll() {
-  try { await load("api/state"); render(); } catch (e) { fail(); }
-  setTimeout(poll, 300);
-}
-
-function frame() { beats(); requestAnimationFrame(frame); }
-poll();
-pollEvents();
-pollScenario();
-requestAnimationFrame(frame);
-</script>
-</body>
-</html>
-"""
+def examples():
+    """The scenarios that come with the bench (deckbench/examples): [{file, name, text}]."""
+    out = []
+    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples")
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        if name.endswith(".json"):
+            with open(os.path.join(folder, name), encoding="utf-8") as f:
+                text = f.read()
+            out.append({"file": name, "name": json.loads(text).get("name", name[:-5]), "text": text})
+    return out
 
 
 def serve(world, host="127.0.0.1", port=8750):
     """Starts the server in a thread; returns it."""
     runner = Runner(world)
+    STATIC = set(os.listdir(UI)) if os.path.isdir(UI) else set()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
@@ -418,12 +74,54 @@ def serve(world, host="127.0.0.1", port=8750):
             self.end_headers()
             self.wfile.write(data)
 
+        def stream(self):
+            """Server-sent events until the page goes away."""
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+            def send_event(kind, data):
+                body = data if isinstance(data, str) else json.dumps(data)
+                self.wfile.write(("event: %s\ndata: %s\n\n" % (kind, body)).encode("utf-8"))
+
+            try:
+                last = {"state": None, "scenario": None}
+                sent_events, beat, generation = 0, 0.0, world.events.generation
+                while True:
+                    snap = world.snapshot()
+                    now = snap.pop("now")
+                    key = json.dumps(snap, sort_keys=True)
+                    if key != last["state"] or time.time() - beat > 1.0:    # also a clock now and then, for the beats
+                        last["state"], beat = key, time.time()
+                        send_event("state", dict(snap, now=now))
+                    if generation != world.events.generation:                # cleared
+                        generation, sent_events = world.events.generation, 0
+                        send_event("cleared", "{}")
+                    for item in world.events.since(sent_events):
+                        sent_events = item["n"] + 1
+                        send_event("event", item)
+                    sc = json.dumps(runner.snapshot(), sort_keys=True)
+                    if sc != last["scenario"]:
+                        last["scenario"] = sc
+                        send_event("scenario", sc)
+                    self.wfile.flush()
+                    time.sleep(0.1)
+            except (OSError, ValueError):
+                pass
+
         def do_GET(self):
             path = self.path.split("?")[0]
-            if path in ("/", "/index.html"):
-                self.send(200, PAGE, "text/html")
+            if path == "/api/stream":
+                self.stream()
+            elif path == "/" or path[1:] in STATIC:
+                name = "index.html" if path == "/" else path[1:]
+                with open(os.path.join(UI, name), "rb") as f:
+                    self.send(200, f.read(), KINDS.get(os.path.splitext(name)[1], "application/octet-stream"))
             elif path == "/api/state":
                 self.send(200, json.dumps(world.snapshot()))
+            elif path == "/api/examples":
+                self.send(200, json.dumps(examples()))
             elif path == "/api/ready":
                 self.send(200, json.dumps(dict(world.info, ready=True)))
             elif path == "/api/scenario":
@@ -440,6 +138,12 @@ def serve(world, host="127.0.0.1", port=8750):
         def do_POST(self):
             parts = self.path.split("?")[0].strip("/").split("/")
             query = parse_qs(urlparse(self.path).query)
+            if len(parts) == 4 and parts[:2] == ["api", "settings"]:
+                value = unquote(parts[3])
+                if not any(p.set_option(parts[2], value) for p in world.protocols):
+                    return self.send(400, json.dumps({"error": "no such setting or value"}))
+                world.changed()
+                return self.send(200, json.dumps(world.snapshot()))
             if parts == ["api", "scenario"]:
                 try:
                     length = int(self.headers.get("Content-Length") or 0)
@@ -476,8 +180,10 @@ def serve(world, host="127.0.0.1", port=8750):
                         world.set_tempo(deck, float(parts[4]))
                     elif what == "load" and len(parts) == 5:
                         bpm = query.get("bpm", [None])[0]
-                        world.load_track(deck, int(parts[4]), unquote(query["title"][0]) if "title" in query else None,
-                                         float(bpm) if bpm else None)
+                        source, slot = query.get("source", [None])[0], query.get("slot", [None])[0]
+                        world.load_track(deck, int(parts[4]), query["title"][0] if "title" in query else None,
+                                         float(bpm) if bpm else None, int(source) if source else None,
+                                         int(slot) if slot else None)
                     elif what == "unplug" and len(parts) == 4:
                         world.set_unplugged(deck, True)
                     elif what == "plug" and len(parts) == 4:

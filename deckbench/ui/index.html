@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>deckbench</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%2316181c' stroke='%235b9cf5' stroke-width='2'/%3E%3Ccircle cx='12' cy='12' r='3' fill='%234cc38a'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="bar">
+  <div class="brand">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="var(--on)"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="currentColor" stroke-width="1.4" opacity=".5"/></svg>
+    <span>deckbench</span> <small id="version"></small>
+  </div>
+  <div class="chips" id="chips" aria-label="Status"></div>
+  <div class="actions">
+    <button class="btn small" id="allon" title="Switch every deck on (except one that has the unit's number)">All on</button>
+    <button class="btn small" id="alloff" title="Switch every deck off">All off</button>
+  </div>
+</header>
+
+<main class="layout">
+  <section id="decks" aria-label="Decks"></section>
+
+  <aside class="side">
+    <div class="tabs" role="tablist" aria-label="Tools">
+      <button role="tab" id="tab-events" aria-controls="p-events" aria-selected="true">Events<span class="count" id="evcount"></span></button>
+      <button role="tab" id="tab-scenario" aria-controls="p-scenario" aria-selected="false">Scenario</button>
+      <button role="tab" id="tab-network" aria-controls="p-network" aria-selected="false">Network</button>
+      <button role="tab" id="tab-settings" aria-controls="p-settings" aria-selected="false">Settings</button>
+    </div>
+
+    <!-- Events -->
+    <div class="panel" id="p-events" role="tabpanel" aria-labelledby="tab-events">
+      <div class="toolbar">
+        <button class="btn small" id="evpause">Pause</button>
+        <button class="btn small" id="evclear">Clear</button>
+        <button class="btn small" id="evexport" title="Save the events as a JSON file">Export</button>
+        <span class="grow"></span>
+        <span class="hint" id="evstatus"></span>
+      </div>
+      <div class="filters" id="evfilters" aria-label="Filter by kind"></div>
+      <div class="events" id="events" role="log" aria-live="off"></div>
+    </div>
+
+    <!-- Scenario -->
+    <div class="panel" id="p-scenario" role="tabpanel" aria-labelledby="tab-scenario" hidden>
+      <div class="toolbar">
+        <select id="scexample" aria-label="Examples"><option value="">Examples&hellip;</option></select>
+        <select id="scsaved" aria-label="Saved in this browser"><option value="">Saved&hellip;</option></select>
+        <button class="btn small danger" id="scdelete" title="Forget the saved scenario" hidden>Delete</button>
+        <span class="grow"></span>
+        <button class="btn small" id="scopen" title="Open a scenario file">Open</button>
+        <button class="btn small" id="scsave" title="Keep it in this browser under its name">Save</button>
+        <button class="btn small" id="scdownload" title="Download it as a file">Download</button>
+        <input type="file" id="scfile" accept=".json,application/json" hidden>
+      </div>
+      <textarea id="scenario" spellcheck="false" rows="14" aria-label="Scenario (JSON)"></textarea>
+      <div class="hint" id="scvalid"></div>
+      <div class="toolbar">
+        <button class="btn primary" id="scrun">Run</button>
+        <button class="btn danger" id="scstop" disabled>Stop</button>
+        <span class="grow"></span>
+        <button class="btn small" id="sccopy" title="Copy the result as JSON" disabled>Copy result</button>
+      </div>
+      <div class="bar-progress" id="scbar"><i></i></div>
+      <div class="note" id="scstatus">Steps and what they do: docs/scenarios.md</div>
+      <div class="events" id="scresults"></div>
+    </div>
+
+    <!-- Network -->
+    <div class="panel" id="p-network" role="tabpanel" aria-labelledby="tab-network" hidden>
+      <h2>Datagrams lost</h2>
+      <div class="row"><input type="range" id="loss" min="0" max="100" step="1" value="0" aria-label="Share of datagrams lost">
+        <output id="lossout" class="mono">0 %</output></div>
+      <div class="seg" id="lossquick"></div>
+      <p class="hint">Every deck loses that share of what it sends, at random. A cable is pulled for one deck on its card.</p>
+      <h2>Unit under test</h2>
+      <div id="unit"></div>
+      <h2>Decks on the network</h2>
+      <table class="kv" id="nettable"></table>
+    </div>
+
+    <!-- Settings -->
+    <div class="panel" id="p-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+      <h2>Behaviour</h2>
+      <div class="setting">
+        <div class="what"><b>Strict decks</b><span>Serve the players 1 to 4 that announced themselves and nobody else, as a CDJ-2000NXS2 or an XDJ-1000MK2 does.</span></div>
+        <button class="switch" role="switch" id="strict" aria-checked="false" aria-label="Strict decks"></button>
+      </div>
+      <div class="setting">
+        <div class="what"><b>Refuse the database</b><span>Turn metadata requests down, as real decks do those of a device that is not a player.</span></div>
+        <button class="switch" role="switch" id="refuse_db" aria-checked="false" aria-label="Refuse the database"></button>
+      </div>
+      <div class="setting">
+        <div class="what"><b>Model name</b><span>What the decks announce themselves as (20 characters at most).</span>
+          <div class="row" style="margin-top:6px"><input type="text" id="model" maxlength="20" style="flex:1" aria-label="Model name" placeholder="CDJ-FAKEn: one for each deck">
+            <button class="btn small" id="modelset">Apply</button></div></div>
+      </div>
+      <h2>Appearance</h2>
+      <div class="row"><select id="theme" aria-label="Theme"><option value="auto">Follow the system</option>
+        <option value="dark">Dark</option><option value="light">Light</option></select></div>
+      <h2>This bench</h2>
+      <table class="kv" id="about"></table>
+    </div>
+  </aside>
+</main>
+<div id="toasts" role="status" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>

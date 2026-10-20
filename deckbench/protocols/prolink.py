@@ -600,10 +600,11 @@ class Prolink(Protocol):
         source = self.decks.get(link.source, link)
         return {"track": source.titles.get((link.slot, link.rbid), ""),
                 "track_id": "%d:%d:%d" % (link.source, link.slot, link.rbid),
+                "track_source": link.source, "track_slot": link.slot, "track_rbid": link.rbid,
                 "model": link.name.decode(), "address": link.address}
 
     def info(self):
-        return {"unit": dict(self.unit) if self.unit["number"] else None}
+        return {"unit": dict(self.unit) if self.unit["number"] else None, "settings": self.settings()}
 
     def allow_enable(self, deck):
         # A deck with the unit's own number is a clash: the unit then links to no deck at all.
@@ -624,12 +625,37 @@ class Prolink(Protocol):
         if link:
             link.handing_to = 0xFF
 
-    def track_loaded(self, deck, rbid, title):
+    def track_loaded(self, deck, rbid, title, source=None, slot=None):
         link = self.decks.get(deck.number)
         if not link:
             return
-        link.source, link.rbid = deck.number, rbid        # from its own database
-        link.titles[(link.slot, rbid)] = title if title is not None else "Track %d" % rbid
+        if slot is not None:
+            link.slot = int(slot)
+        link.source, link.rbid = (deck.number if source is None else int(source)), rbid
+        origin = self.decks.get(link.source, link)          # the title is in the database of the player it comes from
+        key = (link.slot, rbid)
+        if title is not None:
+            origin.titles[key] = title
+        elif key not in origin.titles:
+            origin.titles[key] = "Track %d" % rbid
+
+    def settings(self):
+        links = list(self.decks.values())
+        return {"strict": any(l.strict for l in links), "refuse_db": any(l.refuse_db for l in links),
+                "model": links[0].name.decode() if len({l.name for l in links}) == 1 else ""}
+
+    def set_option(self, name, value):
+        if name in ("strict", "refuse_db") and value in ("0", "1", 0, 1, True, False):
+            for link in self.decks.values():
+                setattr(link, name, str(value) in ("1", "True"))
+            log("%s %s" % (name.replace("_", "-"), "on" if self.settings()[name] else "off"))
+            return True
+        if name == "model" and isinstance(value, str) and value.strip() and len(value.strip().encode()) <= 20:
+            for link in self.decks.values():
+                link.name = value.strip().encode()
+            log("the decks now announce themselves as %s" % value.strip())
+            return True
+        return False
 
     def take_master(self, deck):
         link = self.decks.get(deck.number)

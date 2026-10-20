@@ -154,7 +154,7 @@ def main(argv=None):
             for word in what.split(","):
                 if word.startswith("loop") and word[4:].isdigit():
                     deck.loop = (0.0, float(word[4:]))
-    world.info.update(version=__version__, pid=os.getpid(), numbers=numbers,
+    world.info.update(version=__version__, broadcast=broadcast, pid=os.getpid(), numbers=numbers,
                       ports={"announce": link.ports.announce, "beat": link.ports.beat, "update": link.ports.update,
                              "query": link.ports.query, "db": link.ports.db})
     server = serve(world, a.http_host, a.http_port) if a.http_port >= 0 else None

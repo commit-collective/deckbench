@@ -25,10 +25,12 @@ Python 3.8 or later, no packages to install.
 
     python -m deckbench --numbers 2,3,4 --on
 
-then open <http://127.0.0.1:8750/>: a deck is a block with ON, PLAY, SYNC and MASTER, the four beat squares of its bar
-and its BPM, its loops, its tempo (the pitch fader), a track to load and its cable (pull it, or silence it for a while).
-Under the decks, the share of datagrams lost and what the device under test did (the events), and a line for what is known of
-a DJS-1000 on the network. The decks of Pro DJ Link are at 127.0.0.<number>, so
+then open <http://127.0.0.1:8750/>. A deck is a card with ON, PLAY, SYNC and MASTER, the four beat squares of its bar and its
+tempo display, its loops, its tempo (the pitch fader), its cable (pull it, or silence it for a while) and a fold to load a
+track (its id, title, BPM, the deck whose database it comes from and the slot). The side panel has four tabs: **Events**
+(what the device under test did: filter, pause, export), **Scenario** (an editor with the examples, saved scenarios, a run
+with its progress), **Network** (the share of datagrams lost, the unit heard on the network) and **Settings** (strict decks,
+database refusal, the model name, the theme, and how the bench was started). `http://127.0.0.1:8750/#scenario` opens a tab. The decks of Pro DJ Link are at 127.0.0.<number>, so
 the client must see the machine's loopback: run both in one network namespace
 (on Windows, in WSL, which also reaches the page at `localhost`).
 
@@ -65,8 +67,11 @@ Options (`python -m deckbench --help`):
     POST /api/deck/<n>/loop/<beats>   loop that many beats from the beat the deck is in (0: end it)
 
     POST /api/deck/<n>/tempo/<bpm>    the pitch fader: the deck plays at that tempo
-    POST /api/deck/<n>/load/<id>      the deck loads that track (optional ?title=...&bpm=...), from its first beat
+    POST /api/deck/<n>/load/<id>      the deck loads that track (optional ?title=...&bpm=...&source=<player>&slot=<n>), from its first beat
     POST /api/deck/<n>/unplug         the cable is pulled (also plug, and silence/<seconds>)
+    POST /api/settings/<name>/<value> strict and refuse_db (0 or 1), model (the name the decks announce)
+    GET  /api/examples                the scenarios that come with the bench (deckbench/examples)
+    GET  /api/stream                  the state, the events and the scenario as server-sent events (what the page follows)
     POST /api/loss/<percent>          that share of the datagrams is lost (0 for none)
     GET  /api/ready                   {"ready": true} and how the bench was started (version, pid, ports, address)
     GET  /api/events?since=<n>        what the device under test did, from the n-th event on
@@ -107,7 +112,9 @@ From any other language, start `python -m deckbench --http-port 0 --ready-file r
 
     deckbench/core.py             a deck, and the world of decks, whatever the protocol
     deckbench/protocols/prolink.py  Pro DJ Link
-    deckbench/web.py              the page and the API
+    deckbench/web.py              the API, and the page's files
+    deckbench/ui/                 the page: index.html, app.css, app.js (no packages, no build step)
+    deckbench/examples/           scenarios to start from (the page lists them, `--scenario` plays them)
     deckbench/events.py           what the device under test did, to wait for and check
     deckbench/scenario.py         a timeline of what the decks do and what to expect
     deckbench/audio.py            the decks' sound, in real time

@@ -1,0 +1,570 @@
+/* deckbench's page: no packages, no build step. It follows /api/stream (server-sent events), and falls back on polling. */
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const SLOTS = {1: "CD", 2: "SD", 3: "USB", 4: "rekordbox"};
+const LOOPS = [1, 2, 4, 8, 16, 32];
+const SWITCHES = [["on", "ON"], ["play", "PLAY"], ["sync", "SYNC"], ["master", "MASTER"]];
+
+const store = {
+  get(key, fallback) { try { const v = localStorage.getItem(key); return v === null ? fallback : v; } catch (e) { return fallback; } },
+  set(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* private window, or blocked: it works without */ } },
+};
+
+/* Builds an element. Text goes in as text, never as HTML: a track's title is anyone's string. */
+function h(tag, attrs, ...kids) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === false || v == null) continue;
+    if (k === "class") node.className = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) node.append(kid);
+  return node;
+}
+
+const S = {state: null, offset: 0, events: [], paused: false, frozen: 0, hidden: new Set(), kinds: new Map(),
+           scenario: null, connected: false, examples: []};
+
+/* ---- talking to the bench ---- */
+
+function toast(text, kind) {
+  const t = h("div", {class: "toast" + (kind ? " " + kind : "")}, text);
+  $("toasts").append(t);
+  setTimeout(() => t.remove(), 6000);
+}
+
+async function api(path, options) {
+  let r;
+  try { r = await fetch(path, Object.assign({method: "POST"}, options)); }
+  catch (e) { toast("The bench does not answer."); throw e; }
+  let body = null;
+  try { body = await r.json(); } catch (e) { /* not JSON */ }
+  if (!r.ok) {
+    const message = (body && body.error) || "The bench refused (" + r.status + ").";
+    toast(message);
+    throw new Error(message);
+  }
+  if (body && body.decks) apply(body);
+  return body;
+}
+
+/* a click: errors are said by a toast already */
+const act = (path, options) => api(path, options).catch(() => {});
+
+function apply(state) {
+  S.state = state;
+  S.offset = state.now - Date.now() / 1000;
+  render();
+}
+
+function connect() {
+  if (!window.EventSource) return poll();
+  const es = new EventSource("api/stream");
+  es.onopen = () => { S.connected = true; renderChips(); };
+  es.onerror = () => { S.connected = false; renderChips(); };
+  es.addEventListener("state", (e) => apply(JSON.parse(e.data)));
+  es.addEventListener("event", (e) => addEvent(JSON.parse(e.data)));
+  es.addEventListener("cleared", () => clearEvents());
+  es.addEventListener("scenario", (e) => { S.scenario = JSON.parse(e.data); renderScenario(); });
+}
+
+/* for a browser with no EventSource */
+async function poll() {
+  let seen = 0;
+  const once = async () => {
+    try {
+      apply(await (await fetch("api/state")).json());
+      S.scenario = await (await fetch("api/scenario")).json();
+      for (const e of await (await fetch("api/events?since=" + seen)).json()) { addEvent(e); seen = e.n + 1; }
+      S.connected = true;
+    } catch (e) { S.connected = false; }
+    renderChips(); renderScenario();
+    setTimeout(once, 500);
+  };
+  once();
+}
+
+/* ---- the top bar ---- */
+
+function unitOf(state) {
+  const link = state && state.protocols && state.protocols.prolink;
+  return link && link.unit;
+}
+
+function settingsOf(state) {
+  const link = state && state.protocols && state.protocols.prolink;
+  return (link && link.settings) || {};
+}
+
+function chip(text, kind, strong) {
+  return h("span", {class: "chip " + (kind || "")}, kind ? h("i", {class: "dot"}) : null, strong ? h("b", {}, strong) : null, text);
+}
+
+function renderChips() {
+  const box = $("chips"), s = S.state;
+  box.textContent = "";
+  box.append(S.connected ? chip("connected", "ok") : chip(S.state ? "reconnecting…" : "connecting…", "bad"));
+  if (!s) return;
+  const unit = unitOf(s);
+  box.append(unit
+    ? chip(" " + (unit.master ? "tempo master" : "") + (unit.bpm ? (unit.master ? ", " : "") + unit.bpm.toFixed(1) + " BPM" : ""),
+           "ok", "Unit: player " + unit.number)
+    : chip("no unit heard yet", "warn"));
+  const set = settingsOf(s), info = s.bench || {};
+  if (set.strict) box.append(chip("strict decks"));
+  if (set.refuse_db) box.append(chip("database refused"));
+  if (info.ports && info.ports.announce !== 50000) box.append(chip("ports +" + (info.ports.announce - 50000)));
+  if (info.audio) box.append(chip(info.audio, null, "sound "));
+}
+
+/* ---- the decks ---- */
+
+let built = "";
+
+function buildDecks() {
+  const numbers = Object.keys(S.state.decks);
+  if (numbers.join() === built) return;
+  built = numbers.join();
+  const root = $("decks");
+  root.textContent = "";
+  if (!numbers.length) root.append(h("div", {class: "empty"}, "No decks. Start the bench with --decks or --numbers."));
+  for (const n of numbers) root.append(buildDeck(n, numbers));
+}
+
+function buildDeck(n, numbers) {
+  const q = (cls) => card.querySelector("." + cls);
+  const card = h("article", {class: "deck off", id: "deck" + n, "aria-label": "Deck " + n},
+    h("div", {class: "deck-head"},
+      h("div", {class: "num", "aria-hidden": "true"}, n),
+      h("div", {class: "deck-id"}, h("div", {class: "model"}), h("div", {class: "track"})),
+      h("div", {class: "tags"})),
+    h("div", {class: "live"},
+      h("div", {class: "beats", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")),
+      h("div", {class: "lcd", "aria-label": "Tempo"}, h("b", {}, "--"), h("span", {}, "BPM"))),
+    h("div", {class: "switches", role: "group", "aria-label": "Deck " + n + " switches"},
+      SWITCHES.map(([what, label]) => h("button", {class: "sw", "data-what": what, "aria-pressed": "false",
+        onclick: () => act("api/deck/" + n + "/" + what)}, label))),
+    h("div", {class: "row"}, h("label", {for: "tempo" + n}, "Tempo"),
+      h("input", {type: "range", id: "tempo" + n, class: "tempo-range", min: 60, max: 200, step: 0.1,
+        "aria-label": "Tempo of deck " + n}),
+      h("input", {type: "number", class: "tempo-num", min: 40, max: 220, step: 0.1, "aria-label": "BPM of deck " + n})),
+    h("div", {class: "row"}, h("span", {class: "lbl"}, "Loop"),
+      h("div", {class: "seg", role: "group", "aria-label": "Loop of deck " + n},
+        LOOPS.map((beats) => h("button", {"data-beats": beats, "aria-pressed": "false",
+          title: beats + " beats from where the deck is. Again to end it",
+          onclick: () => { const d = S.state.decks[n]; act("api/deck/" + n + "/loop/" + (d.loop === beats ? 0 : beats)); }}, beats)))),
+    h("div", {class: "row"}, h("span", {class: "lbl"}, "Cable"),
+      h("button", {class: "btn small unplug", title: "Pull the cable: the deck says nothing and answers nothing",
+        onclick: () => act("api/deck/" + n + "/" + (S.state.decks[n].unplugged ? "plug" : "unplug"))}, "Unplug"),
+      h("button", {class: "btn small silence", title: "Pull the cable for a while, then plug it in",
+        onclick: () => act("api/deck/" + n + "/silence/" + q("silence-secs").value)}, "Silence for"),
+      h("select", {class: "silence-secs", "aria-label": "Seconds"},
+        [2, 5, 10, 30].map((s) => h("option", {value: s, selected: s === 5}, s + " s")))),
+    h("details", {class: "fold"},
+      h("summary", {}, "Load a track"),
+      h("div", {class: "fields"},
+        h("label", {}, "Rekordbox id", h("input", {type: "number", class: "t-id", min: 1, placeholder: String(100 + Number(n))})),
+        h("label", {}, "BPM", h("input", {type: "number", class: "t-bpm", step: 0.1, min: 40, max: 220, placeholder: "keep"})),
+        h("label", {class: "wide"}, "Title", h("input", {type: "text", class: "t-title", placeholder: "Track of deck " + n})),
+        h("label", {}, "From the database of",
+          h("select", {class: "t-source"}, numbers.map((m) => h("option", {value: m, selected: m === n}, "deck " + m + (m === n ? " (itself)" : ""))))),
+        h("label", {}, "Slot", h("select", {class: "t-slot"},
+          Object.entries(SLOTS).map(([k, v]) => h("option", {value: k, selected: k === "3"}, v)))),
+        h("button", {class: "btn primary wide", onclick: () => loadTrack(n, card)}, "Load it from its first beat"))));
+  card.querySelector(".tempo-range").addEventListener("input", (e) => { q("tempo-num").value = Number(e.target.value).toFixed(1); });
+  card.querySelector(".tempo-range").addEventListener("change", (e) => act("api/deck/" + n + "/tempo/" + e.target.value));
+  card.querySelector(".tempo-num").addEventListener("change", (e) => {
+    if (e.target.value) act("api/deck/" + n + "/tempo/" + e.target.value);
+  });
+  return card;
+}
+
+function loadTrack(n, card) {
+  const v = (cls) => card.querySelector("." + cls).value.trim();
+  const id = v("t-id") || String(100 + Number(n));
+  const params = new URLSearchParams();
+  if (v("t-title")) params.set("title", v("t-title"));
+  if (v("t-bpm")) params.set("bpm", v("t-bpm"));
+  params.set("source", v("t-source"));
+  params.set("slot", v("t-slot"));
+  act("api/deck/" + n + "/load/" + encodeURIComponent(id) + "?" + params);
+}
+
+function beatOf(d) {
+  if (!d.phase) return 0;
+  const [t, pos, bpm] = d.phase;
+  const now = Date.now() / 1000 + S.offset;
+  let at = pos + (now - t) * bpm / 60;
+  if (d.loop && at >= d.loop_from + d.loop) at = d.loop_from + (at - d.loop_from) % d.loop;
+  return Math.floor(at) % 4 + 1;
+}
+
+function lamps() {
+  if (!S.state) return;
+  for (const [n, d] of Object.entries(S.state.decks)) {
+    const card = $("deck" + n);
+    if (!card) continue;
+    const now = d.on ? beatOf(d) : 0;
+    card.querySelectorAll(".beats i").forEach((square, k) => {
+      square.classList.toggle("lit", now === k + 1);
+      square.classList.toggle("first", k === 0);
+    });
+  }
+}
+
+function render() {
+  const s = S.state;
+  if (!s) return;
+  buildDecks();
+  const unit = unitOf(s), active = document.activeElement;
+  for (const [n, d] of Object.entries(s.decks)) {
+    const card = $("deck" + n);
+    if (!card) continue;
+    const q = (cls) => card.querySelector("." + cls);
+    card.classList.toggle("on", !!d.on);
+    card.classList.toggle("off", !d.on);
+    card.classList.toggle("unplugged", !!d.unplugged);
+
+    const model = q("model");
+    model.textContent = d.model || d.name;
+    if (d.address) model.append(h("span", {class: "addr"}, d.address));
+    const track = q("track");
+    track.textContent = "";
+    if (d.track) {
+      const own = d.track_source === Number(n);
+      track.append(h("b", {}, d.track), " · " + (own ? "own database" : "deck " + d.track_source) + " · " +
+                   (SLOTS[d.track_slot] || "slot " + d.track_slot) + " · id " + d.track_rbid);
+    } else track.textContent = "no track";
+    const tags = q("tags");
+    tags.textContent = "";
+    if (d.on && d.loop) tags.append(h("span", {class: "tag loop"}, "LOOP " + d.loop));
+    if (d.unplugged) tags.append(h("span", {class: "tag cable"}, "UNPLUGGED"));
+
+    q("lcd").firstChild.textContent = d.on ? d.bpm.toFixed(1) : "--";
+    for (const b of card.querySelectorAll(".sw")) {
+      const what = b.dataset.what;
+      b.setAttribute("aria-pressed", String(!!d[what] && (what === "on" || d.on)));
+      b.disabled = what !== "on" && !d.on;
+      if (what === "on") {
+        const clash = !!unit && unit.number === Number(n) && !d.on;
+        b.disabled = clash;
+        b.title = clash ? "This is the unit's own number: a deck here is a clash" : "";
+      }
+    }
+    const range = q("tempo-range"), num = q("tempo-num");
+    if (active !== range) range.value = d.bpm;
+    if (active !== num) num.value = d.bpm.toFixed(1);
+    for (const b of card.querySelectorAll(".seg button")) {
+      b.setAttribute("aria-pressed", String(!!d.on && d.loop === Number(b.dataset.beats)));
+      b.disabled = !d.on;
+    }
+    q("unplug").textContent = d.unplugged ? "Plug in" : "Unplug";
+    q("silence").disabled = !!d.unplugged;
+  }
+  renderChips();
+  renderNetwork();
+  renderSettings();
+  $("version").textContent = s.bench && s.bench.version ? "v" + s.bench.version : "";
+  lamps();
+}
+
+/* ---- events ---- */
+
+function addEvent(e) {
+  S.events.push(e);
+  if (S.events.length > 2000) S.events.shift();
+  S.kinds.set(e.kind, (S.kinds.get(e.kind) || 0) + 1);
+  renderEvents();
+}
+
+function clearEvents() {
+  S.events = []; S.kinds = new Map(); S.frozen = 0;
+  renderEvents();
+}
+
+let evTimer = null;
+function renderEvents() {
+  if (evTimer) return;
+  evTimer = setTimeout(() => { evTimer = null; drawEvents(); }, 120);
+}
+
+function describe(e) {
+  return Object.entries(e).filter(([k]) => !["n", "t", "kind"].includes(k)).map(([k, v]) => k + "=" + v).join(" ");
+}
+
+function drawEvents() {
+  const total = S.paused ? S.frozen : S.events.length;
+  const list = S.events.slice(0, total).filter((e) => !S.hidden.has(e.kind)).slice(-300).reverse();
+  const box = $("events");
+  box.textContent = "";
+  if (!S.events.length) box.append(h("div", {}, h("span", {class: "d dim"},
+    "Nothing yet. An event appears when the device under test sends a deck something: a fader start, a sync command, a request for a title.")));
+  for (const e of list) box.append(h("div", {}, h("span", {class: "t"}, e.t.toFixed(1) + " s"), h("span", {class: "k", title: e.kind}, e.kind),
+    h("span", {class: "d"}, describe(e))));
+  $("evcount").textContent = S.events.length ? "(" + S.events.length + ")" : "";
+  $("evstatus").textContent = S.paused ? "paused, " + (S.events.length - S.frozen) + " more" : "";
+  const filters = $("evfilters");
+  filters.textContent = "";
+  for (const [kind, count] of S.kinds) {
+    filters.append(h("button", {"aria-pressed": String(!S.hidden.has(kind)), title: "Show or hide " + kind,
+      onclick: () => { S.hidden.has(kind) ? S.hidden.delete(kind) : S.hidden.add(kind); drawEvents(); }}, kind + " " + count));
+  }
+}
+
+$("evpause").addEventListener("click", () => {
+  S.paused = !S.paused;
+  S.frozen = S.events.length;
+  $("evpause").textContent = S.paused ? "Resume" : "Pause";
+  drawEvents();
+});
+$("evclear").addEventListener("click", async () => { await act("api/events/clear"); clearEvents(); });
+$("evexport").addEventListener("click", () => download("deckbench-events-" + stamp() + ".json", JSON.stringify(S.events, null, 1)));
+
+function stamp() { return new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19); }
+
+function download(name, text) {
+  const url = URL.createObjectURL(new Blob([text], {type: "application/json"}));
+  const a = h("a", {href: url, download: name});
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ---- scenarios ---- */
+
+function savedScenarios() {
+  try { return JSON.parse(store.get("deckbench.scenarios", "{}")) || {}; } catch (e) { return {}; }
+}
+
+function fillSaved() {
+  const sel = $("scsaved");
+  sel.textContent = "";
+  sel.append(h("option", {value: ""}, "Saved…"));
+  for (const name of Object.keys(savedScenarios()).sort()) sel.append(h("option", {value: name}, name));
+}
+
+async function loadExamples() {
+  try {
+    S.examples = await (await fetch("api/examples")).json();
+    for (const [i, ex] of S.examples.entries()) $("scexample").append(h("option", {value: i}, ex.name));
+    if (!$("scenario").value && S.examples.length) setScenario(S.examples[0].text);
+  } catch (e) { /* no examples */ }
+}
+
+function setScenario(text) {
+  $("scenario").value = text;
+  validate();
+}
+
+/* what is wrong with the text, in words, with the line: null if it is a scenario as far as this page can tell */
+function check(text) {
+  let data;
+  try { data = JSON.parse(text); }
+  catch (e) {
+    const m = /position (\d+)/.exec(e.message), l = /line (\d+)/.exec(e.message);
+    const line = l ? Number(l[1]) : m ? text.slice(0, Number(m[1])).split("\n").length : null;
+    return {error: (line ? "line " + line + ": " : "") + e.message};
+  }
+  if (!data || !Array.isArray(data.steps)) return {error: 'it needs "steps": [ ... ]'};
+  const bad = data.steps.findIndex((s) => !s || typeof s !== "object" || typeof s.do !== "string");
+  if (bad >= 0) return {error: "step " + (bad + 1) + ' has no "do"'};
+  const last = Math.max(0, ...data.steps.map((s) => Number(s.at) || 0));
+  return {data, steps: data.steps.length, seconds: last};
+}
+
+function validate() {
+  const r = check($("scenario").value), box = $("scvalid");
+  box.classList.toggle("note", false);
+  box.textContent = r.error ? r.error : (r.data.name ? r.data.name + " · " : "") + r.steps + " steps, the last at " + r.seconds + " s";
+  box.style.color = r.error ? "var(--danger)" : "";
+  return r;
+}
+
+function renderScenario() {
+  const s = S.scenario;
+  if (!s) return;
+  $("scrun").disabled = s.running;
+  $("scstop").disabled = !s.running;
+  $("sccopy").disabled = s.running || !s.name;
+  const done = s.results.length, bar = $("scbar");
+  bar.firstChild.style.width = s.total ? Math.round(100 * done / s.total) + "%" : "0";
+  bar.classList.toggle("failed", !s.running && s.failed > 0);
+  bar.classList.toggle("done", !s.running && !!s.name && s.failed === 0 && !s.stopped);
+  const note = $("scstatus");
+  note.className = "note" + (!s.running && s.name ? (s.failed ? " bad" : s.stopped ? "" : " good") : "");
+  note.textContent = !s.name ? "Steps and what they do: docs/scenarios.md" :
+    s.name + ": " + (s.running ? "playing, " : s.stopped ? "stopped, " : "done, ") + done + " of " + s.total + " steps" +
+    (s.failed ? ", " + s.failed + " expectation" + (s.failed > 1 ? "s" : "") + " failed" : !s.running && !s.stopped ? ", all expectations met" : "");
+  const box = $("scresults");
+  box.textContent = "";
+  for (const r of s.results) box.append(h("div", {class: r.ok ? "" : "bad"}, h("span", {class: "t"}, r.at.toFixed(1) + " s"),
+    h("span", {class: "k", title: r.what}, r.what), h("span", {class: "d"}, (r.message || "") + (r.ok ? "" : " FAILED"))));
+  box.scrollTop = box.scrollHeight;
+}
+
+$("scenario").addEventListener("input", validate);
+$("scenario").addEventListener("keydown", (e) => {          // Tab indents, as in an editor
+  if (e.key !== "Tab" || e.shiftKey) return;
+  e.preventDefault();
+  const t = e.target, a = t.selectionStart;
+  t.value = t.value.slice(0, a) + "  " + t.value.slice(t.selectionEnd);
+  t.selectionStart = t.selectionEnd = a + 2;
+});
+$("scexample").addEventListener("change", (e) => {
+  const ex = S.examples[e.target.value];
+  if (ex) setScenario(ex.text);
+  e.target.value = "";
+});
+$("scsaved").addEventListener("change", (e) => {
+  const text = savedScenarios()[e.target.value];
+  if (text) setScenario(text);
+  $("scdelete").hidden = !e.target.value;
+});
+$("scdelete").addEventListener("click", () => {
+  const all = savedScenarios();
+  delete all[$("scsaved").value];
+  store.set("deckbench.scenarios", JSON.stringify(all));
+  fillSaved();
+  $("scdelete").hidden = true;
+});
+$("scsave").addEventListener("click", () => {
+  const r = validate();
+  if (r.error || !r.data.name) return toast(r.error ? "Not a scenario yet: " + r.error : 'Give it a "name" to keep it under.');
+  const all = savedScenarios();
+  all[r.data.name] = $("scenario").value;
+  store.set("deckbench.scenarios", JSON.stringify(all));
+  fillSaved();
+  $("scsaved").value = r.data.name;
+  $("scdelete").hidden = false;
+  toast("Kept in this browser as “" + r.data.name + "”.", "info");
+});
+$("scdownload").addEventListener("click", () => {
+  const r = validate();
+  download(((r.data && r.data.name) || "scenario").replace(/[^\w.-]+/g, "-") + ".json", $("scenario").value);
+});
+$("scopen").addEventListener("click", () => $("scfile").click());
+$("scfile").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => setScenario(reader.result);
+  reader.readAsText(file);
+  e.target.value = "";
+});
+$("scrun").addEventListener("click", async () => {
+  const r = validate();
+  if (r.error) return toast("Not a scenario yet: " + r.error);
+  await act("api/scenario", {body: $("scenario").value});
+});
+$("scstop").addEventListener("click", () => act("api/scenario/stop"));
+$("sccopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(JSON.stringify(S.scenario, null, 1)); toast("Result copied.", "info"); }
+  catch (e) { toast("The browser would not let the page copy."); }
+});
+
+/* ---- network ---- */
+
+for (const p of [0, 5, 20, 50]) {
+  $("lossquick").append(h("button", {onclick: () => act("api/loss/" + p)}, p + " %"));
+}
+$("loss").addEventListener("input", (e) => { $("lossout").textContent = e.target.value + " %"; });
+$("loss").addEventListener("change", (e) => act("api/loss/" + e.target.value));
+
+function kv(rows) {
+  return rows.map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, v)));
+}
+
+function renderNetwork() {
+  const s = S.state, loss = $("loss");
+  if (document.activeElement !== loss) loss.value = s.loss;
+  $("lossout").textContent = s.loss + " %";
+  const unit = unitOf(s), box = $("unit");
+  box.textContent = "";
+  if (unit) {
+    box.append(h("table", {class: "kv"}, kv([["Player", String(unit.number)], ["Address", unit.ip || "?"],
+      ["Tempo master", unit.master ? "yes" : "no"], ["Tempo", unit.bpm ? unit.bpm.toFixed(1) + " BPM" : "-"]])));
+  } else box.append(h("p", {class: "hint"}, "No device has announced itself with a player number yet. A DJS-1000 on this network shows here, with its address and whether it is the tempo master."));
+  const table = $("nettable");
+  table.textContent = "";
+  table.append(...kv(Object.entries(s.decks).map(([n, d]) => ["Deck " + n,
+    (d.address || "?") + " · " + (d.unplugged ? "cable pulled" : d.on ? "on" : "off")])));
+  const b = (s.bench || {});
+  if (b.broadcast) table.append(...kv([["Broadcast", b.broadcast]]));
+}
+
+/* ---- settings ---- */
+
+for (const name of ["strict", "refuse_db"]) {
+  $(name).addEventListener("click", () => act("api/settings/" + name + "/" + ($(name).getAttribute("aria-checked") === "true" ? 0 : 1)));
+}
+$("modelset").addEventListener("click", () => act("api/settings/model/" + encodeURIComponent($("model").value.trim())));
+$("model").addEventListener("keydown", (e) => { if (e.key === "Enter") $("modelset").click(); });
+
+function renderSettings() {
+  const s = S.state, set = settingsOf(s), b = s.bench || {};
+  for (const name of ["strict", "refuse_db"]) $(name).setAttribute("aria-checked", String(!!set[name]));
+  if (document.activeElement !== $("model")) $("model").value = set.model || "";
+  const ports = b.ports || {};
+  const about = $("about");
+  about.textContent = "";
+  about.append(...kv([["Version", b.version || "?"], ["Process", b.pid ? String(b.pid) : "?"], ["Page", b.http || location.href],
+    ["Decks", (b.numbers || []).join(", ")],
+    ["UDP", ports.announce ? [ports.announce, ports.beat, ports.update].join(", ") + " (keep-alive, beat, status)" : "?"],
+    ["TCP", ports.query ? ports.query + ", " + ports.db + " (port query, database)" : "?"],
+    ["Sound", b.audio || "off"]]));
+}
+
+function theme(value) {
+  if (value === "dark" || value === "light") document.documentElement.setAttribute("data-theme", value);
+  else document.documentElement.removeAttribute("data-theme");
+}
+$("theme").value = store.get("deckbench.theme", "auto");
+theme($("theme").value);
+$("theme").addEventListener("change", (e) => { store.set("deckbench.theme", e.target.value); theme(e.target.value); });
+
+/* ---- all on, all off ---- */
+
+async function everyDeck(on) {
+  const unit = unitOf(S.state);
+  for (const [n, d] of Object.entries(S.state.decks)) {
+    if (!!d.on === on || (on && unit && unit.number === Number(n))) continue;
+    await act("api/deck/" + n + "/on/" + (on ? 1 : 0));
+  }
+}
+$("allon").addEventListener("click", () => everyDeck(true));
+$("alloff").addEventListener("click", () => everyDeck(false));
+
+/* ---- tabs ---- */
+
+const TABS = ["events", "scenario", "network", "settings"];
+function showTab(name) {
+  for (const t of TABS) {
+    $("tab-" + t).setAttribute("aria-selected", String(t === name));
+    $("p-" + t).hidden = t !== name;
+  }
+  store.set("deckbench.tab", name);
+}
+for (const t of TABS) {
+  $("tab-" + t).addEventListener("click", () => showTab(t));
+  $("tab-" + t).addEventListener("keydown", (e) => {
+    const i = TABS.indexOf(t) + (e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0);
+    if (i === TABS.indexOf(t) || i < 0 || i >= TABS.length) return;
+    showTab(TABS[i]);
+    $("tab-" + TABS[i]).focus();
+  });
+}
+const fromAddress = location.hash.slice(1);        // page#scenario opens that tab
+showTab(TABS.includes(fromAddress) ? fromAddress : TABS.includes(store.get("deckbench.tab")) ? store.get("deckbench.tab") : "events");
+window.addEventListener("hashchange", () => { if (TABS.includes(location.hash.slice(1))) showTab(location.hash.slice(1)); });
+
+/* ---- start ---- */
+
+function frame() { lamps(); requestAnimationFrame(frame); }
+fillSaved();
+drawEvents();
+loadExamples();
+connect();
+requestAnimationFrame(frame);

@@ -184,9 +184,10 @@ class World:
         log("%s plays at %.1f BPM" % (deck.name, deck.base_bpm))
         self.changed()
 
-    def load_track(self, deck, rbid, title=None, bpm=None):
-        """The deck loads the track with that rekordbox id (from its own database, with that title if one is given, and
-        at that tempo): it starts from its first beat, as a loaded track does, and the protocols tell the network."""
+    def load_track(self, deck, rbid, title=None, bpm=None, source=None, slot=None):
+        """The deck loads the track with that rekordbox id (from its own database unless `source`, the number of the
+        player it comes from, says otherwise, in `slot` if one is given, with that title if one is given, and at that
+        tempo): it starts from its first beat, as a loaded track does, and the protocols tell the network."""
         def change():
             deck.track = (int(rbid), title)
             if bpm:
@@ -196,7 +197,7 @@ class World:
             deck.loop = None
         self.settle(change)
         for protocol in self.protocols:
-            protocol.track_loaded(deck, int(rbid), title)
+            protocol.track_loaded(deck, int(rbid), title, source, slot)
         log("%s loads track %d%s" % (deck.name, int(rbid), " (%s)" % title if title else ""))
         self.changed()
 
@@ -292,9 +293,18 @@ class Protocol:
     def master_released(self, deck):
         pass
 
-    def track_loaded(self, deck, rbid, title):
-        """The deck has loaded a track (its rekordbox id, and its title if one was given)."""
+    def track_loaded(self, deck, rbid, title, source=None, slot=None):
+        """The deck has loaded a track (its rekordbox id, its title if one was given, the player it comes from and the
+        slot, if they were given: otherwise it is from the deck's own database)."""
         pass
+
+    def settings(self):
+        """What can be changed while the bench runs: a dict of name: value."""
+        return {}
+
+    def set_option(self, name, value):
+        """Changes one of the settings. False if there is no such setting or the value is not one."""
+        return False
 
     def take_master(self, deck):
         """Takes care of the deck becoming the master. True if it did (the

@@ -1,0 +1,7 @@
+{"name": "Track changes", "steps": [
+  {"at": 0, "deck": 2, "do": "on"},
+  {"at": 0.5, "deck": 2, "do": "play"},
+  {"at": 4, "deck": 2, "do": "load", "id": 205, "title": "Another track", "bpm": 124},
+  {"at": 8, "deck": 2, "do": "load", "id": 206, "title": "Café del Mar / Mix", "bpm": 118},
+  {"at": 12, "deck": 2, "do": "load", "id": 107, "title": "A track of deck 3", "bpm": 130}
+]}

@@ -1,0 +1,10 @@
+{"name": "Cable trouble", "steps": [
+  {"at": 0, "deck": 2, "do": "on"},
+  {"at": 0, "deck": 3, "do": "on"},
+  {"at": 0.5, "deck": 2, "do": "play"},
+  {"at": 5, "deck": 3, "do": "silence", "seconds": 3},
+  {"at": 10, "deck": 2, "do": "unplug"},
+  {"at": 14, "deck": 2, "do": "plug"},
+  {"at": 16, "do": "loss", "percent": 20},
+  {"at": 22, "do": "loss", "percent": 0}
+]}

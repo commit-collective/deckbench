@@ -1,0 +1,6 @@
+{"name": "Expect a fader start from the unit", "steps": [
+  {"at": 0, "deck": 2, "do": "on"},
+  {"at": 0.5, "deck": 2, "do": "play"},
+  {"at": 1, "do": "log", "text": "Move the unit's channel fader for deck 2 now"},
+  {"at": 1, "do": "expect", "event": "fader_start", "within": 20, "match": {"deck": 2}}
+]}

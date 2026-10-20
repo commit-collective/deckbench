@@ -1,0 +1,8 @@
+{"name": "A tempo ride", "steps": [
+  {"at": 0, "deck": 2, "do": "on"},
+  {"at": 0.5, "deck": 2, "do": "play"},
+  {"at": 4, "deck": 2, "do": "tempo", "bpm": 124},
+  {"at": 8, "deck": 2, "do": "tempo", "bpm": 128},
+  {"at": 12, "deck": 2, "do": "tempo", "bpm": 134},
+  {"at": 16, "deck": 2, "do": "stop"}
+]}

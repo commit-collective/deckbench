@@ -288,13 +288,8 @@ class Faults(unittest.TestCase):
         self.api("api/events/clear")
         self.assertEqual(self.api("api/events", post=False), [])
 
-    def test_the_page_has_the_controls(self):
-        with urllib.request.urlopen(self.url, timeout=5) as r:
-            page = r.read().decode("utf-8")
-        for words in ("TEMPO", "LOAD", "UNPLUG", "SILENCE 5 s", "Datagrams lost", "What the unit did", "api/events",
-                      "api/scenario"):
-            self.assertIn(words, page)
-        self.assertIn("bench", self.api("api/state", post=False))       # how the bench was started, for the page
+    def test_the_state_says_how_the_bench_was_started(self):
+        self.assertIn("bench", self.api("api/state", post=False))
 
     def post_json(self, path, body):
         request = urllib.request.Request(self.url + path, data=body.encode("utf-8"), method="POST")

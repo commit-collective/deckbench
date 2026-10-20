@@ -20,3 +20,6 @@ deckbench = "deckbench.cli:main"
 
 [tool.setuptools]
 packages = ["deckbench", "deckbench.protocols"]
+
+[tool.setuptools.package-data]
+deckbench = ["ui/*", "examples/*.json"]
