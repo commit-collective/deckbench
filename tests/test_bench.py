@@ -7,7 +7,7 @@ import sys
 import time
 import unittest
 
-from deckbench.testing import Bench, BenchError
+from deckbench.testing import Bench, BenchError, free_shift
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -54,6 +54,17 @@ class Started(unittest.TestCase):
 
 
 class Command(unittest.TestCase):
+    def test_leaves_when_its_parent_goes(self):
+        """With --exit-on-eof the bench ends when standard input does: a parent that dies takes it along."""
+        out = subprocess.Popen([sys.executable, "-m", "deckbench", "--numbers", "2", "--http-port", "-1", "--port-shift",
+                                str(free_shift()), "--exit-on-eof"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, cwd=ROOT)
+        time.sleep(1.5)
+        self.assertIsNone(out.poll())
+        out.stdin.close()
+        self.assertEqual(out.wait(10), 0)
+        self.assertIn(b"standard input closed", out.stdout.read())
+
     def test_port_in_use_exits_with_a_message(self):
         with Bench(numbers=[2]) as first:
             out = subprocess.run([sys.executable, "-m", "deckbench", "--numbers", "2", "--http-port", "-1",

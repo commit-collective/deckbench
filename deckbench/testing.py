@@ -69,7 +69,8 @@ class Bench:
         self.shift = free_shift() if shift is None and not wsl else (0 if shift is None else shift)
         self.timeout = timeout
         self.wsl = [] if not wsl else ["wsl.exe"] + (["-d", wsl] if isinstance(wsl, str) else []) + ["--"]
-        self.args = ["--numbers", ",".join(map(str, self.numbers)), "--http-port", "0", "--port-shift", str(self.shift)]
+        self.args = ["--numbers", ",".join(map(str, self.numbers)), "--http-port", "0", "--port-shift", str(self.shift),
+                     "--exit-on-eof"]            # the bench goes with the process that started it, even if that is killed
         if self.wsl:
             self.args += ["--http-host", "0.0.0.0"]               # WSL forwards localhost to what listens on any address
         if on:
@@ -99,10 +100,11 @@ class Bench:
         if self.wsl:
             script = "cd %s && exec python3 -m deckbench %s --ready-file %s" % (
                 shlex.quote(self.in_wsl(root)), " ".join(shlex.quote(a) for a in self.args), shlex.quote(self.in_wsl(ready)))
-            self.proc = subprocess.Popen(self.wsl + ["bash", "-lc", script], stdout=self.log, stderr=subprocess.STDOUT)
+            self.proc = subprocess.Popen(self.wsl + ["bash", "-lc", script], stdin=subprocess.PIPE, stdout=self.log,
+                                         stderr=subprocess.STDOUT)
         else:
             self.proc = subprocess.Popen([sys.executable, "-m", "deckbench"] + self.args + ["--ready-file", ready],
-                                         stdout=self.log, stderr=subprocess.STDOUT, cwd=root)
+                                         stdin=subprocess.PIPE, stdout=self.log, stderr=subprocess.STDOUT, cwd=root)
         end = time.time() + self.timeout
         while time.time() < end:
             if os.path.exists(ready):
@@ -118,12 +120,19 @@ class Bench:
         raise BenchError("the bench did not come up in %.0f s:\n%s" % (self.timeout, out))
 
     def stop(self):
+        if self.proc is None:                                  # not started, or stopped already
+            return
         if self.wsl:                                           # ending wsl.exe would leave the bench running in WSL
             if self.info.get("pid"):
                 subprocess.run(self.wsl + ["kill", str(self.info["pid"])], capture_output=True, timeout=30)
             else:                                              # it never said it was ready: find it by its ready file
                 name = os.path.basename(self.dir)
                 subprocess.run(self.wsl + ["pkill", "-f", "[%s]%s/ready.json" % (name[0], name[1:])], capture_output=True, timeout=30)
+        if self.proc.stdin:
+            try:
+                self.proc.stdin.close()
+            except OSError:
+                pass
         if self.proc and self.proc.poll() is None:
             self.proc.terminate()
             try:
@@ -151,8 +160,26 @@ class Bench:
         return self.printed
 
     # -- the API --
+    def request_in_wsl(self, path, post, data):
+        """The same through curl in WSL: where the bench lives, so it does not depend on WSL's localhost forwarding,
+        which was seen to refuse after a while when an emulator ran beside the bench."""
+        port = self.info["http"].rsplit(":", 1)[1].strip("/")
+        curl = ["curl", "-s", "-m", "10", "-w", "<<%{http_code}", "-X", "POST" if post or data else "GET"]
+        if data is not None:
+            curl += ["--data-binary", "@-"]
+        curl.append("http://127.0.0.1:%s/%s" % (port, path.lstrip("/")))
+        # wsl.exe hands its arguments to a shell: a script of its own keeps the odd characters (%, {) as they are
+        out = subprocess.run(self.wsl + ["bash", "-c", " ".join(shlex.quote(x) for x in curl)], input=data,
+                             capture_output=True, timeout=30)
+        text, _, code = out.stdout.decode("utf-8", "replace").rpartition("<<")
+        if code != "200":
+            raise BenchError("%s: %s %s" % (path, code or "no answer", text or out.stderr.decode("utf-8", "replace")))
+        return json.loads(text)
+
     def request(self, path, post=False, body=None):
         data = None if body is None else (body if isinstance(body, bytes) else json.dumps(body).encode("utf-8"))
+        if self.wsl:
+            return self.request_in_wsl(path, post, data)
         req = urllib.request.Request(self.url + path.lstrip("/"), data=data, method="POST" if post or data else "GET")
         try:
             with urllib.request.urlopen(req, timeout=10) as r:

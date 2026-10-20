@@ -104,6 +104,9 @@ def main(argv=None):
                     help="move every port of the decks by N (UDP 50000-50002, TCP 12523 and 1051), to run beside "
                          "something that holds the real ones or where the system keeps them back. A unit on the real "
                          "ports does not hear them (default 0)")
+    ap.add_argument("--exit-on-eof", action="store_true",
+                    help="leave when standard input is closed: for a program that starts the bench and must not leave it "
+                         "running if it dies (deckbench.testing.Bench does)")
     ap.add_argument("--ready-file", metavar="FILE",
                     help="once the decks and the page are up, write FILE: a JSON object with the page's address, the "
                          "ports and the process (a script starting the bench waits for it; GET /api/ready says the same)")
@@ -213,6 +216,16 @@ def main(argv=None):
             done.wait()
             kinds = {o[1] for o in outcomes}
             return 1 if "failed" in kinds else 3 if "skipped" in kinds else 0
+    if a.exit_on_eof:
+        def watch():
+            try:
+                while sys.stdin.buffer.read(4096):
+                    pass
+            except (OSError, ValueError):
+                pass
+            log("standard input closed: leaving")
+            os._exit(0)
+        threading.Thread(target=watch, daemon=True).start()
     log("running; Ctrl-C to stop")
     try:
         while True:
