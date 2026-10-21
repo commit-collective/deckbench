@@ -44,6 +44,7 @@ import time
 from ..core import Protocol, log
 
 from .. import profiles
+from ..net import share
 from . import startup
 from .mixer import LinkMixer, parse_on_air
 from .startup import MAGIC
@@ -335,8 +336,7 @@ class LinkDeck:
 
     def control(self):
         """Master hand-off requests and sync commands, sent to this deck."""
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
         s.bind((self.address, self.ports.beat))
         out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         out.bind((self.address, 0))
@@ -652,8 +652,7 @@ class Prolink(Protocol):
     def faders(self):
         """Fader start packets (type 0x02, broadcast on 50001, as a mixer sends them): a byte for each
         of the players 1 to 4, 0 start, 1 stop, 2 leave it."""
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
         s.bind(("", self.ports.beat))
         while True:
             data, addr = s.recvfrom(2048)
@@ -675,8 +674,8 @@ class Prolink(Protocol):
                 deck = self.world.decks.get(i + 1)
                 if deck and deck.enabled and not deck.unplugged and data[0x24 + i] in (0, 1):
                     action = "start" if data[0x24 + i] == 0 else "stop"
-                    self.world.events.add("fader_start", deck=i + 1, action=action, sender=data[0x21])
                     self.world.set_play(deck, action == "start")
+                    self.world.events.add("fader_start", deck=i + 1, action=action, sender=data[0x21])
 
     # -- what the World asks --
     def external_master_bpm(self):
@@ -883,8 +882,7 @@ class Prolink(Protocol):
         unit takes it from a deck that has agreed to yield it."""
         socks = []
         for port in (self.ports.announce, self.ports.update):
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
             try:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
             except (AttributeError, OSError):
@@ -896,8 +894,7 @@ class Prolink(Protocol):
         # deck's address) goes to the socket bound to that address, not to the
         # ones bound to any address: a socket for each deck.
         for link in self.decks.values():
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
             s.bind((link.address, self.ports.update))
             s.settimeout(0.5)
             socks.append((s, self.ports.update))

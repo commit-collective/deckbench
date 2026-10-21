@@ -10,6 +10,7 @@ import urllib.request
 
 from _ports import fresh
 from deckbench.core import Deck, World
+from deckbench.net import share
 from deckbench.protocols import mixer as mixer_module
 from deckbench.protocols import startup
 from deckbench.protocols.prolink import MAGIC, Prolink
@@ -249,8 +250,7 @@ class Online(unittest.TestCase):
         net = Prolink(world, ports=ports)
         net.start()
         world.set_enabled(world.decks[2], True)
-        claimer = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)           # a device at 127.0.0.9 claims number 2
-        claimer.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        claimer = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))   # a device at 127.0.0.9 claims number 2
         claimer.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         claimer.bind(("127.0.0.9", ports.announce))
         claimer.settimeout(0.3)

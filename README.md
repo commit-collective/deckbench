@@ -118,7 +118,7 @@ beats on from, and for each protocol what it knows of the other side.
 Starts the bench in the process and checks, from a small client, the
 keep-alives, the status packets' fields, the beats, sync and master, the
 hand-off to a player that asks, the sync commands, the database and the API.
-It runs on Linux, Windows and macOS (macOS needs the aliases 127.0.0.2 and up on `lo0`).
+It runs on Linux, Windows and macOS (macOS needs the aliases 127.0.0.2 and up on `lo0`, and 127.0.0.33 for the mixer: `sudo ifconfig lo0 alias 127.0.0.2 up`).
 The tests do not use the real ports: they take the first free range, or the shift in `DECKBENCH_PORT_SHIFT`.
 
 ## From a phone, or a page on another site

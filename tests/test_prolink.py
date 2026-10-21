@@ -16,6 +16,7 @@ import unittest
 import urllib.request
 
 from deckbench.core import Deck, World
+from deckbench.net import share
 from deckbench.protocols import prolink
 from _ports import fresh
 from deckbench.protocols.prolink import (MAGIC, Prolink,
@@ -24,8 +25,7 @@ from deckbench.web import serve
 
 
 def listen(port):
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
     s.bind(("0.0.0.0", port))
     s.settimeout(0.3)
     return s
@@ -230,8 +230,7 @@ class Bench(unittest.TestCase):
         collect(self.statuses, 0.3)
         # The answer goes to the asker's own address: its socket is the one to read it from (another one bound to
         # every address would not get it on Windows, where the most specific socket wins).
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
         s.bind(("127.0.0.9", self.ports.update))
         s.settimeout(0.3)
         request = prolink.header(0x26, b"TEST") + bytes([0x01, 0x00, 9, 0x00, 0x04, 0, 0, 0, 9])

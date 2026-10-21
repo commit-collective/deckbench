@@ -26,7 +26,7 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Loopback aliases (macOS has only 127.0.0.1)
         if: runner.os == 'macOS'
-        run: for n in 2 3 4 5 6 7 8 9; do sudo ifconfig lo0 alias 127.0.0.$n up; done
+        run: for n in 2 3 4 5 6 7 8 9 33; do sudo ifconfig lo0 alias 127.0.0.$n up; done
       - name: Tests
         shell: bash
         run: |

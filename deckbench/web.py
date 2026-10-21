@@ -39,6 +39,7 @@ import os
 import threading
 import time
 from urllib.parse import parse_qs, unquote, urlparse
+import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .core import log
@@ -61,6 +62,16 @@ def examples():
                     text = f.read()
                 out.append({"file": name, "group": group, "name": json.loads(text).get("name", name[:-5]), "text": text})
     return out
+
+
+class Server(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def server_bind(self):
+        """As HTTPServer's, without the reverse lookup of the address (socket.getfqdn), which can take many seconds on a machine
+        whose DNS is slow, a macOS runner for one, and holds up the start."""
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
@@ -294,7 +305,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
                 return self.send(200, json.dumps(world.snapshot()))
             self.send(404, '{"error": "not found"}')
 
-    server = ThreadingHTTPServer((host, port), Handler)
+    server = Server((host, port), Handler)
     server.runner = runner
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()
