@@ -66,6 +66,8 @@ Options (`python -m deckbench --help`):
 - `--claim`: a deck that comes on claims its number first, as a player does (3.6 s), instead of being there at once
 - `--adapter NAME[:ARGS]`: what the device under test shows beyond the network, so a scenario can expect a lamp and press a
   control. There is `djs1000-emu` for the emulator (see [docs/adapters.md](docs/adapters.md))
+- `--profile MODEL`: stand in for a model of player: cdj-2000, cdj-2000nxs2, xdj-1000mk2 or cdj-3000 (its name, the length of its
+  statuses and a byte of them, see [docs/prolink.md](docs/prolink.md))
 - `--model NAME`: the device name the decks announce (default `CDJ-FAKEn`)
 - `--http-port PORT` (default 8750, -1 for none), `--http-host ADDRESS`
 

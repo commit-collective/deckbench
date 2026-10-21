@@ -532,6 +532,7 @@ function renderNetwork() {
 for (const name of ["strict", "refuse_db", "claim"]) {
   $(name).addEventListener("click", () => act("api/settings/" + name + "/" + ($(name).getAttribute("aria-checked") === "true" ? 0 : 1)));
 }
+$("profile").addEventListener("change", (e) => act("api/settings/profile/" + (e.target.value || "default")));
 $("modelset").addEventListener("click", () => act("api/settings/model/" + encodeURIComponent($("model").value.trim())));
 $("model").addEventListener("keydown", (e) => { if (e.key === "Enter") $("modelset").click(); });
 
@@ -539,6 +540,11 @@ function renderSettings() {
   const s = S.state, set = settingsOf(s), b = s.bench || {};
   for (const name of ["strict", "refuse_db", "claim"]) $(name).setAttribute("aria-checked", String(!!set[name]));
   if (document.activeElement !== $("model")) $("model").value = set.model || "";
+  const profile = $("profile"), titles = b.profiles || {};
+  if (profile.options.length !== Object.keys(titles).length + 1) {
+    for (const [key, title] of Object.entries(titles)) profile.append(h("option", {value: key}, title));
+  }
+  if (document.activeElement !== profile) profile.value = set.profile || "";
   const ports = b.ports || {};
   const about = $("about");
   about.textContent = "";

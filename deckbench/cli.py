@@ -13,6 +13,7 @@ from .core import Deck, World, log
 from .adapters import make as make_adapter
 from .audio import AudioServer
 from .events import Events
+from .profiles import PROFILES
 from .protocols.prolink import Ports, PortError, Prolink
 from .scenario import Scenario, ScenarioError
 from .web import serve
@@ -88,8 +89,11 @@ def main(argv=None):
                          "(default 127.0.0.1:7310)")
     ap.add_argument("--events", metavar="FILE", help="write what the device under test does to FILE, a JSON object a line")
     ap.add_argument("--model", help="the device name every deck announces (default CDJ-FAKEn)")
-    ap.add_argument("--status-length", type=lambda x: int(x, 0), default=0x124, metavar="N",
-                    help="the length of the Pro DJ Link status packets (default 0x124)")
+    ap.add_argument("--profile", choices=sorted(PROFILES), metavar="MODEL",
+                    help="the model of player to stand in for: " + ", ".join(sorted(PROFILES)) + ". It sets the name the decks "
+                         "announce, the length of their statuses and a byte of them (see deckbench/profiles.py)")
+    ap.add_argument("--status-length", type=lambda x: int(x, 0), default=None, metavar="N",
+                    help="the length of the Pro DJ Link status packets (default 0x124, or the profile's)")
     ap.add_argument("--bind", metavar="ADDRESS,ADDRESS,...",
                     help="a real network: the address of each deck, in the order of the "
                          "decks (aliases of a network card; see docs/real-network.md); "
@@ -163,7 +167,7 @@ def main(argv=None):
                    model=a.model, status_length=a.status_length,
                    addresses=addresses, broadcast=broadcast, refuse_db=a.refuse_db, strict=a.strict,
                    ports=Ports.shifted(a.port_shift), claim=a.claim, mixer_name=a.mixer or "DJM-900NXS2",
-                   mixer_address=a.mixer_address, mixer_channels=a.mixer_channels)
+                   mixer_address=a.mixer_address, mixer_channels=a.mixer_channels, profile=a.profile)
     try:
         link.start()
     except PortError as e:
@@ -192,6 +196,7 @@ def main(argv=None):
         world.adapters.append(adapter)
         adapter.start(world)
         log("adapter %s" % spec)
+    world.info["profiles"] = {key: value["title"] for key, value in PROFILES.items()}
     world.info.update(version=__version__, adapters=[x.name for x in world.adapters], broadcast=broadcast, pid=os.getpid(), numbers=numbers,
                       ports={"announce": link.ports.announce, "beat": link.ports.beat, "update": link.ports.update,
                              "query": link.ports.query, "db": link.ports.db})

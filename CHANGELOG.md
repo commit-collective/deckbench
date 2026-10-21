@@ -23,6 +23,8 @@ The first version, `v0.1.0`, once it is tagged.
   reports which channels are on the air and starts and stops players with fader start. The decks' on-air flag follows any mixer.
   `--claim` makes a deck do what a player does when it comes online (hellos, the three claim stages), and a deck that is on defends
   its number against another device that claims it. The keep-alive counts the devices on the network.
+- `--profile` (and a Settings choice): the decks stand in for a CDJ-2000 (nexus), CDJ-2000NXS2, XDJ-1000MK2 or CDJ-3000, with its name,
+  the length of its statuses and its nexus byte. The DJS-1000 emulator follows a master under each of them.
 - Library scenario `unit/40-on-air.json`: the unit says it is on air when the mixer's channel 1 is open. Example 04 shows the
   mixer starting and stopping the decks.
 - Settings that can be changed while it runs: strict decks, database refusal and the model name (`/api/settings`).

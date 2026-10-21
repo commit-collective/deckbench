@@ -270,6 +270,70 @@ class Online(unittest.TestCase):
             world.set_enabled(world.decks[2], False)
 
 
+class Profiles(unittest.TestCase):
+    def status_of(self, net, number=2):
+        return net.decks[number].status()
+
+    def test_a_profile_sets_the_name_the_length_and_the_nexus_byte(self):
+        for profile, name, length, nexus in (("cdj-2000", b"CDJ-2000nexus", 0xD4, 0x0F), ("cdj-2000nxs2", b"CDJ-2000NXS2", 0x124, 0x0F),
+                                             ("xdj-1000mk2", b"XDJ-1000MK2", 0x11B, 0x0F), ("cdj-3000", b"CDJ-3000", 0x200, 0x1F)):
+            world = world_of(2)
+            net = Prolink(world, ports=fresh(), profile=profile)
+            p = self.status_of(net)
+            self.assertEqual((len(p), p[0x0B:0x0B + len(name)], p[0xCC]), (length, name, nexus), profile)
+            self.assertEqual(int.from_bytes(p[0x22:0x24], "big"), length - 0x24)
+            self.assertEqual(net.decks[2].keepalive()[0x0C:0x0C + len(name)], name)
+
+    def test_the_cdj_3000_does_not_count_its_syncs(self):
+        world = world_of(2)
+        net = Prolink(world, ports=fresh(), profile="cdj-3000")
+        net.decks[2].sync_number = 7
+        self.assertEqual(self.status_of(net)[0x84:0x88], bytes(4))
+        net = Prolink(world_of(2), ports=fresh(), profile="cdj-2000nxs2")
+        net.decks[2].sync_number = 7
+        self.assertEqual(self.status_of(net)[0x84:0x88], bytes([0, 0, 0, 7]))
+
+    def test_what_is_asked_for_by_hand_wins(self):
+        net = Prolink(world_of(2), ports=fresh(), profile="cdj-3000", model="MY-DECK", status_length=0x150)
+        p = self.status_of(net)
+        self.assertEqual((len(p), p[0x0B:0x12], p[0xCC]), (0x150, b"MY-DECK", 0x1F))
+        self.assertRaises(ValueError, Prolink, world_of(2), ports=fresh(), profile="cdj-9000")
+
+    def test_it_is_a_setting(self):
+        net = Prolink(world_of(2, 3), ports=fresh())
+        self.assertEqual(net.settings()["profile"], "")
+        self.assertTrue(net.set_option("profile", "cdj-3000"))
+        self.assertEqual((net.settings()["profile"], net.settings()["model"], len(self.status_of(net, 3))), ("cdj-3000", "CDJ-3000", 0x200))
+        self.assertFalse(net.set_option("profile", "cdj-9000"))
+        self.assertTrue(net.set_option("profile", "default"))
+        p = self.status_of(net, 3)
+        self.assertEqual((net.settings()["profile"], len(p), p[0x0B:0x15], p[0xCC]), ("", 0x124, b"CDJ-FAKE3\x00", 0x0F))
+
+    def test_the_command_line_takes_only_a_profile_there_is(self):
+        import os
+        import subprocess
+        import sys
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        out = subprocess.run([sys.executable, "-m", "deckbench", "--profile", "cdj-9000", "--http-port", "-1"],
+                             capture_output=True, text=True, timeout=20, cwd=root)
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("cdj-3000", out.stderr)
+
+    def test_it_is_a_setting_of_the_api(self):
+        world = world_of(2)
+        ports = fresh()
+        net = Prolink(world, ports=ports)
+        server = serve(world, "127.0.0.1", 0)
+        try:
+            url = "http://127.0.0.1:%d/" % server.server_address[1]
+            request = urllib.request.Request(url + "api/settings/profile/xdj-1000mk2", method="POST")
+            state = json.loads(urllib.request.urlopen(request, timeout=5).read())
+            self.assertEqual(state["decks"]["2"]["model"], "XDJ-1000MK2")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+
 class Api(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

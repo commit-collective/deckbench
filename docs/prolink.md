@@ -81,7 +81,9 @@ must look like. Each of these was found by the unit not reacting:
 - **A unit's takeover request is 0x28 bytes**, shorter than the status-sized
   packets: a deck must not drop packets shorter than 0x2c.
 
-## What real decks do to a device they do not know
+- **The status length does not matter to it.** A unit that follows a master (`examples/unit/10-follow-master.json`) did so
+  with each profile: statuses of 0xd4, 0x124, 0x11b and 0x200 bytes. Its firmware keeps copies of 292 bytes, so it
+  reads what it needs from the first part.
 
 - **The database server turns it down.** CDJ-2000NXS2 and XDJ-1000MK2 (seen on real ones,
   2026-10) answer the setup request of a player numbered 1 to 4, but a device that is not a
@@ -100,6 +102,8 @@ must look like. Each of these was found by the unit not reacting:
 
 - Claim packets are sent only with `--claim`, and the mixer's on air and fader start are in [mixer.md](mixer.md). The
   assignment of a number by a mixer (a player in a DJM-2000's channel port) is not.
-- Many models: the status length and the name can be chosen (`--status-length`,
-  `--model`), the contents are those of a nexus player.
+- Many models: `--profile` (cdj-2000, cdj-2000nxs2, xdj-1000mk2, cdj-3000) sets the name, the length of the status
+  packets (0xd4, 0x124, 0x11b, 0x200) and the nexus byte, and a CDJ-3000's sync counter stays 0 (see `deckbench/profiles.py`).
+  The contents past the fields the bench fills in are zeros, so it is the shape of a model's packets, not a copy of its state.
+  The CDJ-3000's other packets (precise position, streaming sources) are not sent. `--status-length` and `--model` override a profile.
 - Beat grids, waveforms, cues and the rest of the database.

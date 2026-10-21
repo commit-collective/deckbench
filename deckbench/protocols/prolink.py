@@ -43,6 +43,7 @@ import time
 
 from ..core import Protocol, log
 
+from .. import profiles
 from . import startup
 from .mixer import LinkMixer, parse_on_air
 from .startup import MAGIC
@@ -227,7 +228,7 @@ class LinkDeck:
         p[0x2C:0x30] = struct.pack(">I", self.rbid)
         p[0x7B] = (4 if deck.loop else 3) if deck.playing else 5     # playing (looping) / paused
         p[0x7C:0x80] = b"1.00"
-        p[0x84:0x88] = struct.pack(">I", self.sync_number)
+        p[0x84:0x88] = struct.pack(">I", self.sync_number if self.net.sync_counter else 0)
         p[0x89] = self.flags()
         p[0x8B] = 0x7A if deck.playing else 0x7E
         pitch = struct.pack(">I", PITCH_NORMAL)
@@ -244,7 +245,7 @@ class LinkDeck:
         p[0xA6] = deck.beat_in_bar
         self.counter += 1
         p[0xC8:0xCC] = struct.pack(">I", self.counter)
-        p[0xCC] = 0x0F                                   # a nexus
+        p[0xCC] = self.net.nexus                         # 0x0f for a nexus, 0x1f for a CDJ-3000 or an XDJ-XZ
         return bytes(p)
 
     def beat(self, position):
@@ -517,9 +518,9 @@ def dmst_requester(args):
 class Prolink(Protocol):
     name = "prolink"
 
-    def __init__(self, world, loaded=None, titles=None, model=None, status_length=0x124,
+    def __init__(self, world, loaded=None, titles=None, model=None, status_length=None,
                  addresses=None, broadcast=BROADCAST, refuse_db=False, strict=False, ports=DEFAULT_PORTS,
-                 claim=False, mixer_name=b"DJM-900NXS2", mixer_address=None, mixer_channels=4):
+                 claim=False, mixer_name=b"DJM-900NXS2", mixer_address=None, mixer_channels=4, profile=None):
         """world.decks must have the decks (core.Deck, by player number) already.
         loaded: {deck: (source player, slot, rekordbox id)}; titles: {source
         player: {(slot, id): title}}. A deck has by default the track 100 + its
@@ -529,7 +530,9 @@ class Prolink(Protocol):
         turn metadata requests down (as real decks do those of a device that is not a
         player they know). strict: the decks behave as a CDJ-2000NXS2 does: they answer the players 1 to 4 that announced
         themselves and nobody else (a fifth device gets no answer, a unit that is not a player has its requests turned down).
-        ports: a Ports, the real ones by default. claim: a deck that comes online sends what a player does (three
+        profile: the model of player to stand in for (profiles.py: "cdj-2000nxs2", "xdj-1000mk2", "cdj-3000"...): the
+        name the decks announce, the length of their status packets and a byte of them. `model` and `status_length`
+        say it otherwise. ports: a Ports, the real ones by default. claim: a deck that comes online sends what a player does (three
         hellos and the three stages of claiming its number, 3.6 s) before its keep-alives, as real ones do, instead of
         being there at once. The mixer (off until it is switched on) is a DJM: its name, its address (default
         127.0.0.33) and its number of channels (4 or 6)."""
@@ -539,7 +542,12 @@ class Prolink(Protocol):
         self.defended = {}                  # (claimer's address, number): when it was last told that the number is in use
         self.mixer = LinkMixer(self, mixer_name if isinstance(mixer_name, bytes) else mixer_name.encode(), 33,
                                mixer_address, broadcast, mixer_channels)
-        self.status_length = status_length
+        self.profile = ""
+        self.status_length, self.nexus, self.sync_counter = 0x124, 0x0F, True
+        if profile:
+            self.apply_profile(profile, resize=status_length is None, rename=False)
+        if status_length is not None:
+            self.status_length = status_length
         self.unit = {"number": 0, "ip": None, "master": False, "bpm": None, "synced": False, "playing": False,
                      "on_air": False, "beat": 0, "seen": 0.0, "announced": 0.0}   # the unit under test
         loaded = dict(loaded or {})
@@ -549,7 +557,7 @@ class Prolink(Protocol):
         self.decks = {}
         for n, deck in world.decks.items():
             self.decks[n] = LinkDeck(self, deck, loaded.get(n, (n, 3, 100 + n)),
-                                     known.get(n, {}), model,
+                                     known.get(n, {}), model or (profiles.get(profile)["model"] if profile else None),
                                      (addresses or {}).get(n, "127.0.0.%d" % n), broadcast, refuse_db, strict, ports)
         world.protocols.append(self)
 
@@ -592,6 +600,19 @@ class Prolink(Protocol):
         threading.Thread(target=self.sniff, daemon=True).start()
         threading.Thread(target=self.faders, daemon=True).start()
         threading.Thread(target=self.mixer.run, daemon=True).start()
+
+    def apply_profile(self, name, rename=True, resize=True, **_):
+        """Stands in for another model of player (profiles.py): its name, the length of its statuses, its nexus byte and
+        whether its sync counter counts."""
+        profile = profiles.get(name)
+        self.profile = name
+        self.nexus, self.sync_counter = profile["nexus"], profile["sync_counter"]
+        if resize:
+            self.status_length = profile["status_length"]
+        if rename:
+            for link in self.decks.values():
+                link.name = profile["model"].encode()
+        log("the decks are now %s" % profile["title"])
 
     def peer_count(self, exclude=None, exclude_mixer=False):
         """The devices that are on the network, as the decks see it: the decks that are on and plugged in, the mixer if
@@ -778,10 +799,22 @@ class Prolink(Protocol):
     def settings(self):
         links = list(self.decks.values())
         return {"strict": any(l.strict for l in links), "refuse_db": any(l.refuse_db for l in links),
-                "claim": self.claim, "mixer": self.mixer.on,
+                "claim": self.claim, "mixer": self.mixer.on, "profile": self.profile,
                 "model": links[0].name.decode() if len({l.name for l in links}) == 1 else ""}
 
     def set_option(self, name, value):
+        if name == "profile":
+            if value in ("", "default"):
+                self.profile = ""
+                self.nexus, self.sync_counter, self.status_length = 0x0F, True, 0x124
+                for link in self.decks.values():
+                    link.name = ("CDJ-FAKE%d" % link.number).encode()
+                log("the decks are CDJ-FAKEn again")
+                return True
+            if value in profiles.PROFILES:
+                self.apply_profile(value)
+                return True
+            return False
         if name == "claim" and value in ("0", "1", 0, 1, True, False):
             self.claim = str(value) in ("1", "True")
             log("a deck that comes online %s" % ("claims its number first" if self.claim else "is there at once"))
