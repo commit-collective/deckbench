@@ -77,13 +77,58 @@ const Sound = (() => {
     n.stop(at + 0.06);
   }
 
-  /* A beat of a deck: a kick on 1 and 3, a snare on 2 and 4, a hat on the half beat. Each deck has its own place in the stereo field. */
+  function tone(ctx, out, at, type, freq, peak, length, filter) {
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.value = freq;
+    let node = o;
+    if (filter) {
+      const f = ctx.createBiquadFilter();
+      f.type = "lowpass";
+      f.frequency.value = filter;
+      o.connect(f);
+      node = f;
+    }
+    node.connect(envelope(ctx, out, at, peak, length));
+    o.start(at);
+    o.stop(at + length + 0.03);
+  }
+
+  /* A voice for each deck, so that they can be told apart, and a note for each beat of the bar so that the bar can be heard:
+   *   1 a bass: a sine that walks A1 A1 E2 D2
+   *   2 drums: a kick on 1 and 3, a snare on 2 and 4, a hat between
+   *   3 keys: a triangle that climbs A3 C4 E4 G4, and an octave above between
+   *   4 percussion: a wood block, higher on the 1, and a shaker between
+   * Decks 5 and 6 take the voices of 1 and 2. */
+  s.voices = [
+    (ctx, out, beat, at) => tone(ctx, out, at, "sine", [55, 55, 82.4, 73.4][beat - 1], 0.95, 0.3, 400),
+    (ctx, out, beat, at, half) => {
+      if (beat === 1 || beat === 3) kick(ctx, out, at); else snare(ctx, out, at);
+      hat(ctx, out, at + half);
+    },
+    (ctx, out, beat, at, half) => {
+      const f = [220, 261.6, 329.6, 392][beat - 1];
+      tone(ctx, out, at, "triangle", f, 0.32, 0.22, 2400);
+      tone(ctx, out, at + half, "triangle", f * 2, 0.1, 0.1, 3000);
+    },
+    (ctx, out, beat, at, half) => {
+      tone(ctx, out, at, "square", beat === 1 ? 1320 : 880, 0.16, 0.05, 3500);
+      const n = noise(ctx), f = ctx.createBiquadFilter();
+      f.type = "highpass";
+      f.frequency.value = 9000;
+      n.connect(f);
+      f.connect(envelope(ctx, out, at + half, 0.14, 0.05));
+      n.start(at + half);
+      n.stop(at + half + 0.07);
+    },
+  ];
+
+  /* A beat of a deck, in its voice. Each deck has its own place in the stereo field. */
   function play(deck, number, beat, at, half) {
     const ctx = s.ctx, pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
     const out = pan || s.master;
     if (pan) { pan.pan.value = Math.max(-0.8, Math.min(0.8, (number - 2.5) * 0.4)); pan.connect(s.master); }
-    if (beat === 1 || beat === 3) kick(ctx, out, at); else snare(ctx, out, at);
-    hat(ctx, out, at + half);
+    s.voices[(Math.max(1, number) - 1) % s.voices.length](ctx, out, beat, at, half);
     s.played++;
   }
 

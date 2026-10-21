@@ -87,6 +87,10 @@ class DemoBench {
     const now = this.now();
     for (const d of Object.values(this.decks)) { d.anchorPos = this.position(d, now); d.anchorT = now; }
     change();
+    const master = Object.values(this.decks).find((o) => o.on && o.master);
+    for (const d of Object.values(this.decks)) {     /* and the synced decks on the master's beat: its place, not only its tempo */
+      if (d.on && d.play && d.sync && master && master !== d && master.play) { d.anchorT = now; d.anchorPos = this.position(master, now); }
+    }
   }
   onAir(d) {
     if (this.settings.mixer && this.mixer.on) return this.mixer.master && this.mixer.channels[d.number] ? this.mixer.channels[d.number].fader > 0 : false;

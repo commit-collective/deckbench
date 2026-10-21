@@ -49,6 +49,20 @@ check("with a mixer, off the air", !Sound.audible({on: true, play: true, on_air:
 check("with a mixer, on the air", Sound.audible({on: true, play: true, on_air: true}, true));
 check("with no mixer, on air does not matter", Sound.audible({on: true, play: true, on_air: false}, false));
 
+// every voice runs on a stub of the audio graph, for each beat of the bar, and they are not one voice
+const nodes = [];
+const param = () => ({value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {}});
+const node = (kind) => { const n = {kind, connect() {}, start() {}, stop() {}, frequency: param(), gain: param(), pan: param()}; nodes.push(n); return n; };
+const ctx = {sampleRate: 8000, createOscillator: () => node("osc"), createGain: () => node("gain"), createBiquadFilter: () => node("filter"),
+  createBufferSource: () => node("noise"), createBuffer: (c, length) => ({getChannelData: () => new Float32Array(length)})};
+check("four voices", Sound.voices.length === 4);
+const made = Sound.voices.map((voice) => {
+  nodes.length = 0;
+  for (let beat = 1; beat <= 4; beat++) voice(ctx, node("out"), beat, 0, 0.25);
+  return nodes.map((n) => n.kind).join();
+});
+check("the voices are not the same", new Set(made).size === 4, made.map((m) => m.length));
+
 // a browser with no Web Audio says so
 Sound.toggle().then(() => check("no Web Audio", false), (e) => check("no Web Audio says why", /Web Audio/.test(e.message), e.message)).then(() => {
   console.log(failures ? failures + " failed" : "ok");

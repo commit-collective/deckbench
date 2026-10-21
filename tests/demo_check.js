@@ -30,10 +30,17 @@ const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
   check("on air while it plays, with no mixer", state.decks[2].on_air === true);
   await post("api/deck/3/on/1");
   await post("api/deck/2/master/1");
+  await post("api/deck/3/play/1");
+  await sleep(0.3);                                    // deck 3 is on its own first beats, the master well into its bar
   await post("api/deck/3/sync/1");
   await post("api/deck/2/tempo/131");
   state = await get("api/state");
   check("a synced deck follows the master's tempo", state.decks[3].bpm === 131 && state.decks[2].master, [state.decks[3].bpm, state.decks[2].master]);
+  // synced, a deck is on the master's beat and not only at its tempo: both places match, and go on matching
+  const placeOf = (n) => { const d = bench.decks[n]; return bench.position(d); };
+  check("a synced deck is at the master's place", Math.abs(placeOf(3) - placeOf(2)) < 0.02, [placeOf(2), placeOf(3)]);
+  await sleep(0.4);
+  check("and stays there", Math.abs(placeOf(3) - placeOf(2)) < 0.02, [placeOf(2), placeOf(3)]);
   await post("api/deck/2/master/0");
   state = await get("api/state");
   check("it follows no more when there is no master", state.decks[3].bpm === 124, state.decks[3].bpm);   // its own tempo again
