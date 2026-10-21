@@ -92,9 +92,13 @@ class Heard(unittest.TestCase):
         deck = self.other_world.decks[5]
         deck.enabled = True
         link = self.other.decks[5]
-        self.player.send(link.keepalive(), self.ports.announce)
-        self.player.send(link.status(), self.ports.update)
-        found = wait(lambda: (self.device() or {}).get("status") and self.device())
+
+        def heard():                                             # the listener may not be bound yet: say it again until it hears
+            self.player.send(link.keepalive(), self.ports.announce)
+            self.player.send(link.status(), self.ports.update)
+            time.sleep(0.1)
+            return (self.device() or {}).get("status") and self.device()
+        found = wait(heard, 8.0)
         self.assertTrue(found, "the device was not found")
         self.assertEqual((found["number"], found["model"], found["name"], found["kind"], found["online"]),
                          (5, "CDJ-2000NXS2", "CDJ-2000NXS2", "player", True))
