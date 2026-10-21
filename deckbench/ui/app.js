@@ -679,6 +679,15 @@ $("theme").value = store.get("deckbench.theme", "auto");
 theme($("theme").value);
 $("theme").addEventListener("change", (e) => { store.set("deckbench.theme", e.target.value); theme(e.target.value); });
 
+/* the look: commit (commitcollective.cc) or classic, which is the first look of the page */
+function look(value) {
+  if (value === "classic") document.documentElement.setAttribute("data-style", value);
+  else document.documentElement.removeAttribute("data-style");
+}
+$("look").value = store.get("deckbench.look", "commit");
+look($("look").value);
+$("look").addEventListener("change", (e) => { store.set("deckbench.look", e.target.value); look(e.target.value); });
+
 /* ---- sound ---- */
 
 $("sound").addEventListener("click", async () => {

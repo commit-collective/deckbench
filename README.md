@@ -42,7 +42,7 @@ track (its id, title, BPM, the deck whose database it comes from and the slot). 
 - **Scenario**: an editor with the examples, saved scenarios and a run with its progress.
 - **Mixer**: a simulated DJM with a fader and fader start for each channel.
 - **Network**: the share of datagrams lost and the unit heard on the network.
-- **Settings**: strict decks, database refusal, claiming the number first, the model name, the theme, and how the bench was started.
+- **Settings**: strict decks, database refusal, claiming the number first, the model name, the look (Commit Collective or Classic) and the colours (dark or light), and how the bench was started.
 
 **Sound** in the header plays each deck's beat in the browser (a kick, a snare and a hat, made with Web Audio), and with a mixer on only the
 decks on air are heard. It is the page's own sound, not the device under test's: see [docs/audio.md](docs/audio.md) for the stream that goes to an emulator.
