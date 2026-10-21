@@ -1,8 +1,8 @@
 # Changelog
 
-## Not yet released
+## v0.1.0
 
-The first version, `v0.1.0`, once it is tagged.
+The first version.
 
 - Pro DJ Link decks: discovery, status, beats, tempo master, sync and hand-off, loops, and the database server for track titles.
 - A page and an HTTP API to drive them, a command line, scenarios with expectations, events of what the device under test did,
@@ -35,3 +35,6 @@ The first version, `v0.1.0`, once it is tagged.
 - `--ready-file`, `GET /api/ready` and `deckbench.testing.Bench` to start a bench from a test without guessing a delay.
 - Runs on Linux, Windows and macOS. The tests use ports of their own, so a running bench or rekordbox does not matter.
   Tried on Windows 11 (Python 3.10, 3.9) and, through the emulator, WSL2 on Ubuntu 24.04.
+  The GitHub Action has not run yet, and macOS and Python 3.8 were not tried. The DJS-1000 emulator scenarios ran in WSL2.
+
+## Not yet released
