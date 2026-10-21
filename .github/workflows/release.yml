@@ -1,0 +1,32 @@
+# A tag becomes a GitHub release, with the changelog's entry as the notes. Run it by hand (Actions, Run workflow) for a tag that
+# has no release yet, or after a correction to the changelog, to write the notes again.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The tag to make a release of, or whose notes are written again"
+        required: true
+        default: "v0.1.0"
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          python3 tools/release_notes.py "$TAG" > notes.md
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file notes.md
+          else
+            gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md
+          fi

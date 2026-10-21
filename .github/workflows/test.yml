@@ -12,9 +12,13 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         python: ["3.8", "3.12"]
         include:
+          # macOS has only 127.0.0.1 on its loopback: the aliases below give the decks their addresses. Whether
+          # broadcasts to 127.255.255.255 work there is not known, so it does not fail the run.
           - os: macos-latest
             python: "3.12"
+            experimental: true
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental == true }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,4 +28,11 @@ jobs:
         if: runner.os == 'macOS'
         run: for n in 2 3 4 5 6 7 8 9; do sudo ifconfig lo0 alias 127.0.0.$n up; done
       - name: Tests
-        run: python -m unittest discover -s tests
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m unittest discover -s tests 2>&1 | tee test-output.txt
+      - name: Say what failed
+        if: failure()
+        shell: bash
+        run: python tools/ci_report.py test-output.txt

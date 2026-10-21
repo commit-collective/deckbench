@@ -74,7 +74,17 @@ class Command(unittest.TestCase):
             self.assertIn("--port-shift", out.stderr)
 
 
-@unittest.skipUnless(os.name == "nt" and shutil.which("wsl.exe"), "needs Windows with WSL")
+def wsl_ready():
+    """Windows with a WSL distribution that starts. A runner can have wsl.exe and no distribution."""
+    if os.name != "nt" or not shutil.which("wsl.exe"):
+        return False
+    try:
+        return subprocess.run(["wsl.exe", "--", "true"], capture_output=True, timeout=60).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+@unittest.skipUnless(wsl_ready(), "needs Windows with a WSL distribution")
 class InWsl(unittest.TestCase):
     def test_runs_in_wsl_and_stops_there(self):
         with Bench(numbers=[2, 3], on=True, init={2: "play"}, wsl=True) as bench:

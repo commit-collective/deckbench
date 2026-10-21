@@ -1,5 +1,8 @@
 # deckbench
 
+[![release](https://img.shields.io/github/v/release/commit-collective/deckbench?display_name=tag)](https://github.com/commit-collective/deckbench/releases)
+[![tests](https://github.com/commit-collective/deckbench/actions/workflows/test.yml/badge.svg)](https://github.com/commit-collective/deckbench/actions/workflows/test.yml)
+
 Simulated DJ decks on a network, for testing what talks to them: players,
 mixers, DJ software, firmware, hardware, emulators.
 
