@@ -11,7 +11,7 @@ A push to main that changes `deckbench/ui` builds and deploys the worker, with n
 1. Workers & Pages, Create, Import a repository, and choose this repo.
 2. Worker name `deckbench-app`, the same as `name` in `wrangler.toml`.
 3. Production branch `main`. Build command empty. Deploy command `npx wrangler deploy`.
-4. Build watch paths: include `deckbench/ui/**` and `wrangler.toml`.
+4. Build watch paths: include `deckbench/ui/**`, `worker.js` and `wrangler.toml`.
 5. After the first deploy, check Settings, Domains & Routes: `commitcollective.cc/deckbench/app/*` must be listed.
 6. Open `/deckbench/app/?demo` and `/deckbench/app/` on the site.
 
