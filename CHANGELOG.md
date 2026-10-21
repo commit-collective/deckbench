@@ -10,7 +10,7 @@ Newest first. A release is a tagged commit.
   them), and `?demo` runs a bench made of JavaScript in the page (`demo.js`), tested in node. `docs/phone.md`,
   `tools/copy_to_site.py`.
 - Releases: a tag makes a GitHub release with the changelog's entry (`.github/workflows/release.yml`, which can be run by hand for a tag
-  that has none). The test workflow says which test failed as annotations, and macOS is allowed to fail.
+  that has none). The test workflow says which test failed, and runs on Ubuntu and Windows.
 - The WSL test of `Bench` only runs where a WSL distribution starts.
 - UDP sockets are shared with SO_REUSEPORT on macOS, and the page's server no longer does a reverse lookup when it starts, which held it
   up for many seconds on a macOS runner.
@@ -50,4 +50,4 @@ The first version.
 - `--ready-file`, `GET /api/ready` and `deckbench.testing.Bench` to start a bench from a test without guessing a delay.
 - Runs on Linux and Windows, Python 3.8 and later: the GitHub Action passes on Ubuntu and on Windows with 3.8 and 3.12. The tests use ports
   of their own, so a running bench or rekordbox does not matter. The DJS-1000 emulator scenarios ran in WSL2.
-  On macOS the loopback carries no broadcasts, so decks on 127.0.0.n are not heard: its CI job fails and is allowed to. Use `--bind` there.
+  On macOS the loopback carries no broadcasts, so decks on 127.0.0.n are not heard and 27 of the tests fail: it is not tested. Use `--bind` there.

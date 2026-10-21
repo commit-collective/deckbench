@@ -119,8 +119,8 @@ beats on from, and for each protocol what it knows of the other side.
 Starts the bench in the process and checks, from a small client, the
 keep-alives, the status packets' fields, the beats, sync and master, the
 hand-off to a player that asks, the sync commands, the database and the API.
-It runs on Linux and Windows. The tests need the whole of 127.0.0.0/8 and its broadcast address, which macOS does not give: they fail there (CI
-keeps a macOS job that is allowed to fail, to see if that changes).
+It runs on Linux and Windows, and CI tests both. The tests need the whole of 127.0.0.0/8 and its broadcast address, which macOS does not give:
+27 of them fail there, so macOS is not tested.
 The tests do not use the real ports: they take the first free range, or the shift in `DECKBENCH_PORT_SHIFT`.
 
 ## From a phone, or a page on another site
