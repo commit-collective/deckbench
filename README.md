@@ -7,7 +7,7 @@ Simulated DJ decks on a network, for testing what talks to them: players,
 mixers, DJ software, firmware, hardware, emulators.
 
 <p align="center">
-<img src="docs/img/hero.png" alt="The deckbench page: four simulated decks on air with their beat strips, tempo, loops and cable controls, another player heard on the network, and the events list" width="1000">
+<img src="https://commitcollective.cc/deckbench/hero.png" alt="The deckbench page: four simulated decks on air with their beat strips, tempo, loops and cable controls, another player heard on the network, and the events list" width="1000">
 </p>
 
 Follow development: [commitcollective.cc](https://commitcollective.cc), [Instagram](https://www.instagram.com/commit.collective), [YouTube](https://www.youtube.com/@CommitCollective). On GitHub, Watch, then Releases. The page runs in a browser at [commitcollective.cc/deckbench](https://commitcollective.cc/deckbench/), as a demo or as the screen of a bench of your own.
@@ -74,6 +74,8 @@ Options (`python -m deckbench --help`):
   `netsh interface ipv4 show excludedportrange protocol=udp`). A unit on the real ports does not hear such decks
 - `--ready-file FILE`: once the decks and the page are up, write FILE, a JSON object with the page's address, the ports and the
   process. A script that starts the bench waits for it instead of guessing a delay
+- `--exit-on-eof`: leave when standard input is closed. For a program that starts the bench and must not leave it running if it
+  dies (`deckbench.testing.Bench` does this). `--version` prints the version and leaves
 - `--mixer [NAME]`, `--mixer-address`, `--mixer-channels 4|6`: a simulated DJM that tells the decks which channels are on the air
   and starts them with its faders (see [docs/mixer.md](docs/mixer.md))
 - `--claim`: a deck that comes on claims its number first, as a player does (3.6 s), instead of being there at once
