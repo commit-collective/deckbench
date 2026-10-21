@@ -4,6 +4,9 @@ Newest first. A release is a tagged commit.
 
 ## Not yet released
 
+- The page can play the decks' beats (the Sound button): a kick, a snare and a hat for each deck that plays, in time with it, made with Web
+  Audio. With a mixer on only the decks that are on air are heard. The demo has a deck 1 too.
+
 - The API refuses a request from a web page of another origin (any site could drive a bench on localhost), unless `--allow-origin` names it,
   and answers its CORS preflight, private network access included. `--token` makes the API want a token.
 - The page works hosted on another site and from a phone: `transport.js` takes the address and token of a bench (a dialog asks for

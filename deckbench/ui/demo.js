@@ -52,7 +52,7 @@ const demoMatches = (value, want) => {
 };
 
 class DemoBench {
-  constructor(numbers = [2, 3, 4]) {
+  constructor(numbers = [1, 2, 3, 4]) {
     this.began = Date.now() / 1000;
     this.decks = {};
     numbers.forEach((n, i) => {
@@ -369,10 +369,11 @@ class DemoBench {
   }
 }
 
-/* The page starts the demo with something going on: two decks playing, one the master, and a mixer. */
+/* The page starts the demo with something going on: two decks playing, one the master, and a mixer. Deck 1 is there too, as it is
+ * on a bench started with no numbers: it is the number a unit takes for itself, which the demo has none of. */
 function livelyDemo() {
   const bench = new DemoBench();
-  for (const n of [2, 3, 4]) bench.toggle(bench.decks[n], "on", true);
+  for (const n of [1, 2, 3, 4]) bench.toggle(bench.decks[n], "on", true);
   bench.toggle(bench.decks[2], "play", true);
   bench.toggle(bench.decks[3], "play", true);
   bench.toggle(bench.decks[2], "master", true);

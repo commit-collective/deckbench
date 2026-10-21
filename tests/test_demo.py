@@ -15,8 +15,13 @@ class Demo(unittest.TestCase):
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
         self.assertEqual(out.stdout.strip().splitlines()[-1], "ok")
 
+    def test_the_beats_of_a_deck_for_the_sound(self):
+        out = subprocess.run(["node", os.path.join(ROOT, "tests", "sound_check.js")], capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertEqual(out.stdout.strip().splitlines()[-1], "ok")
+
     def test_the_page_scripts_are_valid(self):
-        for name in ("app.js", "transport.js", "demo.js"):
+        for name in ("app.js", "transport.js", "demo.js", "sound.js"):
             out = subprocess.run(["node", "--check", os.path.join(ROOT, "deckbench", "ui", name)], capture_output=True, text=True)
             self.assertEqual(out.returncode, 0, name + out.stderr)
 

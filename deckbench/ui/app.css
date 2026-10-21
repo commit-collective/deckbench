@@ -57,6 +57,7 @@ button { cursor: pointer; }
 .btn:hover:not(:disabled) { border-color: var(--line-2); background: var(--surface); }
 .btn:disabled { opacity: .45; cursor: default; }
 .btn.small { height: 26px; padding: 0 9px; font-size: 12px; }
+.btn[aria-pressed="true"] { background: color-mix(in srgb, var(--on) 22%, var(--surface-2)); border-color: var(--on); color: var(--text); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn.primary:hover:not(:disabled) { filter: brightness(1.1); background: var(--accent); }
 .btn.danger { color: var(--danger); }

@@ -21,7 +21,7 @@ const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
 
 (async () => {
   let state = await get("api/state");
-  check("three decks, off", Object.keys(state.decks).join() === "2,3,4" && !state.decks[2].on);
+  check("four decks, off", Object.keys(state.decks).join() === "1,2,3,4" && !state.decks[2].on && !state.decks[1].on);
   check("ready", (await get("api/ready")).ready === true);
 
   state = (await post("api/deck/2/on/1")).data;
@@ -36,7 +36,7 @@ const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
   check("a synced deck follows the master's tempo", state.decks[3].bpm === 131 && state.decks[2].master, [state.decks[3].bpm, state.decks[2].master]);
   await post("api/deck/2/master/0");
   state = await get("api/state");
-  check("it follows no more when there is no master", state.decks[3].bpm === 126, state.decks[3].bpm);
+  check("it follows no more when there is no master", state.decks[3].bpm === 124, state.decks[3].bpm);   // its own tempo again
 
   state = (await post("api/deck/2/loop/4")).data;
   check("a loop", state.decks[2].loop === 4);

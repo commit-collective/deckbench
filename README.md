@@ -44,6 +44,9 @@ track (its id, title, BPM, the deck whose database it comes from and the slot). 
 - **Network**: the share of datagrams lost and the unit heard on the network.
 - **Settings**: strict decks, database refusal, claiming the number first, the model name, the theme, and how the bench was started.
 
+**Sound** in the header plays each deck's beat in the browser (a kick, a snare and a hat, made with Web Audio), and with a mixer on only the
+decks on air are heard. It is the page's own sound, not the device under test's: see [docs/audio.md](docs/audio.md) for the stream that goes to an emulator.
+
 `http://127.0.0.1:8750/#scenario` opens a tab. The decks of Pro DJ Link are at 127.0.0.<number>, so the device under test must
 see this machine's loopback: run both on the same machine and network namespace. The bench runs on Linux and Windows (tested by CI on both, with Python 3.8 and 3.12). On macOS the loopback carries no broadcasts, so
 the decks on 127.0.0.n are not heard: use the real network mode there (`--bind`, see [docs/real-network.md](docs/real-network.md)).
@@ -151,7 +154,7 @@ From any other language, start `python -m deckbench --http-port 0 --ready-file r
     deckbench/core.py             a deck, and the world of decks, whatever the protocol
     deckbench/protocols/prolink.py  Pro DJ Link
     deckbench/web.py              the API, and the page's files
-    deckbench/ui/                 the page: index.html, app.css, app.js, transport.js (which bench), demo.js (the demo); no packages, no build step
+    deckbench/ui/                 the page: index.html, app.css, app.js, transport.js (which bench), sound.js (the beats as sound), demo.js (the demo); no packages, no build step
     deckbench/examples/           scenarios to start from (the page lists them, `--scenario` plays them)
     deckbench/protocols/mixer.py  the simulated DJM
     deckbench/protocols/startup.py  the packets of a device coming online

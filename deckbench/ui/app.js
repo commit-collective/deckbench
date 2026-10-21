@@ -563,6 +563,18 @@ $("theme").value = store.get("deckbench.theme", "auto");
 theme($("theme").value);
 $("theme").addEventListener("change", (e) => { store.set("deckbench.theme", e.target.value); theme(e.target.value); });
 
+/* ---- sound ---- */
+
+$("sound").addEventListener("click", async () => {
+  try {
+    const on = await Sound.toggle();
+    $("sound").setAttribute("aria-pressed", String(on));
+    $("sound").textContent = on ? "Sound on" : "Sound";
+  } catch (e) {
+    toast(e.message || "The browser would not start the sound.");
+  }
+});
+
 /* ---- all on, all off ---- */
 
 async function everyDeck(on) {

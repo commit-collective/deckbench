@@ -45,7 +45,7 @@ class Page(unittest.TestCase):
 
     def test_the_files_are_served(self):
         for path, kind in (("", "text/html"), ("app.css", "text/css"), ("app.js", "text/javascript"), ("transport.js", "text/javascript"),
-                           ("demo.js", "text/javascript")):
+                           ("demo.js", "text/javascript"), ("sound.js", "text/javascript")):
             status, content_type, body = self.get(path)
             self.assertEqual(status, 200)
             self.assertTrue(content_type.startswith(kind), content_type)
