@@ -182,8 +182,17 @@ function buildDeck(n, numbers) {
         h("label", {}, "Slot", h("select", {class: "t-slot"},
           Object.entries(SLOTS).map(([k, v]) => h("option", {value: k, selected: k === "3"}, v)))),
         h("button", {class: "btn primary wide", onclick: () => loadTrack(n, card)}, "Load it from its first beat"))));
-  card.querySelector(".tempo-range").addEventListener("input", (e) => { q("tempo-num").value = Number(e.target.value).toFixed(1); });
-  card.querySelector(".tempo-range").addEventListener("change", (e) => act("api/deck/" + n + "/tempo/" + e.target.value));
+  let tempoSent = 0, tempoLater = null;                       /* the fader is followed as it moves, a request every 60 ms at most */
+  const sendTempo = (value) => { tempoSent = Date.now(); act("api/deck/" + n + "/tempo/" + value); };
+  card.querySelector(".tempo-range").addEventListener("input", (e) => {
+    const value = e.target.value;
+    q("tempo-num").value = Number(value).toFixed(1);
+    clearTimeout(tempoLater);
+    const wait = 60 - (Date.now() - tempoSent);
+    if (wait <= 0) sendTempo(value);
+    else tempoLater = setTimeout(() => sendTempo(value), wait);
+  });
+  card.querySelector(".tempo-range").addEventListener("change", (e) => { clearTimeout(tempoLater); sendTempo(e.target.value); });
   card.querySelector(".tempo-num").addEventListener("change", (e) => {
     if (e.target.value) act("api/deck/" + n + "/tempo/" + e.target.value);
   });
