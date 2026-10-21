@@ -3,6 +3,12 @@
 Simulated DJ decks on a network, for testing what talks to them: players,
 mixers, DJ software, firmware, hardware, emulators.
 
+<p align="center">
+<img src="docs/img/hero.png" alt="The deckbench page: three simulated decks playing, with their beat squares, tempo, loops and cable controls, and the events list showing a mixer's on-air reports and fader starts" width="1000">
+</p>
+
+Follow development: [commitcollective.cc](https://commitcollective.cc), [Instagram](https://www.instagram.com/commit.collective), [YouTube](https://www.youtube.com/@CommitCollective). On GitHub, Watch, then Releases. The page runs in a browser at [commitcollective.cc/deckbench](https://commitcollective.cc/deckbench/), as a demo or as the screen of a bench of your own.
+
 Players and software that speak a DJ link protocol are tested with real decks,
 which means owning them, cabling them and loading tracks. deckbench stands in:
 any number of decks that announce themselves, report a loaded track, play at a
