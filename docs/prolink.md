@@ -98,8 +98,8 @@ must look like. Each of these was found by the unit not reacting:
 
 ## Not done
 
-- The claim packets a player sends when it joins (hello, the three claim
-  stages): the decks only send keep-alives, which is all a unit was seen to need.
+- Claim packets are sent only with `--claim`, and the mixer's on air and fader start are in [mixer.md](mixer.md). The
+  assignment of a number by a mixer (a player in a DJM-2000's channel port) is not.
 - Many models: the status length and the name can be chosen (`--status-length`,
   `--model`), the contents are those of a nexus player.
 - Beat grids, waveforms, cues and the rest of the database.

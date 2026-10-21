@@ -43,7 +43,9 @@ import time
 
 from ..core import Protocol, log
 
-MAGIC = bytes([0x51, 0x73, 0x70, 0x74, 0x31, 0x57, 0x6D, 0x4A, 0x4F, 0x4C])
+from . import startup
+from .mixer import LinkMixer, parse_on_air
+from .startup import MAGIC
 BROADCAST = "127.255.255.255"
 DB_PORT = 1051
 QUERY_PORT = 12523
@@ -163,25 +165,31 @@ class LinkDeck:
         self.pending = False                # has asked the unit for the master role
         self.sync_number = 0
         self.counter = 0
+        self.online = False                 # it has come onto the network (and claimed its number, if that is asked)
+        self.alone = False                  # nothing else was on the network when it came online (a byte of its keep-alive)
+        self.mac = bytes([0x02, 0xFA, 0x4E, 0xDE, 0xC0, deck.number])
 
     @property
     def number(self):
         return self.deck.number
 
     def keepalive(self):
-        p = bytearray(0x36)
-        p[0:10] = MAGIC
-        p[0x0A] = 0x06
-        p[0x0C:0x0C + len(self.name)] = self.name
-        p[0x20], p[0x21] = 0x01, 0x02
-        p[0x22:0x24] = struct.pack(">H", 0x36)
-        p[0x24] = self.number
-        p[0x25] = 0x01
-        p[0x26:0x2C] = bytes([0x02, 0xFA, 0x4E, 0xDE, 0xC0, self.number])
-        p[0x2C:0x30] = socket.inet_aton(self.address)
-        p[0x30] = 1
-        p[0x34] = 0x01
-        return bytes(p)
+        return startup.keepalive(self.name, self.number, self.address, self.mac, self.net.peer_count(), self.alone)
+
+    def claim(self, sock):
+        """What a player sends when it comes online, at 300 ms: three hellos, then the three stages of claiming its
+        number. False if it was switched off or unplugged on the way."""
+        steps = [startup.hello(self.name)] * 3
+        steps += [startup.stage1(self.name, self.mac, n) for n in (1, 2, 3)]
+        steps += [startup.stage2(self.name, self.address, self.mac, self.number, n) for n in (1, 2, 3)]
+        steps += [startup.stage3(self.name, self.number, n) for n in (1, 2, 3)]
+        log("%s comes online: claiming number %d" % (self.deck.name, self.number))
+        for packet in steps:
+            if not self.deck.enabled or self.deck.unplugged:
+                return False
+            self.send(sock, packet, (self.broadcast, self.ports.announce))
+            time.sleep(0.3)
+        return True
 
     def flags(self):
         # Bits 7 and 2 are set on a real player (the analysis does not explain
@@ -191,7 +199,9 @@ class LinkDeck:
         deck = self.deck
         f = 0x84
         if deck.playing:
-            f |= 0x40 | 0x08                             # playing, on air
+            f |= 0x40
+        if deck.on_air if deck.on_air is not None else deck.playing:
+            f |= 0x08                                    # on air: a mixer says so, and with none it is while it plays
         if deck.master:
             f |= 0x20
         # While it waits for the unit to hand the master role over, its status
@@ -279,8 +289,16 @@ class LinkDeck:
             now = time.time()
             if not self.deck.enabled or self.deck.unplugged:
                 last_keep = last_status = 0.0
+                self.online = False
                 time.sleep(0.1)
                 continue
+            if not self.online:
+                self.online = True
+                self.alone = self.net.peer_count(exclude=self) == 0
+                if self.net.claim and not self.claim(s):
+                    continue
+                last_keep = last_status = 0.0
+                now = time.time()
             if now - last_keep >= 2.0:
                 self.send(s, self.keepalive(), (self.broadcast, self.ports.announce))
                 last_keep = now
@@ -500,7 +518,8 @@ class Prolink(Protocol):
     name = "prolink"
 
     def __init__(self, world, loaded=None, titles=None, model=None, status_length=0x124,
-                 addresses=None, broadcast=BROADCAST, refuse_db=False, strict=False, ports=DEFAULT_PORTS):
+                 addresses=None, broadcast=BROADCAST, refuse_db=False, strict=False, ports=DEFAULT_PORTS,
+                 claim=False, mixer_name=b"DJM-900NXS2", mixer_address=None, mixer_channels=4):
         """world.decks must have the decks (core.Deck, by player number) already.
         loaded: {deck: (source player, slot, rekordbox id)}; titles: {source
         player: {(slot, id): title}}. A deck has by default the track 100 + its
@@ -510,12 +529,19 @@ class Prolink(Protocol):
         turn metadata requests down (as real decks do those of a device that is not a
         player they know). strict: the decks behave as a CDJ-2000NXS2 does: they answer the players 1 to 4 that announced
         themselves and nobody else (a fifth device gets no answer, a unit that is not a player has its requests turned down).
-        ports: a Ports, the real ones by default."""
+        ports: a Ports, the real ones by default. claim: a deck that comes online sends what a player does (three
+        hellos and the three stages of claiming its number, 3.6 s) before its keep-alives, as real ones do, instead of
+        being there at once. The mixer (off until it is switched on) is a DJM: its name, its address (default
+        127.0.0.33) and its number of channels (4 or 6)."""
         self.world = world
         self.ports = ports
+        self.claim = claim
+        self.defended = {}                  # (claimer's address, number): when it was last told that the number is in use
+        self.mixer = LinkMixer(self, mixer_name if isinstance(mixer_name, bytes) else mixer_name.encode(), 33,
+                               mixer_address, broadcast, mixer_channels)
         self.status_length = status_length
         self.unit = {"number": 0, "ip": None, "master": False, "bpm": None, "synced": False, "playing": False,
-                     "on_air": False, "beat": 0, "seen": 0.0}   # the unit under test
+                     "on_air": False, "beat": 0, "seen": 0.0, "announced": 0.0}   # the unit under test
         loaded = dict(loaded or {})
         known = {n: {(3, 100 + n): "Track of deck %d" % n} for n in world.decks}
         for src, entries in (titles or {}).items():
@@ -565,6 +591,42 @@ class Prolink(Protocol):
                 % ((deck.name, link.address, link.source, link.slot, link.rbid, deck.base_bpm)))
         threading.Thread(target=self.sniff, daemon=True).start()
         threading.Thread(target=self.faders, daemon=True).start()
+        threading.Thread(target=self.mixer.run, daemon=True).start()
+
+    def peer_count(self, exclude=None, exclude_mixer=False):
+        """The devices that are on the network, as the decks see it: the decks that are on and plugged in, the mixer if
+        it is on, and the unit under test if it was heard in the last ten seconds."""
+        count = sum(1 for link in self.decks.values() if link is not exclude and link.deck.enabled and not link.deck.unplugged)
+        count += 1 if self.mixer.on and not exclude_mixer else 0
+        count += 1 if time.time() - self.unit["announced"] < 10 else 0
+        return count
+
+    def mixer_gone(self):
+        """The mixer was switched off: the decks are no longer told whether they are on air."""
+        with self.world.lock:
+            for deck in self.world.decks.values():
+                deck.on_air = None
+
+    def defend(self, number, claimer):
+        """Another device claims or announces a number a deck of the bench is using: tell it so (type 0x08), as a player
+        does, at most once a second."""
+        for link in self.decks.values():
+            if link.number != number or not link.deck.enabled or link.deck.unplugged or claimer == link.address:
+                continue
+            now = time.time()
+            if now - self.defended.get((claimer, number), 0.0) < 1.0:
+                return
+            self.defended[(claimer, number)] = now
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.bind((link.address, 0))
+                link.send(s, startup.in_use(link.name, number, link.address), (claimer, self.ports.announce))
+            except OSError as e:
+                log("%s could not defend its number against %s: %s" % (link.deck.name, claimer, e))
+            finally:
+                s.close()
+            log("%s tells %s that number %d is in use" % (link.deck.name, claimer, number))
+            self.world.events.add("number_defended", deck=number, claimer=claimer)
 
     def faders(self):
         """Fader start packets (type 0x02, broadcast on 50001, as a mixer sends them): a byte for each
@@ -574,6 +636,16 @@ class Prolink(Protocol):
         s.bind(("", self.ports.beat))
         while True:
             data, addr = s.recvfrom(2048)
+            flags = parse_on_air(data)
+            if flags is not None:
+                with self.world.lock:
+                    for channel, on in flags.items():
+                        deck = self.world.decks.get(channel)
+                        if deck and deck.on_air != on:
+                            deck.on_air = on
+                            self.world.events.add("on_air", deck=channel, on=on, sender=data[0x21])
+                self.world.changed()
+                continue
             if len(data) < 0x28 or data[:10] != MAGIC or data[0x0A] != 0x02:
                 continue
             log("fader start from %d (%s): %s" % (data[0x21], data[0x0B:0x1F].rstrip(b"\0").decode("latin-1"),
@@ -603,7 +675,59 @@ class Prolink(Protocol):
                 "model": link.name.decode(), "address": link.address}
 
     def info(self):
-        return {"unit": dict(self.unit) if self.unit["number"] else None, "settings": self.settings()}
+        return {"unit": dict(self.unit) if self.unit["number"] else None, "settings": self.settings(),
+                "mixer": self.mixer.snapshot()}
+
+    @staticmethod
+    def truthy(value):
+        return value in (True, 1, "1", "true", "on")
+
+    def mixer_do(self, params):
+        """What a scenario step or a POST to /api/mixer does: (ok, message)."""
+        m = self.mixer
+        if "on" in params and not m.set_on(self.truthy(params["on"])):
+            return False, "the mixer cannot be on: its address (%s) is not this machine's" % m.address
+        if "master" in params:
+            m.set_master(self.truthy(params["master"]))
+        if params.get("channel") is not None:
+            try:
+                channel = int(params["channel"])
+            except (TypeError, ValueError):
+                channel = 0
+            if channel not in m.channels:
+                return False, "no channel %s (the mixer has 1 to %d)" % (params["channel"], len(m.channels))
+            if "fader" in params:
+                try:
+                    m.set_fader(channel, float(params["fader"]))
+                except (TypeError, ValueError):
+                    return False, "a fader is a number from 0 to 100"
+            if "fader_start" in params:
+                m.set_fader_start(channel, self.truthy(params["fader_start"]))
+            if "command" in params:
+                if params["command"] not in ("start", "stop"):
+                    return False, "a command is start or stop"
+                if not m.send_fader_start({channel: params["command"]}):
+                    return False, "the mixer is off"
+        return True, ""
+
+    def action(self, name, params):
+        if name == "mixer":
+            return self.mixer_do(params)
+        return None
+
+    def handle_api(self, parts, query):
+        """POST /api/mixer/on/1, /master/0, /channel/2/fader/70, /channel/2/fader_start/1, /channel/2/command/start."""
+        if parts[0] != "mixer":
+            return None
+        rest = parts[1:]
+        if len(rest) == 2 and rest[0] in ("on", "master"):
+            params = {rest[0]: rest[1]}
+        elif len(rest) == 4 and rest[0] == "channel" and rest[2] in ("fader", "fader_start", "command"):
+            params = {"channel": rest[1], rest[2]: rest[3]}
+        else:
+            return 404, {"error": "no such mixer control"}
+        ok, why = self.mixer_do(params)
+        return (200, {}) if ok else (400, {"error": why})
 
     def unit_state(self):
         u = self.unit
@@ -654,9 +778,16 @@ class Prolink(Protocol):
     def settings(self):
         links = list(self.decks.values())
         return {"strict": any(l.strict for l in links), "refuse_db": any(l.refuse_db for l in links),
+                "claim": self.claim, "mixer": self.mixer.on,
                 "model": links[0].name.decode() if len({l.name for l in links}) == 1 else ""}
 
     def set_option(self, name, value):
+        if name == "claim" and value in ("0", "1", 0, 1, True, False):
+            self.claim = str(value) in ("1", "True")
+            log("a deck that comes online %s" % ("claims its number first" if self.claim else "is there at once"))
+            return True
+        if name == "mixer" and value in ("0", "1", 0, 1, True, False):
+            return self.mixer.set_on(str(value) in ("1", "True"))
         if name in ("strict", "refuse_db") and value in ("0", "1", 0, 1, True, False):
             for link in self.decks.values():
                 setattr(link, name, str(value) in ("1", "True"))
@@ -745,6 +876,8 @@ class Prolink(Protocol):
                 port = s.getsockname()[1]
                 if len(data) < 0x30 or data[:10] != MAGIC:
                     continue
+                if port == self.ports.announce and startup.claimed_number(data) is not None:
+                    self.defend(startup.claimed_number(data), addr[0])
                 if not (data[0x0B:0x0F] == b"DJS-" or data[0x0C:0x10] == b"DJS-"):
                     continue
                 with world.lock:
@@ -754,6 +887,7 @@ class Prolink(Protocol):
                             log("the unit under test is player %d" % data[0x24])
                             world.events.add("unit_seen", number=data[0x24])
                         unit["ip"] = ".".join(str(b) for b in data[0x2C:0x30])
+                        unit["announced"] = time.time()
                     elif port == self.ports.update and data[0x0A] == 0x0A and len(data) > 0x93:
                         master = bool(data[0x89] & 0x20)
                         unit["syncn"] = struct.unpack(">I", data[0x84:0x88])[0]

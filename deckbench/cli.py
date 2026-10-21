@@ -104,6 +104,15 @@ def main(argv=None):
                     help="move every port of the decks by N (UDP 50000-50002, TCP 12523 and 1051), to run beside "
                          "something that holds the real ones or where the system keeps them back. A unit on the real "
                          "ports does not hear them (default 0)")
+    ap.add_argument("--claim", action="store_true",
+                    help="a deck that comes on does what a player does first: three hellos and the three stages of claiming "
+                         "its number (3.6 s), and only then its keep-alives. Without it the deck is there at once")
+    ap.add_argument("--mixer", nargs="?", const="DJM-900NXS2", metavar="NAME",
+                    help="a simulated DJM mixer, on from the start (NAME is what it announces, default DJM-900NXS2). It "
+                         "reports which channels are on the air and can start the players with its faders")
+    ap.add_argument("--mixer-address", metavar="ADDRESS",
+                    help="the mixer's address (default 127.0.0.33 on the loopback, needed with --bind)")
+    ap.add_argument("--mixer-channels", type=int, choices=(4, 6), default=4, help="the mixer's channels (default 4)")
     ap.add_argument("--exit-on-eof", action="store_true",
                     help="leave when standard input is closed: for a program that starts the bench and must not leave it "
                          "running if it dies (deckbench.testing.Bench does)")
@@ -147,15 +156,20 @@ def main(argv=None):
         broadcast = a.broadcast or broadcast_of(given[0], a.netmask)
     elif a.broadcast:
         broadcast = a.broadcast
+    if a.bind and a.mixer and not a.mixer_address:
+        ap.error("--mixer with --bind needs --mixer-address: an address of this machine, on that network")
     link = Prolink(world, loaded=parse_loaded(a.loaded),
                    titles=parse_titles(a.titles) if a.titles else None,
                    model=a.model, status_length=a.status_length,
                    addresses=addresses, broadcast=broadcast, refuse_db=a.refuse_db, strict=a.strict,
-                   ports=Ports.shifted(a.port_shift))
+                   ports=Ports.shifted(a.port_shift), claim=a.claim, mixer_name=a.mixer or "DJM-900NXS2",
+                   mixer_address=a.mixer_address, mixer_channels=a.mixer_channels)
     try:
         link.start()
     except PortError as e:
         ap.exit(2, "deckbench: %s\n" % e)
+    if a.mixer and not link.mixer.set_on(True):
+        ap.error("--mixer: the mixer cannot use %s" % link.mixer.address)
     world.info["strict"] = a.strict
     if a.audio_port:
         heard = {int(x) for x in a.audio_decks.split(",")} if a.audio_decks else None

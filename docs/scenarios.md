@@ -44,6 +44,7 @@ from the start), `do`, and what the action needs. `deck` is the player number.
 | `expect_unit` (`match`, `within`, `for`) | what is known of the device under test matches within `within` seconds (5), and then for `for` more seconds if it is given |
 | `expect_deck` (`deck`, `match`, `within`, `for`) | the same for a deck: `on`, `play`, `sync`, `master`, `bpm`, `loop`, `unplugged`, `track_rbid`... (`within` is 2 by default) |
 | `unit` (`press` or `send`) | press a control of the device under test through an adapter, or send it a raw line |
+| `mixer` (`on`, `master`, `channel` with `fader`, `fader_start` or `command`) | the simulated mixer: switch it on, put its master level up or down, move a channel's fader (0 to 100), turn its fader start on, or tell its player to `start` or `stop` (see [mixer.md](mixer.md)) |
 
 `load` can also take `source` (the player whose database the track is in) and `slot`.
 
@@ -89,6 +90,8 @@ since the bench started), `kind` and what the kind adds.
 | `unit_master` | the unit takes or leaves the tempo master role | `on` |
 | `unit_sync` | the unit's sync flag turns on or off | `on` |
 | `unit_play` | the unit starts or stops playing | `on` |
+| `on_air` | a deck is told it is on air or off it (by the bench's mixer or another) | `deck`, `on`, `sender` |
+| `number_defended` | a deck told another device that the number is in use | `deck`, `claimer` |
 | `fader_start` | a fader start packet starts or stops a deck | `deck`, `action` (`start` or `stop`), `sender` |
 | `sync_command` | the unit tells a deck to sync, unsync or become the master | `deck`, `command`, `sender` |
 | `handoff_request` | the unit asks a deck to yield the master role | `deck`, `sender`, `granted` |

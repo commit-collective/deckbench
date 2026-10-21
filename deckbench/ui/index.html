@@ -27,6 +27,7 @@
     <div class="tabs" role="tablist" aria-label="Tools">
       <button role="tab" id="tab-events" aria-controls="p-events" aria-selected="true">Events<span class="count" id="evcount"></span></button>
       <button role="tab" id="tab-scenario" aria-controls="p-scenario" aria-selected="false">Scenario</button>
+      <button role="tab" id="tab-mixer" aria-controls="p-mixer" aria-selected="false">Mixer</button>
       <button role="tab" id="tab-network" aria-controls="p-network" aria-selected="false">Network</button>
       <button role="tab" id="tab-settings" aria-controls="p-settings" aria-selected="false">Settings</button>
     </div>
@@ -69,6 +70,20 @@
       <div class="events" id="scresults"></div>
     </div>
 
+    <!-- Mixer -->
+    <div class="panel" id="p-mixer" role="tabpanel" aria-labelledby="tab-mixer" hidden>
+      <div class="setting">
+        <div class="what"><b id="mixname">Mixer</b><span>A DJM on the link. It tells the players which channels are on the air, and a channel with fader start starts and stops its player with its fader.</span></div>
+        <button class="switch" role="switch" id="mixon" aria-checked="false" aria-label="Mixer on"></button>
+      </div>
+      <div class="setting">
+        <div class="what"><b>Master level</b><span>Up, the channels whose faders are open are on the air. Down, none is.</span></div>
+        <button class="switch" role="switch" id="mixmaster" aria-checked="true" aria-label="Master level up"></button>
+      </div>
+      <div id="mixstrips" class="strips"></div>
+      <p class="hint" id="mixhint"></p>
+    </div>
+
     <!-- Network -->
     <div class="panel" id="p-network" role="tabpanel" aria-labelledby="tab-network" hidden>
       <h2>Datagrams lost</h2>
@@ -93,6 +108,10 @@
       <div class="setting">
         <div class="what"><b>Refuse the database</b><span>Turn metadata requests down, as real decks do those of a device that is not a player.</span></div>
         <button class="switch" role="switch" id="refuse_db" aria-checked="false" aria-label="Refuse the database"></button>
+      </div>
+      <div class="setting">
+        <div class="what"><b>Claim the number first</b><span>A deck that comes on does what a player does: three hellos and the three stages of claiming its number (3.6 s), and only then its keep-alives. Off, it is there at once.</span></div>
+        <button class="switch" role="switch" id="claim" aria-checked="false" aria-label="Claim the number first"></button>
       </div>
       <div class="setting">
         <div class="what"><b>Model name</b><span>What the decks announce themselves as (20 characters at most).</span>

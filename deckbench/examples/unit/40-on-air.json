@@ -1,0 +1,28 @@
+{"name": "The unit is on air when the mixer says so",
+ "requires": ["unit", "adapter"],
+ "steps": [
+  {"at": 0, "do": "log", "text": "A mixer on the link: channel 1 is the unit's (it is player 1)"},
+  {"at": 0, "deck": 2, "do": "on"}, {"at": 0, "deck": 3, "do": "on"},
+  {"at": 0, "do": "mixer", "on": true}, {"at": 0, "do": "mixer", "master": true},
+  {"at": 0, "do": "mixer", "channel": 1, "fader": 0},
+  {"at": 1, "do": "expect_unit", "within": 6, "match": {"on_air": false}},
+
+  {"at": 2, "do": "log", "text": "The fader of channel 1 is opened: the unit says it is on air"},
+  {"at": 2, "do": "mixer", "channel": 1, "fader": 100},
+  {"at": 2, "do": "expect_unit", "within": 4, "for": 2, "match": {"on_air": true}},
+
+  {"at": 5, "do": "log", "text": "The master level goes down: nothing is on air"},
+  {"at": 5, "do": "mixer", "master": false},
+  {"at": 5, "do": "expect_unit", "within": 4, "for": 2, "match": {"on_air": false}},
+  {"at": 8, "do": "mixer", "master": true},
+  {"at": 8, "do": "expect_unit", "within": 4, "match": {"on_air": true}},
+
+  {"at": 10, "do": "log", "text": "The fader is closed again"},
+  {"at": 10, "do": "mixer", "channel": 1, "fader": 0},
+  {"at": 10, "do": "expect_unit", "within": 4, "for": 2, "match": {"on_air": false}},
+
+  {"at": 13, "do": "log", "text": "A fader start command for player 1: a unit in drum machine mode does not start"},
+  {"at": 13, "do": "mixer", "channel": 1, "command": "start"},
+  {"at": 13, "do": "expect_unit", "within": 1, "for": 3, "match": {"playing": false}},
+  {"at": 17, "do": "mixer", "on": false}
+ ]}

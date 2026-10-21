@@ -41,6 +41,7 @@ class Deck:
         # The cable is pulled: it says nothing and answers nothing (the protocols see to that).
         self.unplugged = False
         self.track = None                    # the track it has loaded: (rekordbox id, title), or None for its first
+        self.on_air = None                   # what a mixer said (True or False), None: none did, so it is on air while it plays
 
     def position(self, now):
         """Beats since the bar line, counted on from the anchor at the tempo
@@ -93,6 +94,14 @@ class World:
         for adapter in self.adapters:
             state.update(adapter.state())
         return state
+
+    def protocol_action(self, name, params):
+        """A scenario step for a protocol: (ok, message)."""
+        for protocol in self.protocols:
+            result = protocol.action(name, params)
+            if result is not None:
+                return result
+        return False, "nothing here does %s" % name
 
     def press_unit(self, control=None, line=None):
         """Presses a control of the device under test through an adapter that has it (or sends a raw command line).
@@ -158,6 +167,7 @@ class World:
             decks = {}
             for n, d in self.decks.items():
                 entry = {"on": d.enabled, "play": d.playing, "sync": d.sync,
+                         "on_air": d.on_air if d.on_air is not None else d.playing,
                          "master": d.master and d.enabled, "bpm": round(d.tempo(), 2),
                          "name": d.name, "loop": d.loop[1] if d.loop else 0, "loop_from": d.loop[0] if d.loop else 0,
                          "unplugged": d.unplugged,
@@ -334,6 +344,14 @@ class Protocol:
     def unit_state(self):
         """What the network says of the device under test: a flat dict (`heard` says whether it was seen at all)."""
         return {}
+
+    def handle_api(self, parts, query):
+        """A POST to /api/<parts...> that the protocol takes (a mixer's faders...): (status, dict), or None if it is not its."""
+        return None
+
+    def action(self, name, params):
+        """A scenario step the protocol does (`mixer`): (ok, message), or None if it is not its."""
+        return None
 
     def settings(self):
         """What can be changed while the bench runs: a dict of name: value."""

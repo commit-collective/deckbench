@@ -192,6 +192,21 @@ table.kv td:first-child { color: var(--muted); width: 38%; }
 h2 { margin: 6px 0 0; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 h2:first-child { margin-top: 0; }
 
+/* ---- the mixer ---- */
+.strips { display: flex; flex-direction: column; gap: 8px; }
+.strip { display: grid; grid-template-columns: 34px 1fr 40px; gap: 4px 8px; align-items: center; padding: 8px 10px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; }
+.strip .ch { font-weight: 700; color: var(--muted); font-size: 12px; letter-spacing: .06em; }
+.strip input[type=range] { width: 100%; accent-color: var(--accent); }
+.strip output { text-align: right; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.strip .row2 { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.air { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; letter-spacing: .05em; color: var(--muted); }
+.air::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--unlit); border: 1px solid var(--line-2); }
+.air.lit { color: var(--text); }
+.air.lit::before { background: var(--master); border-color: var(--master); box-shadow: 0 0 8px var(--master); }
+.tag.air-tag { background: color-mix(in srgb, var(--master) 22%, transparent); color: var(--master); }
+.tag.off-air { background: var(--unlit); color: var(--muted); }
+
 /* ---- toasts ---- */
 #toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 20; max-width: min(420px, calc(100vw - 32px)); }
 .toast { padding: 10px 14px; border-radius: 8px; background: var(--surface); border: 1px solid var(--danger);

@@ -36,6 +36,8 @@ What a step does (`deck` is the player number where a deck is meant):
   expect_deck      the same for a deck's own state (`on`, `play`, `sync`, `master`, `bpm`, `loop`, `unplugged`, `track_rbid`),
                    within `within` seconds (default 2)
   unit             press a control of the device under test through the adapter: `press` (its name) or `send` (a raw line)
+  mixer            do something with the simulated mixer: `on` (true or false), `master` (its master level), and for a
+                   `channel`: its `fader` (0 to 100), `fader_start` (true or false), or a `command` (start or stop)
 
 Any step can have `when`, a match against the device under test (as in `expect_unit`): the step is done only if it holds
 at that moment, so a scenario can bring a device that keeps its state to where it starts: {"do": "unit", "press": "sync",
@@ -56,7 +58,7 @@ from .matching import explain, matches
 
 DECK_ACTIONS = ("on", "off", "play", "stop", "sync", "unsync", "master", "release", "loop", "unloop", "load", "tempo",
                 "unplug", "plug", "silence")
-ACTIONS = DECK_ACTIONS + ("loss", "log", "expect", "expect_unit", "expect_deck", "unit")
+ACTIONS = DECK_ACTIONS + ("loss", "log", "expect", "expect_unit", "expect_deck", "unit", "mixer")
 REQUIRES = ("unit", "adapter")
 
 
@@ -206,6 +208,8 @@ class Scenario:
         elif do == "log":
             from .core import log as write
             write(step["text"])
+        elif do == "mixer":
+            return world.protocol_action("mixer", step)
         elif do == "unit":
             if "press" in step:
                 return world.press_unit(control=step["press"])

@@ -22,6 +22,8 @@
     GET  /api/examples               the scenarios that come with the bench: [{file, group, name, text}]
     GET  /api/stream                 the same as server-sent events: `state` (when the decks change, and every second),
                                      `event` (each event of the device under test), `scenario` (how far it is)
+    POST /api/mixer/on/<0|1>          the simulated mixer on or off (also master/<0|1>)
+    POST /api/mixer/channel/<n>/fader/<0-100>, .../fader_start/<0|1>, .../command/<start|stop>
     GET  /api/unit                   what is known of the device under test: the network's word and the adapters' (lamps...)
     POST /api/unit/press/<control>   press a control of the device under test through an adapter (sync, master)
     POST /api/settings/<name>/<value>  strict and refuse_db (0 or 1), model (the name the decks announce)
@@ -144,6 +146,13 @@ def serve(world, host="127.0.0.1", port=8750):
         def do_POST(self):
             parts = self.path.split("?")[0].strip("/").split("/")
             query = parse_qs(urlparse(self.path).query)
+            if parts[:2] == ["api", "mixer"]:
+                for protocol in world.protocols:
+                    result = protocol.handle_api(parts[1:], query)
+                    if result is not None:
+                        world.changed()
+                        return self.send(result[0], json.dumps(result[1] if result[0] != 200 else world.snapshot()))
+                return self.send(404, '{"error": "no mixer here"}')
             if len(parts) == 4 and parts[:3] == ["api", "unit", "press"]:
                 ok, why = world.press_unit(control=unquote(parts[3]))
                 if not ok:

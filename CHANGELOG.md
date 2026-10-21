@@ -19,6 +19,12 @@ The first version, `v0.1.0`, once it is tagged.
 - A library of scenarios for a unit (`deckbench/examples/unit`): it follows a master deck and its tempo, the master role passes
   between a deck and the unit, and it keeps following after a cable pull and with 30 % of the packets lost.
 - More of the unit is heard: synced, playing, on air and the beat, and `unit_sync` and `unit_play` events.
+- A simulated DJM mixer (`--mixer`, the Mixer tab, `/api/mixer`, the `mixer` scenario step): it announces itself as device 33,
+  reports which channels are on the air and starts and stops players with fader start. The decks' on-air flag follows any mixer.
+  `--claim` makes a deck do what a player does when it comes online (hellos, the three claim stages), and a deck that is on defends
+  its number against another device that claims it. The keep-alive counts the devices on the network.
+- Library scenario `unit/40-on-air.json`: the unit says it is on air when the mixer's channel 1 is open. Example 04 shows the
+  mixer starting and stopping the decks.
 - Settings that can be changed while it runs: strict decks, database refusal and the model name (`/api/settings`).
 - A track can come from another deck's database and slot (`/api/deck/<n>/load/<id>?source=&slot=`). A title with a percent sign
   is no longer decoded twice.

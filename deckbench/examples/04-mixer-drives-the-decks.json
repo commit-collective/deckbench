@@ -1,0 +1,30 @@
+{"name": "A mixer starts and stops the decks",
+ "steps": [
+  {"at": 0, "do": "log", "text": "A DJM joins the link. No fader is open, so no deck is on air"},
+  {"at": 0, "deck": 2, "do": "on"}, {"at": 0, "deck": 3, "do": "on"},
+  {"at": 0, "do": "mixer", "on": true}, {"at": 0, "do": "mixer", "master": true},
+  {"at": 0, "do": "mixer", "channel": 2, "fader": 0, "fader_start": true},
+  {"at": 0, "do": "mixer", "channel": 3, "fader": 0, "fader_start": false},
+  {"at": 1, "do": "expect_deck", "deck": 2, "match": {"play": false, "on_air": false}, "within": 3},
+
+  {"at": 2, "do": "log", "text": "The fader of channel 2 is opened, with fader start: deck 2 starts and is on air"},
+  {"at": 2, "do": "mixer", "channel": 2, "fader": 100},
+  {"at": 2, "do": "expect", "event": "fader_start", "within": 3, "match": {"deck": 2, "action": "start"}},
+  {"at": 2, "do": "expect_deck", "deck": 2, "match": {"play": true, "on_air": true}, "within": 3},
+
+  {"at": 5, "do": "log", "text": "Channel 3 has no fader start: its deck is on air but does not move"},
+  {"at": 5, "deck": 3, "do": "play"},
+  {"at": 5, "do": "mixer", "channel": 3, "fader": 80},
+  {"at": 5, "do": "expect_deck", "deck": 3, "match": {"play": true, "on_air": true}, "within": 3},
+  {"at": 6, "do": "mixer", "channel": 3, "fader": 0},
+  {"at": 6, "do": "expect_deck", "deck": 3, "match": {"play": true, "on_air": false}, "within": 3, "for": 1},
+
+  {"at": 8, "do": "log", "text": "The fader of channel 2 is closed: deck 2 stops"},
+  {"at": 8, "do": "mixer", "channel": 2, "fader": 0},
+  {"at": 8, "do": "expect", "event": "fader_start", "within": 3, "match": {"deck": 2, "action": "stop"}},
+  {"at": 8, "do": "expect_deck", "deck": 2, "match": {"play": false}, "within": 3},
+
+  {"at": 10, "do": "log", "text": "The mixer is switched off: a deck is on air while it plays again"},
+  {"at": 10, "do": "mixer", "on": false},
+  {"at": 10, "do": "expect_deck", "deck": 3, "match": {"on_air": true}, "within": 3}
+ ]}

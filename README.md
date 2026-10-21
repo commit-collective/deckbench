@@ -27,12 +27,17 @@ Python 3.8 or later, no packages to install.
 
 then open <http://127.0.0.1:8750/>. A deck is a card with ON, PLAY, SYNC and MASTER, the four beat squares of its bar and its
 tempo display, its loops, its tempo (the pitch fader), its cable (pull it, or silence it for a while) and a fold to load a
-track (its id, title, BPM, the deck whose database it comes from and the slot). The side panel has four tabs: **Events**
-(what the device under test did: filter, pause, export), **Scenario** (an editor with the examples, saved scenarios, a run
-with its progress), **Network** (the share of datagrams lost, the unit heard on the network) and **Settings** (strict decks,
-database refusal, the model name, the theme, and how the bench was started). `http://127.0.0.1:8750/#scenario` opens a tab. The decks of Pro DJ Link are at 127.0.0.<number>, so
-the client must see the machine's loopback: run both in one network namespace
-(on Windows, in WSL, which also reaches the page at `localhost`).
+track (its id, title, BPM, the deck whose database it comes from and the slot). The side panel has five tabs:
+
+- **Events**: what the device under test did, with a filter, pause and export.
+- **Scenario**: an editor with the examples, saved scenarios and a run with its progress.
+- **Mixer**: a simulated DJM with a fader and fader start for each channel.
+- **Network**: the share of datagrams lost and the unit heard on the network.
+- **Settings**: strict decks, database refusal, claiming the number first, the model name, the theme, and how the bench was started.
+
+`http://127.0.0.1:8750/#scenario` opens a tab. The decks of Pro DJ Link are at 127.0.0.<number>, so the device under test must
+see this machine's loopback: run both on the same machine and network namespace. The bench runs on Linux, Windows and macOS.
+An emulator that lives in WSL needs the bench there too (`Bench(wsl=True)` from a test does that).
 
 Options (`python -m deckbench --help`):
 
@@ -56,6 +61,9 @@ Options (`python -m deckbench --help`):
   `netsh interface ipv4 show excludedportrange protocol=udp`). A unit on the real ports does not hear such decks
 - `--ready-file FILE`: once the decks and the page are up, write FILE, a JSON object with the page's address, the ports and the
   process. A script that starts the bench waits for it instead of guessing a delay
+- `--mixer [NAME]`, `--mixer-address`, `--mixer-channels 4|6`: a simulated DJM that tells the decks which channels are on the air
+  and starts them with its faders (see [docs/mixer.md](docs/mixer.md))
+- `--claim`: a deck that comes on claims its number first, as a player does (3.6 s), instead of being there at once
 - `--adapter NAME[:ARGS]`: what the device under test shows beyond the network, so a scenario can expect a lamp and press a
   control. There is `djs1000-emu` for the emulator (see [docs/adapters.md](docs/adapters.md))
 - `--model NAME`: the device name the decks announce (default `CDJ-FAKEn`)
@@ -76,6 +84,8 @@ Options (`python -m deckbench --help`):
     POST /api/unit/press/<control>    press a control of the device under test through an adapter
     GET  /api/examples                the scenarios that come with the bench (deckbench/examples)
     GET  /api/stream                  the state, the events and the scenario as server-sent events (what the page follows)
+    POST /api/mixer/on/<0|1>          the mixer on or off. Also master/<0|1>, channel/<n>/fader/<0-100>, channel/<n>/fader_start/<0|1>,
+                                      channel/<n>/command/<start|stop>
     POST /api/loss/<percent>          that share of the datagrams is lost (0 for none)
     GET  /api/ready                   {"ready": true} and how the bench was started (version, pid, ports, address)
     GET  /api/events?since=<n>        what the device under test did, from the n-th event on
@@ -119,6 +129,8 @@ From any other language, start `python -m deckbench --http-port 0 --ready-file r
     deckbench/web.py              the API, and the page's files
     deckbench/ui/                 the page: index.html, app.css, app.js (no packages, no build step)
     deckbench/examples/           scenarios to start from (the page lists them, `--scenario` plays them)
+    deckbench/protocols/mixer.py  the simulated DJM
+    deckbench/protocols/startup.py  the packets of a device coming online
     deckbench/events.py           what the device under test did, to wait for and check
     deckbench/adapters/           what the device under test shows beyond the network (the DJS-1000 emulator's lamps and buttons)
     deckbench/matching.py         matching the device's state against what a scenario expects
@@ -130,6 +142,7 @@ From any other language, start `python -m deckbench --http-port 0 --ready-file r
     docs/real-network.md          showing the decks to a real unit on a real network
     docs/scenarios.md             scenarios, faults, events and the strict decks
     docs/audio.md                 the decks' sound
+    docs/mixer.md                 the simulated mixer, and a player coming online
     docs/adapters.md              seeing the device under test from the inside, and writing an adapter
 
 A protocol is a module that gives the World what to show of the decks and

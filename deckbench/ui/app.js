@@ -98,6 +98,11 @@ function settingsOf(state) {
   return (link && link.settings) || {};
 }
 
+function mixerOf(state) {
+  const link = state && state.protocols && state.protocols.prolink;
+  return link && link.mixer;
+}
+
 function chip(text, kind, strong) {
   return h("span", {class: "chip " + (kind || "")}, kind ? h("i", {class: "dot"}) : null, strong ? h("b", {}, strong) : null, text);
 }
@@ -115,6 +120,9 @@ function renderChips() {
   const set = settingsOf(s), info = s.bench || {};
   if (set.strict) box.append(chip("strict decks"));
   if (set.refuse_db) box.append(chip("database refused"));
+  const mixer = mixerOf(s);
+  if (mixer && mixer.on) box.append(chip(mixer.name, "ok", "mixer "));
+  if (set.claim) box.append(chip("claims its number"));
   if (info.ports && info.ports.announce !== 50000) box.append(chip("ports +" + (info.ports.announce - 50000)));
   if (info.audio) box.append(chip(info.audio, null, "sound "));
 }
@@ -241,6 +249,8 @@ function render() {
     tags.textContent = "";
     if (d.on && d.loop) tags.append(h("span", {class: "tag loop"}, "LOOP " + d.loop));
     if (d.unplugged) tags.append(h("span", {class: "tag cable"}, "UNPLUGGED"));
+    const mixer = mixerOf(s);
+    if (mixer && mixer.on && d.on) tags.append(h("span", {class: "tag " + (d.on_air ? "air-tag" : "off-air")}, d.on_air ? "ON AIR" : "OFF AIR"));
 
     q("lcd").firstChild.textContent = d.on ? d.bpm.toFixed(1) : "--";
     for (const b of card.querySelectorAll(".sw")) {
@@ -266,6 +276,7 @@ function render() {
   renderChips();
   renderNetwork();
   renderSettings();
+  renderMixer();
   $("version").textContent = s.bench && s.bench.version ? "v" + s.bench.version : "";
   lamps();
 }
@@ -518,7 +529,7 @@ function renderNetwork() {
 
 /* ---- settings ---- */
 
-for (const name of ["strict", "refuse_db"]) {
+for (const name of ["strict", "refuse_db", "claim"]) {
   $(name).addEventListener("click", () => act("api/settings/" + name + "/" + ($(name).getAttribute("aria-checked") === "true" ? 0 : 1)));
 }
 $("modelset").addEventListener("click", () => act("api/settings/model/" + encodeURIComponent($("model").value.trim())));
@@ -526,7 +537,7 @@ $("model").addEventListener("keydown", (e) => { if (e.key === "Enter") $("models
 
 function renderSettings() {
   const s = S.state, set = settingsOf(s), b = s.bench || {};
-  for (const name of ["strict", "refuse_db"]) $(name).setAttribute("aria-checked", String(!!set[name]));
+  for (const name of ["strict", "refuse_db", "claim"]) $(name).setAttribute("aria-checked", String(!!set[name]));
   if (document.activeElement !== $("model")) $("model").value = set.model || "";
   const ports = b.ports || {};
   const about = $("about");
@@ -560,7 +571,59 @@ $("alloff").addEventListener("click", () => everyDeck(false));
 
 /* ---- tabs ---- */
 
-const TABS = ["events", "scenario", "network", "settings"];
+/* ---- the mixer ---- */
+
+let strips = "";
+
+function buildStrips(mixer) {
+  const key = Object.keys(mixer.channels).join();
+  if (key === strips) return;
+  strips = key;
+  const box = $("mixstrips");
+  box.textContent = "";
+  for (const n of Object.keys(mixer.channels)) {
+    const out = h("output", {id: "mixout" + n}, "0");
+    box.append(h("div", {class: "strip", id: "strip" + n},
+      h("span", {class: "ch"}, "CH " + n),
+      h("input", {type: "range", min: 0, max: 100, step: 1, value: 0, class: "mixfader", "aria-label": "Fader of channel " + n,
+        oninput: (e) => { out.textContent = e.target.value; },
+        onchange: (e) => act("api/mixer/channel/" + n + "/fader/" + e.target.value)}),
+      out,
+      h("div", {class: "row2"},
+        h("span", {class: "air"}, "ON AIR"),
+        h("button", {class: "switch", role: "switch", "aria-checked": "false", "aria-label": "Fader start of channel " + n,
+          title: "Opening the fader starts the player, closing it stops it",
+          onclick: (e) => act("api/mixer/channel/" + n + "/fader_start/" + (e.currentTarget.getAttribute("aria-checked") === "true" ? 0 : 1))}),
+        h("span", {class: "hint"}, "fader start"),
+        h("span", {style: "flex:1"}),
+        h("button", {class: "btn small", title: "Tell player " + n + " to start", onclick: () => act("api/mixer/channel/" + n + "/command/start")}, "Start"),
+        h("button", {class: "btn small", title: "Tell player " + n + " to stop", onclick: () => act("api/mixer/channel/" + n + "/command/stop")}, "Stop"))));
+  }
+}
+
+function renderMixer() {
+  const mixer = mixerOf(S.state);
+  if (!mixer) return;
+  buildStrips(mixer);
+  $("mixname").textContent = "Mixer " + mixer.name + " (player " + mixer.number + ")";
+  $("mixon").setAttribute("aria-checked", String(!!mixer.on));
+  $("mixmaster").setAttribute("aria-checked", String(!!mixer.master));
+  const active = document.activeElement;
+  for (const [n, c] of Object.entries(mixer.channels)) {
+    const strip = $("strip" + n), fader = strip.querySelector(".mixfader");
+    if (active !== fader) { fader.value = c.fader; $("mixout" + n).textContent = c.fader; }
+    strip.querySelector(".air").classList.toggle("lit", !!c.on_air);
+    strip.querySelector(".switch").setAttribute("aria-checked", String(!!c.fader_start));
+    for (const b of strip.querySelectorAll(".btn")) b.disabled = !mixer.on;
+  }
+  $("mixhint").textContent = mixer.on ? "Channel N is player N. The decks' on-air flag follows what the mixer says, and a unit that picks the deck to sync to looks at it."
+    : "Off. The decks say they are on air while they play, as with no mixer.";
+}
+
+$("mixon").addEventListener("click", () => act("api/mixer/on/" + ($("mixon").getAttribute("aria-checked") === "true" ? 0 : 1)));
+$("mixmaster").addEventListener("click", () => act("api/mixer/master/" + ($("mixmaster").getAttribute("aria-checked") === "true" ? 0 : 1)));
+
+const TABS = ["events", "scenario", "mixer", "network", "settings"];
 function showTab(name) {
   for (const t of TABS) {
     $("tab-" + t).setAttribute("aria-selected", String(t === name));
