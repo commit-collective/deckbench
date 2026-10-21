@@ -33,6 +33,7 @@ The page (deckbench/ui: index.html, app.css, app.js, no build step and no packag
 beat squares on from each deck's phase, so it needs nothing but a browser, on the machine or any that can reach the port
 (by default it listens on 127.0.0.1 only).
 """
+import hmac
 import json
 import os
 import threading
@@ -62,8 +63,14 @@ def examples():
     return out
 
 
-def serve(world, host="127.0.0.1", port=8750):
-    """Starts the server in a thread; returns it."""
+def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
+    """Starts the server in a thread; returns it.
+
+    A request to the API that comes from a page (it has an Origin header) is refused unless that page is the bench's own
+    or its origin is in `allow_origins` (for a page hosted elsewhere, such as https://commitcollective.cc), which is
+    then given the CORS headers it needs, a preflight for a private network included. With a `token` the API wants it,
+    as `?token=...` or `Authorization: Bearer ...`. The page's own files are served to anyone who can reach the port."""
+    allowed = {o.rstrip("/") for o in allow_origins}
     runner = Runner(world)
     STATIC = set(os.listdir(UI)) if os.path.isdir(UI) else set()
 
@@ -71,14 +78,51 @@ def serve(world, host="127.0.0.1", port=8750):
         def log_message(self, fmt, *args):
             pass
 
+        def cors(self):
+            """The headers that let an allowed page read the answer."""
+            origin = self.headers.get("Origin")
+            if origin and origin.rstrip("/") in allowed:
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
+
         def send(self, code, body, kind="application/json"):
             data = body if isinstance(body, bytes) else body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", kind + "; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
+            self.cors()
             self.end_headers()
             self.wfile.write(data)
+
+        def guard(self, preflight=False):
+            """False (after answering) if this request to the API must not be done: from a page that is not allowed,
+            or without the token."""
+            origin = self.headers.get("Origin")
+            if origin and origin.rstrip("/") not in allowed and origin != "http://" + (self.headers.get("Host") or ""):
+                self.send(403, json.dumps({"error": "this page may not use the bench: start it with --allow-origin %s" % origin}))
+                return False
+            if token and not preflight:             # a browser sends no credentials with a preflight
+                given = (self.headers.get("Authorization") or "")[7:] if (self.headers.get("Authorization") or "").startswith("Bearer ") \
+                    else parse_qs(urlparse(self.path).query).get("token", [""])[0]
+                if not hmac.compare_digest(given.encode("utf-8"), token.encode("utf-8")):
+                    self.send(401, json.dumps({"error": "the bench wants its token (?token=... or Authorization: Bearer ...)"}))
+                    return False
+            return True
+
+        def do_OPTIONS(self):
+            """The preflight of a page on another origin."""
+            if not self.guard(preflight=True):
+                return
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+            if self.headers.get("Access-Control-Request-Private-Network") == "true":
+                self.send_header("Access-Control-Allow-Private-Network", "true")
+            self.send_header("Access-Control-Max-Age", "600")
+            self.send_header("Content-Length", "0")
+            self.cors()
+            self.end_headers()
 
         def stream(self):
             """Server-sent events until the page goes away."""
@@ -86,6 +130,7 @@ def serve(world, host="127.0.0.1", port=8750):
             self.send_header("Content-Type", "text/event-stream; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Accel-Buffering", "no")
+            self.cors()
             self.end_headers()
             def send_event(kind, data):
                 body = data if isinstance(data, str) else json.dumps(data)
@@ -118,6 +163,8 @@ def serve(world, host="127.0.0.1", port=8750):
 
         def do_GET(self):
             path = self.path.split("?")[0]
+            if path.startswith("/api/") and not self.guard():
+                return
             if path == "/api/stream":
                 self.stream()
             elif path == "/" or path[1:] in STATIC:
@@ -144,6 +191,8 @@ def serve(world, host="127.0.0.1", port=8750):
                 self.send(404, '{"error": "not found"}')
 
         def do_POST(self):
+            if not self.guard():
+                return
             parts = self.path.split("?")[0].strip("/").split("/")
             query = parse_qs(urlparse(self.path).query)
             if parts[:2] == ["api", "mixer"]:

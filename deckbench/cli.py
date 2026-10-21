@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import secrets
 import socket
 import sys
 import threading
@@ -125,6 +126,11 @@ def main(argv=None):
                          "ports and the process (a script starting the bench waits for it; GET /api/ready says the same)")
     ap.add_argument("--http-port", type=int, default=8750, metavar="PORT",
                     help="the page and API's port (default 8750, 0 for any, -1 for none)")
+    ap.add_argument("--allow-origin", action="append", default=[], metavar="ORIGIN",
+                    help="a page from this origin (https://commitcollective.cc) may use the API, with CORS. Pages of "
+                         "other origins are refused: any web page can reach a bench on localhost otherwise. Repeat for more")
+    ap.add_argument("--token", metavar="TOKEN",
+                    help="the API wants this token (?token=... or Authorization: Bearer ...). `auto` makes one and says it")
     ap.add_argument("--http-host", default="127.0.0.1", metavar="ADDRESS",
                     help="the address the page listens on (default 127.0.0.1)")
     a = ap.parse_args(argv)
@@ -200,7 +206,14 @@ def main(argv=None):
     world.info.update(version=__version__, adapters=[x.name for x in world.adapters], broadcast=broadcast, pid=os.getpid(), numbers=numbers,
                       ports={"announce": link.ports.announce, "beat": link.ports.beat, "update": link.ports.update,
                              "query": link.ports.query, "db": link.ports.db})
-    server = serve(world, a.http_host, a.http_port) if a.http_port >= 0 else None
+    token = a.token
+    if token == "auto":
+        token = secrets.token_urlsafe(12)
+    if token and a.http_host in ("127.0.0.1", "localhost") and not a.allow_origin:
+        log("the API wants a token: open the page as http://127.0.0.1:PORT/#token=%s" % token)
+    elif token:
+        log("the API wants a token: %s (open the page with #token=%s)" % (token, token))
+    server = serve(world, a.http_host, a.http_port, a.allow_origin, token) if a.http_port >= 0 else None
     if server:
         world.info["http"] = "http://%s:%d/" % (a.http_host, server.server_address[1])
     if a.ready_file:

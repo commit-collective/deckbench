@@ -37,7 +37,7 @@ function toast(text, kind) {
 
 async function api(path, options) {
   let r;
-  try { r = await fetch(path, Object.assign({method: "POST"}, options)); }
+  try { r = await transport.fetch(path, Object.assign({method: "POST"}, options)); }
   catch (e) { toast("The bench does not answer."); throw e; }
   let body = null;
   try { body = await r.json(); } catch (e) { /* not JSON */ }
@@ -60,8 +60,8 @@ function apply(state) {
 }
 
 function connect() {
-  if (!window.EventSource) return poll();
-  const es = new EventSource("api/stream");
+  if (!window.EventSource && !transport.demo) return poll();
+  const es = transport.eventSource("api/stream");
   es.onopen = () => { S.connected = true; renderChips(); };
   es.onerror = () => { S.connected = false; renderChips(); };
   es.addEventListener("state", (e) => apply(JSON.parse(e.data)));
@@ -75,9 +75,9 @@ async function poll() {
   let seen = 0;
   const once = async () => {
     try {
-      apply(await (await fetch("api/state")).json());
-      S.scenario = await (await fetch("api/scenario")).json();
-      for (const e of await (await fetch("api/events?since=" + seen)).json()) { addEvent(e); seen = e.n + 1; }
+      apply(await (await transport.fetch("api/state")).json());
+      S.scenario = await (await transport.fetch("api/scenario")).json();
+      for (const e of await (await transport.fetch("api/events?since=" + seen)).json()) { addEvent(e); seen = e.n + 1; }
       S.connected = true;
     } catch (e) { S.connected = false; }
     renderChips(); renderScenario();
@@ -277,7 +277,7 @@ function render() {
   renderNetwork();
   renderSettings();
   renderMixer();
-  $("version").textContent = s.bench && s.bench.version ? "v" + s.bench.version : "";
+  $("version").textContent = s.bench && s.bench.version ? (/^\d/.test(s.bench.version) ? "v" : "") + s.bench.version : "";
   lamps();
 }
 
@@ -359,7 +359,7 @@ function fillSaved() {
 
 async function loadExamples() {
   try {
-    S.examples = await (await fetch("api/examples")).json();
+    S.examples = await (await transport.fetch("api/examples")).json();
     const groups = {};
     for (const [i, ex] of S.examples.entries()) {
       if (!groups[ex.group]) { groups[ex.group] = h("optgroup", {label: ex.group}); $("scexample").append(groups[ex.group]); }
@@ -646,15 +646,70 @@ for (const t of TABS) {
     $("tab-" + TABS[i]).focus();
   });
 }
-const fromAddress = location.hash.slice(1);        // page#scenario opens that tab
-showTab(TABS.includes(fromAddress) ? fromAddress : TABS.includes(store.get("deckbench.tab")) ? store.get("deckbench.tab") : "events");
-window.addEventListener("hashchange", () => { if (TABS.includes(location.hash.slice(1))) showTab(location.hash.slice(1)); });
+const tabInAddress = () => location.hash.slice(1).split("&").find((part) => TABS.includes(part)) || "";    // page#scenario opens that tab
+showTab(tabInAddress() || (TABS.includes(store.get("deckbench.tab")) ? store.get("deckbench.tab") : "events"));
+window.addEventListener("hashchange", () => { if (tabInAddress()) showTab(tabInAddress()); });
 
 /* ---- start ---- */
 
 function frame() { lamps(); requestAnimationFrame(frame); }
-fillSaved();
-drawEvents();
-loadExamples();
-connect();
-requestAnimationFrame(frame);
+
+function start() {
+  fillSaved();
+  drawEvents();
+  loadExamples();
+  connect();
+  requestAnimationFrame(frame);
+  const change = $("changebench");
+  if (transport.demo || transport.remote()) {
+    change.hidden = false;
+    change.textContent = transport.demo ? "Leave the demo" : "Change bench";
+    change.title = transport.demo ? "Back to connecting to a bench" : "Connect to another bench";
+    change.onclick = () => {
+      if (transport.demo) location.href = location.pathname;
+      else { transport.forget(); location.href = location.pathname; }
+    };
+  }
+  if (transport.demo) {
+    const note = h("div", {class: "demo-note"}, "Demo: a bench made of JavaScript in this page. It shows the page, not a network. The real one runs on a machine cabled to your players.");
+    document.body.prepend(note);
+  }
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => { document.head.append(h("script", {src, onload: resolve, onerror: reject})); });
+}
+
+function showConnect(message) {
+  $("connect").hidden = false;
+  $("connaddr").value = $("connaddr").value || (transport.base || "").replace(/\/$/, "");
+  $("conntoken").value = $("conntoken").value || transport.token;
+  $("connmsg").textContent = message || "";
+  $("connhow").textContent = "python -m deckbench --http-host 0.0.0.0 --allow-origin " + location.origin + " --token auto";
+  $("connaddr").focus();
+}
+
+$("connok").addEventListener("click", async () => {
+  const base = transport.normalise($("connaddr").value), token = $("conntoken").value.trim();
+  if (!base) return ($("connmsg").textContent = "Give the address of the bench.");
+  $("connmsg").textContent = "Looking for it\u2026";
+  const r = await transport.probe(base, token);
+  if (!r.ok) return ($("connmsg").textContent = r.message);
+  transport.base = base;
+  transport.token = token;
+  transport.remember(base, token);
+  $("connect").hidden = true;
+  start();
+});
+$("conndemo").addEventListener("click", () => { location.search = "?demo"; });
+for (const id of ["connaddr", "conntoken"]) $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") $("connok").click(); });
+
+(async function boot() {
+  if (transport.demo) await loadScript("demo.js");
+  if (transport.hosted && !transport.demo) {
+    if (!transport.base) return showConnect();
+    const r = await transport.probe(transport.base, transport.token);
+    if (!r.ok) return showConnect(r.message);
+  }
+  start();
+})();

@@ -70,6 +70,10 @@ Options (`python -m deckbench --help`):
   statuses and a byte of them, see [docs/prolink.md](docs/prolink.md))
 - `--model NAME`: the device name the decks announce (default `CDJ-FAKEn`)
 - `--http-port PORT` (default 8750, -1 for none), `--http-host ADDRESS`
+- `--allow-origin ORIGIN`: a page of that origin (the hosted page, `https://commitcollective.cc`) may use the API, with CORS. Every other
+  site is refused, since any web page can reach a bench on localhost otherwise. Repeat for more
+- `--token TOKEN` (or `auto`): the API wants it, as `?token=...` or `Authorization: Bearer ...`. The page takes it from the address:
+  `http://host:8750/#token=...`. Use it with `--http-host 0.0.0.0`
 
 ## API
 
@@ -108,6 +112,13 @@ hand-off to a player that asks, the sync commands, the database and the API.
 It runs on Linux, Windows and macOS (macOS needs the aliases 127.0.0.2 and up on `lo0`).
 The tests do not use the real ports: they take the first free range, or the shift in `DECKBENCH_PORT_SHIFT`.
 
+## From a phone, or a page on another site
+
+The page is the same wherever it is served: by the bench itself, hosted (commitcollective.cc/deckbench, which asks for the address and
+the token of a bench) or as a **demo** (`?demo`), a bench made of JavaScript in the page that needs no network. A phone is the screen of
+a bench that runs on a machine cabled to the players, not the bench: see [docs/phone.md](docs/phone.md). `tools/copy_to_site.py DIR`
+copies the page's files to a website.
+
 ## Use it from a test
 
 `deckbench.testing.Bench` starts a bench in a process of its own, on a free range of ports, waits until it is ready and
@@ -129,7 +140,7 @@ From any other language, start `python -m deckbench --http-port 0 --ready-file r
     deckbench/core.py             a deck, and the world of decks, whatever the protocol
     deckbench/protocols/prolink.py  Pro DJ Link
     deckbench/web.py              the API, and the page's files
-    deckbench/ui/                 the page: index.html, app.css, app.js (no packages, no build step)
+    deckbench/ui/                 the page: index.html, app.css, app.js, transport.js (which bench), demo.js (the demo); no packages, no build step
     deckbench/examples/           scenarios to start from (the page lists them, `--scenario` plays them)
     deckbench/protocols/mixer.py  the simulated DJM
     deckbench/protocols/startup.py  the packets of a device coming online
@@ -144,6 +155,7 @@ From any other language, start `python -m deckbench --http-port 0 --ready-file r
     docs/real-network.md          showing the decks to a real unit on a real network
     docs/scenarios.md             scenarios, faults, events and the strict decks
     docs/audio.md                 the decks' sound
+    docs/phone.md                 a phone as the screen, and what a phone as the bench would take
     docs/mixer.md                 the simulated mixer, and a player coming online
     docs/adapters.md              seeing the device under test from the inside, and writing an adapter
 

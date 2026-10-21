@@ -38,3 +38,9 @@ The first version.
   The GitHub Action has not run yet, and macOS and Python 3.8 were not tried. The DJS-1000 emulator scenarios ran in WSL2.
 
 ## Not yet released
+
+- The API refuses a request from a web page of another origin (any site could drive a bench on localhost), unless `--allow-origin` names it,
+  and answers its CORS preflight, private network access included. `--token` makes the API want a token.
+- The page works hosted on another site and from a phone: `transport.js` takes the address and token of a bench (a dialog asks for
+  them), and `?demo` runs a bench made of JavaScript in the page (`demo.js`), tested in node. `docs/phone.md`,
+  `tools/copy_to_site.py`.
