@@ -1,0 +1,8 @@
+# The page (deckbench/ui) served on commitcollective.cc/deckbench/app/, as its own worker. See docs/hosting.md.
+# Cloudflare builds it from this repo when deckbench/ui changes. By hand: npx wrangler deploy
+name = "deckbench-app"
+compatibility_date = "2026-10-01"
+routes = [{ pattern = "commitcollective.cc/deckbench/app/*", zone_name = "commitcollective.cc" }]
+
+[assets]
+directory = "./deckbench/ui"

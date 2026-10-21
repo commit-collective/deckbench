@@ -131,8 +131,8 @@ The tests do not use the real ports: they take the first free range, or the shif
 
 The page is the same wherever it is served: by the bench itself, hosted (commitcollective.cc/deckbench, which asks for the address and
 the token of a bench) or as a **demo** (`?demo`), a bench made of JavaScript in the page that needs no network. A phone is the screen of
-a bench that runs on a machine cabled to the players, not the bench: see [docs/phone.md](docs/phone.md). `tools/copy_to_site.py DIR`
-copies the page's files to a website.
+a bench that runs on a machine cabled to the players, not the bench: see [docs/phone.md](docs/phone.md). How commitcollective.cc
+serves it, and how to host it elsewhere (`tools/copy_to_site.py DIR`): [docs/hosting.md](docs/hosting.md).
 
 ## Use it from a test
 
