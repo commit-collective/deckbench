@@ -15,6 +15,15 @@ A push to main that changes `deckbench/ui` builds and deploys the worker, with n
 5. After the first deploy, check Settings, Domains & Routes: `commitcollective.cc/deckbench/app/*` must be listed.
 6. Open `/deckbench/app/?demo` and `/deckbench/app/` on the site.
 
+## Seeing it on the website locally
+
+The site's repo does not hold the page, so a local copy of the site has no `/deckbench/app/`. Copy it in for a look. The folder is
+ignored by the site's git, so nothing is committed:
+
+    python tools/copy_to_site.py ../commitcollective.cc/public/deckbench/app
+
+Run it again after a change to the page. This is the same idea as `tools/release.py --preview` in the mods repo.
+
 ## To host it somewhere else
 
 Copy the files with `python tools/copy_to_site.py DIR`, or point a static host at `deckbench/ui`. The page asks for the address

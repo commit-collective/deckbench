@@ -4,7 +4,8 @@
 
     python tools/copy_to_site.py ../commitcollective.cc/public/deckbench/app
 
-The hosted page asks for the address and the token of a bench, or runs its demo. It needs nothing else. Files that are not
+On commitcollective.cc a Cloudflare worker serves the page (docs/hosting.md), so this is for a preview in a local
+copy of the site, or for another host. The hosted page asks for the address and the token of a bench, or runs its demo. It needs nothing else. Files that are not
 in the page any more are removed from the destination, so it matches the source.
 """
 import os
