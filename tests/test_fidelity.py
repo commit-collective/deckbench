@@ -123,39 +123,50 @@ class Mixer(unittest.TestCase):
     def test_03_a_deck_is_on_air_when_the_mixer_says_so(self):
         self.assertTrue(self.status_flags(2) & 0x08)            # no mixer: on air while it plays
         self.mixer.set_on(True)                                 # all faders closed
-        time.sleep(0.6)
+        self.assertTrue(self.until(lambda: self.world.decks[2].on_air is False), "the deck was not told")
         self.assertFalse(self.status_flags(2) & 0x08, "told it is off the air, it still says on air")
         self.assertFalse(self.world.snapshot()["decks"]["2"]["on_air"])
         self.mixer.set_fader(2, 100)
-        time.sleep(0.6)
+        self.assertTrue(self.until(lambda: self.world.decks[2].on_air is True), "the deck was not told")
         self.assertTrue(self.status_flags(2) & 0x08)
         self.assertFalse(self.status_flags(3) & 0x08)
         self.assertTrue(self.world.events.find("on_air", deck=2, on=True, sender=33))
         self.mixer.set_on(False)                                # no mixer again: back to on air while it plays
         self.assertTrue(self.status_flags(3) & 0x08)
 
+    def until(self, check, seconds=3.0):
+        """True once check() is, within `seconds`: a packet takes a moment to reach a deck."""
+        end = time.time() + seconds
+        while time.time() < end:
+            if check():
+                return True
+            time.sleep(0.02)
+        return check()
+
     def test_04_fader_start(self):
+        deck = self.world.decks[2]
         self.mixer.set_on(True)
         self.mixer.set_fader_start(2, True)
+        self.world.set_play(deck, False)
+        # opened: deck 2 is told to start. Each step waits for its own packet before the next, since they take their time
         before = len(self.world.events.items)
-        self.mixer.set_fader(2, 50)                             # opened: deck 2 is told to start. It plays already
-        self.world.set_play(self.world.decks[2], False)
+        self.mixer.set_fader(2, 50)
+        self.assertTrue(self.world.events.wait("fader_start", 3.0, before, deck=2, action="start", sender=33), "deck 2 was not told to start")
+        self.assertTrue(self.until(lambda: deck.playing))
+        # closed: told to stop
+        before = len(self.world.events.items)
         self.mixer.set_fader(2, 0)
-        self.mixer.set_fader(2, 60)
-        event = self.world.events.wait("fader_start", 2.0, before, deck=2, action="start", sender=33)
-        self.assertTrue(event, "deck 2 was not started")
-        self.assertTrue(self.world.decks[2].playing)
-        self.mixer.set_fader(2, 0)                              # closed: told to stop
-        self.assertTrue(self.world.events.wait("fader_start", 2.0, before, deck=2, action="stop", sender=33))
-        self.assertFalse(self.world.decks[2].playing)
-        self.world.set_play(self.world.decks[2], True)
+        self.assertTrue(self.world.events.wait("fader_start", 3.0, before, deck=2, action="stop", sender=33), "deck 2 was not told to stop")
+        self.assertTrue(self.until(lambda: not deck.playing))
+        self.world.set_play(deck, True)
         # with fader start off for the channel, the fader moves nothing
         self.mixer.set_fader_start(2, False)
         count = len(self.world.events.items)
         self.mixer.set_fader(2, 90)
         self.mixer.set_fader(2, 0)
-        time.sleep(0.5)
+        time.sleep(0.6)
         self.assertEqual([e for e in self.world.events.since(count) if e["kind"] == "fader_start"], [])
+        self.assertTrue(deck.playing)
 
     def test_05_a_command_by_hand(self):
         self.assertFalse(self.mixer.send_fader_start({3: "stop"}))      # off: nothing is sent
