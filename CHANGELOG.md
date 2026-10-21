@@ -12,6 +12,8 @@ Newest first. A release is a tagged commit.
 - Releases: a tag makes a GitHub release with the changelog's entry (`.github/workflows/release.yml`, which can be run by hand for a tag
   that has none). The test workflow says which test failed as annotations, and macOS is allowed to fail.
 - The WSL test of `Bench` only runs where a WSL distribution starts.
+- UDP sockets are shared with SO_REUSEPORT on macOS, and the page's server no longer does a reverse lookup when it starts, which held it
+  up for many seconds on a macOS runner.
 
 ## v0.1.0
 
@@ -46,6 +48,6 @@ The first version.
 - Example scenarios in `deckbench/examples`.
 - `--port-shift` moves every port of the decks. The bench names the port it cannot have when it starts.
 - `--ready-file`, `GET /api/ready` and `deckbench.testing.Bench` to start a bench from a test without guessing a delay.
-- Runs on Linux, Windows and macOS. The tests use ports of their own, so a running bench or rekordbox does not matter.
-  Tried on Windows 11 (Python 3.10, 3.9) and, through the emulator, WSL2 on Ubuntu 24.04.
-  The GitHub Action has not run yet, and macOS and Python 3.8 were not tried. The DJS-1000 emulator scenarios ran in WSL2.
+- Runs on Linux and Windows, Python 3.8 and later: the GitHub Action passes on Ubuntu and on Windows with 3.8 and 3.12. The tests use ports
+  of their own, so a running bench or rekordbox does not matter. The DJS-1000 emulator scenarios ran in WSL2.
+  On macOS the loopback carries no broadcasts, so decks on 127.0.0.n are not heard: its CI job fails and is allowed to. Use `--bind` there.

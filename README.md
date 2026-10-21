@@ -45,7 +45,8 @@ track (its id, title, BPM, the deck whose database it comes from and the slot). 
 - **Settings**: strict decks, database refusal, claiming the number first, the model name, the theme, and how the bench was started.
 
 `http://127.0.0.1:8750/#scenario` opens a tab. The decks of Pro DJ Link are at 127.0.0.<number>, so the device under test must
-see this machine's loopback: run both on the same machine and network namespace. The bench runs on Linux, Windows and macOS.
+see this machine's loopback: run both on the same machine and network namespace. The bench runs on Linux and Windows (tested by CI on both, with Python 3.8 and 3.12). On macOS the loopback carries no broadcasts, so
+the decks on 127.0.0.n are not heard: use the real network mode there (`--bind`, see [docs/real-network.md](docs/real-network.md)).
 An emulator that lives in WSL needs the bench there too (`Bench(wsl=True)` from a test does that).
 
 Options (`python -m deckbench --help`):
@@ -118,7 +119,8 @@ beats on from, and for each protocol what it knows of the other side.
 Starts the bench in the process and checks, from a small client, the
 keep-alives, the status packets' fields, the beats, sync and master, the
 hand-off to a player that asks, the sync commands, the database and the API.
-It runs on Linux, Windows and macOS (macOS needs the aliases 127.0.0.2 and up on `lo0`, and 127.0.0.33 for the mixer: `sudo ifconfig lo0 alias 127.0.0.2 up`).
+It runs on Linux and Windows. The tests need the whole of 127.0.0.0/8 and its broadcast address, which macOS does not give: they fail there (CI
+keeps a macOS job that is allowed to fail, to see if that changes).
 The tests do not use the real ports: they take the first free range, or the shift in `DECKBENCH_PORT_SHIFT`.
 
 ## From a phone, or a page on another site

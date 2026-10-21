@@ -12,8 +12,8 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         python: ["3.8", "3.12"]
         include:
-          # macOS has only 127.0.0.1 on its loopback: the aliases below give the decks their addresses. Whether
-          # broadcasts to 127.255.255.255 work there is not known, so it does not fail the run.
+          # macOS: the loopback has only 127.0.0.1 (the aliases below give the decks their addresses) and carries no broadcasts, so
+          # the decks on 127.0.0.n are not heard and most tests fail there. The job stays, to see if that changes, and may fail.
           - os: macos-latest
             python: "3.12"
             experimental: true

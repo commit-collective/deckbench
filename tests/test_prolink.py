@@ -5,7 +5,7 @@
 
 Starts the bench in this process (decks 2 and 3, and the page) on ports of its
 own (see _ports.py), so a running emulator or bench does not matter. Needs a
-loopback with all of 127.0.0.0/8 (Linux and Windows have it, macOS needs aliases).
+loopback with all of 127.0.0.0/8 and its broadcast address (Linux and Windows have them, macOS does not).
 """
 import json
 import socket
