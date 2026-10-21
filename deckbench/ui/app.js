@@ -817,7 +817,7 @@ function buildStrips(mixer) {
   box.textContent = "";
   for (const n of Object.keys(mixer.channels)) {
     const out = h("output", {id: "mixout" + n}, "0");
-    box.append(h("div", {class: "strip", id: "strip" + n},
+    box.append(h("div", {class: "chan", id: "strip" + n},
       h("span", {class: "ch"}, "CH " + n),
       h("input", {type: "range", min: 0, max: 100, step: 1, value: 0, class: "mixfader", "aria-label": "Fader of channel " + n,
         oninput: (e) => { out.textContent = e.target.value; },
