@@ -5,7 +5,8 @@
 
 const Sound = (() => {
   const LOOKAHEAD = 0.18;                     /* seconds of beats scheduled ahead of the clock */
-  const s = {ctx: null, on: false, timer: null, last: {}, played: 0};   /* played: how many beats were sounded (for a check) */
+  const s = {ctx: null, on: false, timer: null, last: {}, played: 0,   /* played: how many beats were sounded (for a check) */
+             options: {own: true, other: true}, volume: 0.4};
 
   /* The beats of a deck between two moments (seconds, the page's clock), as {k, time, beat}: k counts the beats of the deck's
    * timeline, beat is its place in the bar (1 to 4, as in a loop). `offset` is what to add to the page's clock to get the bench's.
@@ -19,13 +20,35 @@ const Sound = (() => {
     for (let k = Math.ceil(posAt(from) - 1e-9); k <= Math.floor(posAt(to)); k++) {
       let at = k;
       if (deck.loop && at >= deck.loop_from + deck.loop) at = deck.loop_from + ((at - deck.loop_from) % deck.loop);
-      out.push({k, time: t + (k - pos) / rate - offset, beat: ((at % 4) + 4) % 4 + 1, half: 0.5 / rate});
+      out.push({k, at, time: t + (k - pos) / rate - offset, beat: ((at % 4) + 4) % 4 + 1, half: 0.5 / rate});
     }
     return out;
   };
 
   /* is a deck heard: it plays, and with a mixer on it is on the air */
   s.audible = (deck, mixerOn) => !!deck.on && !!deck.play && !deck.unplugged && (!mixerOn || !!deck.on_air);
+
+  /* The sources of sound in a state: the bench's decks and, if asked, the other devices on the link that play (their beats, as the
+   * bench heard them). [{key, number, deck}] with deck as `beats` and `audible` take it. */
+  s.sources = (state, options) => {
+    const prolink = state.protocols && state.protocols.prolink, out = [];
+    const devices = (prolink && prolink.devices) || [];
+    const mixer = prolink && prolink.mixer;
+    const mixerOn = !!(mixer && mixer.on) || devices.some((d) => d.kind === "mixer" && d.online);
+    if (options.own) {
+      /* a deck's on air is what a mixer told it, and while it plays when none did: the bench says so in its state */
+      for (const [n, d] of Object.entries(state.decks)) if (s.audible(d, true)) out.push({key: n, number: Number(n), deck: d});
+    }
+    if (options.other) {
+      for (const d of devices) {
+        const st = d.status;
+        if (d.kind === "mixer" || !d.online || !st || !st.play || !d.phase) continue;
+        const deck = {on: true, play: true, phase: d.phase, loop: 0, loop_from: 0, on_air: st.on_air};
+        if (s.audible(deck, mixerOn)) out.push({key: "ext:" + d.ip, number: d.number || 1, deck});
+      }
+    }
+    return out;
+  };
 
   /* -- the voices -- */
   function noise(ctx) {
@@ -135,26 +158,32 @@ const Sound = (() => {
   function tick() {
     const state = typeof S !== "undefined" ? S.state : null;
     if (!state || !s.ctx || s.ctx.state !== "running") return;
-    const mixer = state.protocols && state.protocols.prolink && state.protocols.prolink.mixer;
-    const mixerOn = !!(mixer && mixer.on), now = Date.now() / 1000, offset = S.offset;
+    const now = Date.now() / 1000, offset = S.offset;
     const clock = s.ctx.currentTime - now;      /* the page's clock to the audio clock */
-    for (const [n, d] of Object.entries(state.decks)) {
-      if (!s.audible(d, mixerOn)) { delete s.last[n]; continue; }
-      const sig = d.phase.join(","), last = s.last[n];
+    const heard = s.sources(state, s.options), keys = new Set(heard.map((x) => x.key));
+    for (const key of Object.keys(s.last)) if (!keys.has(key)) delete s.last[key];
+    for (const {key, number, deck: d} of heard) {
+      const sig = d.phase.join(","), last = s.last[key];
       const beats = s.beats(d, now, now + LOOKAHEAD, offset);
       if (!last || last.sig !== sig) {          /* a new phase: from here on, not the beats that were */
-        s.last[n] = {sig, k: Math.floor(d.phase[1] + (now + offset - d.phase[0]) * d.phase[2] / 60)};
+        s.last[key] = {sig, k: Math.floor(d.phase[1] + (now + offset - d.phase[0]) * d.phase[2] / 60)};
       }
-      const seen = s.last[n];
+      const seen = s.last[key];
       for (const b of beats) {
         if (b.k <= seen.k) continue;
         seen.k = b.k;
-        play(d, Number(n), b.beat, Math.max(s.ctx.currentTime, b.time + clock), b.half);
+        play(d, number, b.beat, Math.max(s.ctx.currentTime, b.time + clock), b.half);
       }
     }
   }
 
   s.tick = tick;
+
+  /* 0 to 1 */
+  s.setVolume = (v) => {
+    s.volume = Math.max(0, Math.min(1, Number(v)));
+    if (s.master) s.master.gain.value = s.volume;
+  };
 
   /* Switches the sound on or off. It must be called from a click: a browser starts audio only then. Resolves to whether it is on. */
   s.toggle = async () => {
@@ -169,7 +198,7 @@ const Sound = (() => {
     if (!s.ctx) {
       s.ctx = new Context();
       s.master = s.ctx.createGain();
-      s.master.gain.value = 0.4;
+      s.master.gain.value = s.volume;
       s.master.connect(s.ctx.destination);
     }
     await s.ctx.resume();

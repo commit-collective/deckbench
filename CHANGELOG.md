@@ -4,6 +4,12 @@ Newest first. A release is a tagged commit.
 
 ## Not yet released
 
+- The bench hears the link (`protocols/monitor.py`). Other players and mixers on the network get a read-only card with what they
+  do and their model, and a log in the Network tab shows the Pro DJ Link packets as they come (`/api/packets`). The bench's own
+  packets, statuses and beats are options. See `docs/link.md`.
+- Each deck and each device has a scrolling strip with a grid of beats and bars, and a loop shows where it goes back.
+- A synced deck snaps to the master's beat grid, not only to its tempo.
+- Each deck has its own sound, and other devices on the link can be heard too. The settings choose which.
 - The page can play the decks' beats (the Sound button): a kick, a snare and a hat for each deck that plays, in time with it, made with Web
   Audio. With a mixer on only the decks that are on air are heard. The demo has a deck 1 too.
 

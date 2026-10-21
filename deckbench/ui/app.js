@@ -151,6 +151,7 @@ function buildDeck(n, numbers) {
     h("div", {class: "live"},
       h("div", {class: "beats", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")),
       h("div", {class: "lcd", "aria-label": "Tempo"}, h("b", {}, "--"), h("span", {}, "BPM"))),
+    h("canvas", {class: "strip", "aria-hidden": "true"}),
     h("div", {class: "switches", role: "group", "aria-label": "Deck " + n + " switches"},
       SWITCHES.map(([what, label]) => h("button", {class: "sw", "data-what": what, "aria-pressed": "false",
         onclick: () => act("api/deck/" + n + "/" + what)}, label))),
@@ -211,6 +212,15 @@ function beatOf(d) {
 
 function lamps() {
   if (!S.state) return;
+  for (const d of devicesOf(S.state)) {
+    const card = $(devId(d.ip));
+    if (!card || d.kind === "mixer") continue;
+    const now = d.online && d.phase ? beatOf({phase: d.phase}) : 0;
+    card.querySelectorAll(".beats i").forEach((square, k) => {
+      square.classList.toggle("lit", now === k + 1);
+      square.classList.toggle("first", k === 0);
+    });
+  }
   for (const [n, d] of Object.entries(S.state.decks)) {
     const card = $("deck" + n);
     if (!card) continue;
@@ -220,6 +230,102 @@ function lamps() {
       square.classList.toggle("first", k === 0);
     });
   }
+}
+
+/* ---- the strips, and the other devices on the link ---- */
+
+function devicesOf(state) {
+  const link = state && state.protocols && state.protocols.prolink;
+  return (link && link.devices) || [];
+}
+
+const devId = (ip) => "dev-" + ip.replace(/[^\w]/g, "-");
+
+function strips() {
+  if (!S.state) return;
+  const now = Date.now() / 1000;
+  for (const [n, d] of Object.entries(S.state.decks)) {
+    const card = $("deck" + n), canvas = card && card.querySelector(".strip");
+    if (canvas && d.on) Strip.draw(canvas, Strip.layout(d, now, S.offset), {});
+    else if (canvas) canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+  }
+  for (const d of devicesOf(S.state)) {
+    const card = $(devId(d.ip)), canvas = card && card.querySelector(".strip");
+    if (!canvas) continue;
+    const st = d.status;
+    Strip.draw(canvas, Strip.layoutDevice(d.ip, d, now), {bars: !(st && st.track_beat != null)});
+  }
+}
+
+function buildDevice(d) {
+  const mixer = d.kind === "mixer";
+  return h("article", {class: "deck device off", id: devId(d.ip), "aria-label": (d.model || "Device") + " on the link"},
+    h("div", {class: "deck-head"},
+      h("div", {class: "num", "aria-hidden": "true"}),
+      h("div", {class: "deck-id"}, h("div", {class: "model"}), h("div", {class: "track"})),
+      h("div", {class: "tags"})),
+    mixer ? h("div", {class: "airs", "aria-label": "Channels on air"}) : h("div", {class: "live"},
+      h("div", {class: "beats", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")),
+      h("div", {class: "lcd", "aria-label": "Tempo"}, h("b", {}, "--"), h("span", {}, "BPM"))),
+    mixer ? null : h("canvas", {class: "strip", "aria-hidden": "true"}),
+    h("div", {class: "facts"}));
+}
+
+function renderDevices() {
+  const list = devicesOf(S.state), box = $("devices");
+  $("others").hidden = !list.length;
+  const keep = new Set();
+  for (const d of list) {
+    Strip.observe(d.ip, d.phase, S.offset);
+    keep.add(devId(d.ip));
+    let card = $(devId(d.ip));
+    if (!card || card.dataset.kind !== d.kind) {
+      if (card) card.remove();
+      card = buildDevice(d);
+      card.dataset.kind = d.kind;
+      box.append(card);
+    }
+    const st = d.status, q = (cls) => card.querySelector("." + cls);
+    card.classList.toggle("online", d.online);
+    card.classList.toggle("offline", !d.online);
+    card.classList.toggle("off", false);
+    q("num").textContent = d.number == null ? "?" : d.number;
+    const model = q("model");
+    model.textContent = d.model || d.ip;
+    model.append(h("span", {class: "addr"}, d.ip));
+    const track = q("track");
+    track.textContent = "";
+    if (d.kind === "mixer") track.textContent = "mixer";
+    else if (st) {
+      track.append(h("b", {}, st.state), st.rbid ? " \u00b7 player " + st.source + " \u00b7 " + (SLOTS[st.slot] || "slot " + st.slot) + " \u00b7 id " + st.rbid : "");
+    } else track.textContent = d.online ? "no status yet" : "gone quiet";
+    const tags = q("tags");
+    tags.textContent = "";
+    if (d.unit) tags.append(h("span", {class: "tag unit"}, "UNIT UNDER TEST"));
+    if (!d.online) tags.append(h("span", {class: "tag offline"}, "OFFLINE"));
+    if (st && d.online) {
+      if (st.master) tags.append(h("span", {class: "tag master"}, "MASTER"));
+      if (st.sync) tags.append(h("span", {class: "tag sync"}, "SYNC"));
+      if (st.on_air) tags.append(h("span", {class: "tag air-tag"}, "ON AIR"));
+      if (st.loop) tags.append(h("span", {class: "tag loop"}, "LOOP"));
+    }
+    const facts = q("facts");
+    facts.textContent = "";
+    if (d.kind === "mixer") {
+      const airs = q("airs");
+      airs.textContent = "";
+      for (const [channel, on] of Object.entries(d.air || {})) airs.append(h("span", {class: "air" + (on ? " lit" : "")}, "CH " + channel));
+      if (!d.air) airs.append(h("span", {class: "hint"}, "no on-air report heard"));
+      if (d.fader) facts.append(h("span", {}, "fader start: " + Object.entries(d.fader).map(([p, c]) => "player " + p + " " + c).join(", ")));
+    } else {
+      q("lcd").firstChild.textContent = st && d.online ? st.bpm.toFixed(1) : "--";
+      if (st && st.pitch) facts.append(h("span", {}, "pitch " + (st.pitch > 0 ? "+" : "") + st.pitch + " %"));
+      if (d.firmware) facts.append(h("span", {}, "firmware " + d.firmware));
+    }
+    if (d.peers != null) facts.append(h("span", {}, "knows " + d.peers + " device" + (d.peers === 1 ? "" : "s")));
+    if (d.mac) facts.append(h("span", {}, d.mac));
+  }
+  for (const card of Array.from(box.children)) if (!keep.has(card.id)) card.remove();
 }
 
 function render() {
@@ -277,6 +383,7 @@ function render() {
   renderNetwork();
   renderSettings();
   renderMixer();
+  renderDevices();
   $("version").textContent = s.bench && s.bench.version ? (/^\d/.test(s.bench.version) ? "v" : "") + s.bench.version : "";
   lamps();
 }
@@ -575,6 +682,106 @@ $("sound").addEventListener("click", async () => {
   }
 });
 
+/* ---- the link log ---- */
+
+const P = {next: 0, items: [], counts: {}, paused: false, noisy: false, ours: false, follow: true, hidden: new Set(), open: new Set(), busy: false};
+const NOISY = ["status", "beat", "position"];
+
+function pktLine(p) {
+  const who = (p.number != null ? "#" + p.number + " " : "") + p.src;
+  const line = h("div", {class: "pkt" + (p.ours ? " ours" : ""), title: p.src + " to " + p.to + ", port " + p.port + ", " + p.len + " bytes. Click for the bytes",
+    onclick: () => { P.open.has(p.n) ? P.open.delete(p.n) : P.open.add(p.n); drawPackets(); }},
+    h("span", {class: "t"}, p.t.toFixed(2)), h("span", {class: "dir"}, p.to !== "*" && p.to !== "" && p.ours ? "\u2192" : "\u2190"),
+    h("span", {class: "src"}, who), h("span", {class: "kind"}, p.kind), h("span", {class: "what"}, p.text));
+  return P.open.has(p.n) ? [line, h("div", {class: "hex"}, p.hex)] : [line];
+}
+
+function shownPackets() {
+  return P.items.filter((p) => (P.ours || !p.ours) && !P.hidden.has(p.kind) && (P.noisy || !NOISY.includes(p.kind)));
+}
+
+let pktTimer = null;
+function drawPackets() {
+  if (pktTimer) return;
+  pktTimer = setTimeout(() => {
+    pktTimer = null;
+    const box = $("pktlog"), atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 24;
+    box.textContent = "";
+    const list = shownPackets().slice(-400);
+    if (!list.length) box.append(h("div", {class: "pkt"}, h("span", {class: "what"}, "Nothing heard yet. Packets of the other devices on the link appear here as they come.")));
+    for (const p of list) box.append(...pktLine(p));
+    if (P.follow && (atEnd || P.fresh)) box.scrollTop = box.scrollHeight;
+    P.fresh = false;
+    $("pktcount").textContent = "(" + list.length + " of " + P.items.length + " kept)";
+    const filters = $("pktfilters");
+    filters.textContent = "";
+    for (const [kind, count] of Object.entries(P.counts).sort()) {
+      if (!P.noisy && NOISY.includes(kind)) continue;
+      filters.append(h("button", {"aria-pressed": String(!P.hidden.has(kind)), title: "Show or hide " + kind,
+        onclick: () => { P.hidden.has(kind) ? P.hidden.delete(kind) : P.hidden.add(kind); drawPackets(); }}, kind + " " + count));
+    }
+  }, 150);
+}
+
+async function pollPackets() {
+  const visible = !$("p-network").hidden;
+  if (visible && !P.paused && !P.busy) {
+    P.busy = true;
+    try {
+      const r = await transport.fetch("api/packets?since=" + P.next + "&noisy=" + (P.noisy ? 1 : 0) + "&limit=800");
+      if (r.ok) {
+        const data = await r.json();
+        if (data.next < P.next) { P.items = []; P.open.clear(); }
+        P.next = data.next;
+        P.counts = data.counts;
+        if (data.packets.length) { P.items = P.items.concat(data.packets).slice(-3000); P.fresh = true; }
+        drawPackets();
+      }
+    } catch (e) { /* the state's stream says so */ }
+    P.busy = false;
+  }
+  setTimeout(pollPackets, 500);
+}
+
+function resetPackets() { P.items = []; P.next = 0; P.open.clear(); drawPackets(); }
+
+$("pktpause").addEventListener("click", () => {
+  P.paused = !P.paused;
+  $("pktpause").textContent = P.paused ? "Resume" : "Pause";
+});
+$("pktclear").addEventListener("click", async () => { await act("api/packets/clear"); resetPackets(); P.counts = {}; });
+$("pktexport").addEventListener("click", () => download("deckbench-link-" + stamp() + ".json", JSON.stringify(shownPackets(), null, 1)));
+for (const [id, key] of [["pktnoisy", "noisy"], ["pktours", "ours"], ["pktfollow", "follow"]]) {
+  $(id).addEventListener("click", () => {
+    P[key] = !P[key];
+    $(id).setAttribute("aria-pressed", String(P[key]));
+    if (key === "noisy" && P.noisy) resetPackets();                 /* the statuses and beats were not asked for: fetch all again */
+    P.fresh = true;
+    drawPackets();
+  });
+}
+
+/* ---- sound options ---- */
+
+(function soundOptions() {
+  let saved = {};
+  try { saved = JSON.parse(store.get("deckbench.sound", "{}")) || {}; } catch (e) { saved = {}; }
+  Sound.options.own = saved.own !== false;
+  Sound.options.other = saved.other !== false;
+  if (typeof saved.volume === "number") Sound.setVolume(saved.volume); else Sound.volume = 0.4;
+  const keep = () => store.set("deckbench.sound", JSON.stringify({own: Sound.options.own, other: Sound.options.other, volume: Sound.volume}));
+  for (const [id, key] of [["soundown", "own"], ["soundother", "other"]]) {
+    $(id).setAttribute("aria-checked", String(Sound.options[key]));
+    $(id).addEventListener("click", () => {
+      Sound.options[key] = !Sound.options[key];
+      $(id).setAttribute("aria-checked", String(Sound.options[key]));
+      keep();
+    });
+  }
+  $("soundvol").value = Math.round(Sound.volume * 100);
+  $("soundvol").addEventListener("input", (e) => { Sound.setVolume(e.target.value / 100); keep(); });
+})();
+
 /* ---- all on, all off ---- */
 
 async function everyDeck(on) {
@@ -591,12 +798,12 @@ $("alloff").addEventListener("click", () => everyDeck(false));
 
 /* ---- the mixer ---- */
 
-let strips = "";
+let stripKey = "";
 
 function buildStrips(mixer) {
   const key = Object.keys(mixer.channels).join();
-  if (key === strips) return;
-  strips = key;
+  if (key === stripKey) return;
+  stripKey = key;
   const box = $("mixstrips");
   box.textContent = "";
   for (const n of Object.keys(mixer.channels)) {
@@ -664,9 +871,10 @@ window.addEventListener("hashchange", () => { if (tabInAddress()) showTab(tabInA
 
 /* ---- start ---- */
 
-function frame() { lamps(); requestAnimationFrame(frame); }
+function frame() { lamps(); strips(); requestAnimationFrame(frame); }
 
 function start() {
+  pollPackets();
   fillSaved();
   drawEvents();
   loadExamples();

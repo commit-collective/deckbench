@@ -68,6 +68,71 @@ class DemoBench {
     this.scenario = {running: false, name: null, total: 0, results: [], failed: 0, stopped: false, skipped: null};
     this.timers = [];
     this.listeners = [];
+    /* another player on the link, as the bench would hear it: a CDJ at 124 BPM that goes round a loop of four beats for a while */
+    this.ext = {number: 5, ip: "192.168.1.20", name: "CDJ-2000NXS2", base: 124, anchorT: this.now(), anchorPos: 16, mac: "02:fa:4e:de:c0:05", firmware: "1.85"};
+    this.packets = {noisy: [], rest: [], n: 0, counts: {}};
+    this.sent = {};
+    this.packetTimer = setInterval(() => this.tickPackets(), 100);
+  }
+
+  /* -- the other device -- */
+  extLoop(now) {                                      /* looping for 8 s of every 18 */
+    const phase = (now - this.began) % 18;
+    return phase >= 10 ? [Math.floor(this.extRaw(now - (phase - 10))), 4] : null;
+  }
+  extRaw(now) { return this.ext.anchorPos + (now - this.ext.anchorT) * this.ext.base / 60; }
+  extPosition(now) {
+    let pos = this.extRaw(now);
+    const loop = this.extLoop(now);
+    if (loop && pos >= loop[0]) pos = loop[0] + ((pos - loop[0]) % loop[1]);
+    return pos;
+  }
+  devices() {
+    const now = this.now(), e = this.ext, rate = e.base / 60, pos = this.extPosition(now), whole = Math.floor(pos), since = (pos - whole) / rate;
+    const loop = !!this.extLoop(now);
+    return [{ip: e.ip, name: e.name, model: e.name, number: e.number, kind: "player", unit: false, online: true, mac: e.mac, peers: 4 + (this.mixer.on ? 1 : 0), firmware: e.firmware,
+      status: {play: true, master: false, sync: true, on_air: this.settings.mixer ? false : true, state: loop ? "looping" : "playing", loop, bpm: e.base, track_bpm: e.base,
+        pitch: 0, bar: whole % 4 + 1, track_beat: whole + 1, source: 5, slot: 3, track_type: 1, rbid: 805, sync_counter: 0},
+      phase: [now - since, whole, e.base], at: null, air: null, fader: null}];
+  }
+
+  /* -- the log -- */
+  packet(kind, src, name, number, text, ours, port, to = "*") {
+    const t = Math.round((this.now() - this.began) * 1000) / 1000, noisy = ["status", "beat", "position"].includes(kind);
+    const item = {n: ++this.packets.n, t, port, kind, src, to, ours, len: 0x30, text, name, number, hex: "5173707431576d4a4f4c" + "0".repeat(16) + "..."};
+    const ring = this.packets[noisy ? "noisy" : "rest"];
+    ring.push(item);
+    if (ring.length > (noisy ? 1500 : 2500)) ring.shift();
+    this.packets.counts[kind] = (this.packets.counts[kind] || 0) + 1;
+  }
+  tickPackets() {
+    const now = this.now(), due = (key, every) => { if (now - (this.sent[key] || 0) >= every) { this.sent[key] = now; return true; } return false; };
+    for (const d of Object.values(this.decks)) {
+      if (!d.on || d.unplugged) { delete this.sent["pos" + d.number]; continue; }
+      const name = this.settings.model || "CDJ-FAKE" + d.number, ip = "127.0.0." + d.number;
+      if (due("ka" + d.number, 2)) this.packet("keep-alive", ip, name, d.number, name + " #" + d.number + " at " + ip + ", player, knows " + (Object.values(this.decks).filter((o) => o.on).length + 1) + " devices", true, 50000);
+      if (due("st" + d.number, 0.2)) this.packet("status", ip, name, d.number, name + " #" + d.number + ": " + (d.play ? "playing" : "paused") + (d.master ? ", master" : "") + (d.sync ? ", synced" : "") + ", " + this.tempo(d).toFixed(1) + " BPM", true, 50002);
+      if (d.play) {
+        const beat = Math.floor(this.position(d)), last = this.sent["pos" + d.number];
+        if (last !== undefined && beat !== last) this.packet("beat", ip, name, d.number, name + " #" + d.number + ": beat " + (beat % 4 + 1) + " of 4, " + this.tempo(d).toFixed(1) + " BPM", true, 50001);
+        this.sent["pos" + d.number] = beat;
+      } else delete this.sent["pos" + d.number];
+    }
+    const e = this.ext;
+    if (due("ka-ext", 2)) this.packet("keep-alive", e.ip, e.name, e.number, e.name + " #5 at " + e.ip + ", player, knows 5 devices", false, 50000);
+    if (due("st-ext", 0.2)) this.packet("status", e.ip, e.name, e.number, e.name + " #5: " + (this.extLoop(now) ? "looping" : "playing") + ", synced, 124.0 BPM, beat " + (Math.floor(this.extPosition(now)) % 4 + 1) + ", track 5:3:805", false, 50002);
+    const beat = Math.floor(this.extPosition(now)), lastBeat = this.sent["ext-beat"];
+    if (lastBeat !== undefined && beat !== lastBeat) this.packet("beat", e.ip, e.name, e.number, e.name + " #5: beat " + (beat % 4 + 1) + " of 4, 124.0 BPM", false, 50001);
+    this.sent["ext-beat"] = beat;
+    if (this.settings.mixer && this.mixer.on && due("air", 0.25)) {
+      const on = Object.entries(this.mixer.channels).filter(([n, c]) => this.mixer.master && c.fader > 0).map(([n]) => n).join(" ") || "none";
+      this.packet("on air", "127.0.0.33", this.mixer.name, 33, this.mixer.name + ": on air " + on, true, 50001);
+    }
+  }
+  packetsSince(since, noisy, limit) {
+    const rings = noisy ? [this.packets.noisy, this.packets.rest] : [this.packets.rest];
+    const items = [].concat(...rings).filter((p) => p.n > since).sort((a, b) => a.n - b.n);
+    return {packets: items.slice(-limit), next: this.packets.n, counts: Object.assign({}, this.packets.counts)};
   }
 
   now() { return Date.now() / 1000; }
@@ -103,6 +168,7 @@ class DemoBench {
       const bpm = Math.round(this.tempo(d) * 100) / 100;
       decks[d.number] = {on: d.on, play: d.play, sync: d.sync, on_air: this.onAir(d), master: d.master && d.on, bpm,
         name: "deck " + d.number, loop: d.loop ? d.loop[1] : 0, loop_from: d.loop ? d.loop[0] : 0, unplugged: d.unplugged,
+        at: d.play ? null : Math.round(this.position(d) * 1000) / 1000,
         phase: d.on && d.play ? [d.anchorT, d.anchorPos, bpm] : null,
         track: d.track.title, track_id: d.track.source + ":" + d.track.slot + ":" + d.track.id, track_source: d.track.source,
         track_slot: d.track.slot, track_rbid: d.track.id,
@@ -114,7 +180,8 @@ class DemoBench {
       channels[n] = {fader: c.fader, fader_start: c.fader_start, on_air: !!(mixer && this.mixer.master && c.fader > 0)};
     }
     return {now: this.now(), decks, loss: this.loss, unit_state: {heard: false}, adapters: [],
-      protocols: {prolink: {unit: null, settings: Object.assign({}, this.settings, {mixer}), mixer: Object.assign({}, this.mixer, {on: mixer, channels, six: false})}},
+      protocols: {prolink: {unit: null, settings: Object.assign({}, this.settings, {mixer}), mixer: Object.assign({}, this.mixer, {on: mixer, channels, six: false}),
+        devices: this.devices()}},
       bench: {version: "demo", numbers: Object.keys(this.decks).map(Number), strict: this.settings.strict, broadcast: "127.255.255.255",
         profiles: {"cdj-2000": "CDJ-2000 (nexus)", "cdj-2000nxs2": "CDJ-2000NXS2", "xdj-1000mk2": "XDJ-1000MK2", "cdj-3000": "CDJ-3000"},
         http: "the demo in this page"}};
@@ -176,6 +243,7 @@ class DemoBench {
       if (route === "api/ready") return ok({ready: true, version: "demo", numbers: Object.keys(this.decks).map(Number)});
       if (route === "api/scenario") return ok(Object.assign({}, this.scenario, {results: this.scenario.results.slice()}));
       if (route === "api/events") return ok(this.events.slice(Number(query.get("since") || 0)));
+      if (route === "api/packets") return ok(this.packetsSince(Number(query.get("since") || 0), query.get("noisy") !== "0", Math.max(1, Math.min(2000, Number(query.get("limit") || 400)))));
       if (route === "api/examples") return ok(DEMO_EXAMPLES);
       if (route === "api/unit") return ok({heard: false});
       return fail(404, "not found");
@@ -212,6 +280,7 @@ class DemoBench {
     }
     if (parts[1] === "loss") { this.loss = Math.max(0, Math.min(100, Number(parts[2]))); return ok(); }
     if (parts[1] === "events" && parts[2] === "clear") { this.events = []; this.generation++; return ok({}); }
+    if (parts[1] === "packets" && parts[2] === "clear") { this.packets.noisy = []; this.packets.rest = []; this.packets.counts = {}; return ok({}); }
     if (parts[1] === "settings") {
       const name = parts[2], value = decodeURIComponent(parts[3] ?? "");
       if (["strict", "refuse_db", "claim", "mixer"].includes(name) && (value === "0" || value === "1")) {

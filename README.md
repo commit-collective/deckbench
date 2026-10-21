@@ -107,6 +107,7 @@ Options (`python -m deckbench --help`):
                                       channel/<n>/command/<start|stop>
     POST /api/loss/<percent>          that share of the datagrams is lost (0 for none)
     GET  /api/ready                   {"ready": true} and how the bench was started (version, pid, ports, address)
+    GET  /api/packets?since=<n>       the Pro DJ Link packets the bench heard (docs/link.md). POST /api/packets/clear forgets them
     GET  /api/events?since=<n>        what the device under test did, from the n-th event on
     POST /api/events/clear            forget them
     POST /api/scenario                play the scenario in the body (JSON), one at a time; /stop ends it; GET gives how far it is

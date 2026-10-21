@@ -233,12 +233,8 @@ class FakeUnit:
         self.counter = 0
 
     def announce(self):
-        from .protocols.prolink import header
-        p = bytearray(0x36)
-        p[:0x1F] = header(0x06, self.name)
-        p[0x24] = self.number
-        p[0x2C:0x30] = bytes(int(x) for x in self.address.split("."))
-        self.sock.sendto(bytes(p), (self.broadcast, self.ports.announce))
+        from .protocols import startup
+        self.sock.sendto(startup.keepalive(self.name, self.number, self.address, bytes(6)), (self.broadcast, self.ports.announce))
 
     def status(self, master=False, synced=False, playing=False, bpm=120.0, pitch=0x100000, beat=1, on_air=False):
         """One status packet, as the unit's flags say: bit 6 plays, bit 5 master, bit 4 sync, bit 3 on air."""

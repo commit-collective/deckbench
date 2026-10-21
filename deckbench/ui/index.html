@@ -23,7 +23,14 @@
 </header>
 
 <main class="layout">
-  <section id="decks" aria-label="Decks"></section>
+  <div class="stage">
+    <section id="decks" aria-label="Decks"></section>
+    <section id="others" aria-label="Other devices on the link" hidden>
+      <h2>On the network</h2>
+      <p class="hint">Heard on the link, read only: what each says of itself in its keep-alives, statuses and beats.</p>
+      <div id="devices"></div>
+    </section>
+  </div>
 
   <aside class="side">
     <div class="tabs" role="tablist" aria-label="Tools">
@@ -98,6 +105,18 @@
       <div class="toolbar" id="unitpress"></div>
       <h2>Decks on the network</h2>
       <table class="kv" id="nettable"></table>
+      <h2>Link log <span class="hint" id="pktcount"></span></h2>
+      <div class="toolbar">
+        <button class="btn small" id="pktpause">Pause</button>
+        <button class="btn small" id="pktclear">Clear</button>
+        <button class="btn small" id="pktexport" title="Save the lines shown as a JSON file">Export</button>
+        <span class="grow"></span>
+        <button class="btn small" id="pktnoisy" aria-pressed="false" title="Show the statuses and beats too: many a second">Statuses and beats</button>
+        <button class="btn small" id="pktours" aria-pressed="false" title="Show the packets of the bench's own decks and mixer too">The bench's own</button>
+        <button class="btn small" id="pktfollow" aria-pressed="true" title="Keep the newest line in view">Follow</button>
+      </div>
+      <div class="filters" id="pktfilters" aria-label="Filter by kind"></div>
+      <div class="pktlog" id="pktlog" role="log" aria-live="off"></div>
     </div>
 
     <!-- Settings -->
@@ -124,6 +143,16 @@
           <div class="row" style="margin-top:6px"><input type="text" id="model" maxlength="20" style="flex:1" aria-label="Model name" placeholder="CDJ-FAKEn: one for each deck">
             <button class="btn small" id="modelset">Apply</button></div></div>
       </div>
+      <h2>Sound</h2>
+      <div class="setting">
+        <div class="what"><b>The bench's decks</b><span>Each deck that plays has a voice of its own, on its beat.</span></div>
+        <button class="switch" role="switch" id="soundown" aria-checked="true" aria-label="Sound of the bench's decks"></button>
+      </div>
+      <div class="setting">
+        <div class="what"><b>Other devices on the link</b><span>The decks that are on the network, from the beats the bench hears of them.</span></div>
+        <button class="switch" role="switch" id="soundother" aria-checked="true" aria-label="Sound of the other devices"></button>
+      </div>
+      <div class="row"><label for="soundvol">Volume</label><input type="range" id="soundvol" min="0" max="100" step="1" value="40" aria-label="Volume"></div>
       <h2>Appearance</h2>
       <div class="row"><select id="theme" aria-label="Theme"><option value="auto">Follow the system</option>
         <option value="dark">Dark</option><option value="light">Light</option></select></div>
@@ -147,6 +176,7 @@
 <div id="toasts" role="status" aria-live="polite"></div>
 <script src="transport.js"></script>
 <script src="sound.js"></script>
+<script src="viz.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

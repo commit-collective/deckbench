@@ -193,6 +193,36 @@ table.kv td:first-child { color: var(--muted); width: 38%; }
 h2 { margin: 6px 0 0; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 h2:first-child { margin-top: 0; }
 
+/* ---- the strip, and the devices of the link ---- */
+.strip { display: block; width: 100%; height: 64px; border-radius: 7px; background: var(--lcd-bg); border: 1px solid var(--line); }
+.deck.off .strip { opacity: .45; }
+.stage { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+#others h2 { margin: 6px 0 2px; }
+#devices { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--gap); margin-top: 8px; }
+.deck.device { border-style: dashed; }
+.deck.device.offline { opacity: .55; }
+.deck.device .num { background: var(--surface-2); color: var(--text); border-color: var(--line-2); }
+.deck.device.online .num { border-color: var(--accent); box-shadow: 0 0 10px -3px var(--accent); }
+.deck.device .facts { color: var(--muted); font-size: 11px; display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.tag.master { background: color-mix(in srgb, var(--master) 22%, transparent); color: var(--master); }
+.tag.sync { background: color-mix(in srgb, var(--sync) 22%, transparent); color: var(--sync); }
+.tag.unit { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
+.tag.offline { background: var(--unlit); color: var(--muted); }
+.airs { display: flex; gap: 6px; flex-wrap: wrap; }
+.airs .air { padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+
+/* ---- the link log ---- */
+.pktlog { font: 11px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--lcd-bg); color: #cfd6cf; }
+.pktlog .pkt { display: flex; flex-wrap: wrap; gap: 0 6px; padding: 1px 6px; border-bottom: 1px solid rgba(128,128,128,.12); cursor: pointer; }
+.pktlog .pkt.ours { opacity: .55; }
+.pktlog .t { flex: none; width: 54px; text-align: right; color: #8d968d; }
+.pktlog .dir { flex: none; width: 10px; color: #8d968d; }
+.pktlog .src { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #9fc3f5; }
+.pktlog .kind { flex: none; width: 104px; color: #9fe870; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pktlog .what { flex: 1 0 100%; white-space: normal; word-break: break-word; padding-left: 70px; color: #e3e9e3; }
+.pktlog .hex { white-space: normal; word-break: break-all; padding: 2px 6px 4px 70px; color: #8d968d; font-size: 10px; border-bottom: 1px solid rgba(128,128,128,.12); }
+
 /* ---- the mixer ---- */
 .strips { display: flex; flex-direction: column; gap: 8px; }
 .strip { display: grid; grid-template-columns: 34px 1fr 40px; gap: 4px 8px; align-items: center; padding: 8px 10px;

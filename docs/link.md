@@ -1,0 +1,43 @@
+# What the bench hears on the link
+
+The bench listens on the three Pro DJ Link ports (50000, 50001, 50002) and keeps what it hears. The page shows it in three places.
+
+## Other devices
+
+A player or a mixer that is not one of the bench's decks gets a read-only card. It says what the device does according to its own
+packets: the model if the name is a known one, its number and address, whether it plays, is master, is synced or on air, its tempo,
+its place in the track and its loop. A device is known by its name and number, not by the address it sends from, so a unit under test
+that sends its keep-alives from its network address and its statuses from the loopback is one card. A device that has been silent for
+8 seconds is offline, and one that has been silent for 60 seconds is dropped.
+
+`GET /api/state` has them in `protocols.prolink.devices`. Each has `name`, `model`, `number`, `ip`, `kind`, `unit` (it is the device
+under test), `online`, `status`, `phase` (only while it plays), `at` (only while it does not), `air` and `fader`.
+
+## Strips
+
+Each deck, and each device with beats, has a strip: a grid that scrolls past a fixed playhead, one line for every beat and a heavier
+line for every bar, with the beat of the track written on it. It has no waveform. All the strips share one time scale, so decks that
+are synced line up and one that is not drifts. A loop is tinted and marked where it goes back. For a device the page draws the beats
+it was told of, and goes on at its tempo from the last.
+
+## Sync
+
+A deck that is synced to the master snaps to its beat grid, not only to its tempo. The bench takes the master's place from the
+master's own beat packets, including the unit's.
+
+## The log
+
+The Network tab has a real-time log of the packets. Keep-alives, claims, on air, fader start and the like are shown by default.
+Statuses and beats are many, so they are an option ("status and beats"). The bench's own packets are an option too ("ours"). The
+log can be paused, cleared, followed and exported.
+
+    GET  /api/packets?since=<n>&noisy=<0|1>&limit=<n>   the lines after n, and the counts by kind
+    POST /api/packets/clear                              forget them
+
+Windows delivers a broadcast on the loopback to every socket bound to the port, so the monitor drops a copy of a packet that
+arrives twice within 30 ms.
+
+## Sound
+
+The Sound button plays the bench's decks, each with its own voice (bass, drums, keys, percussion). The settings choose whether the
+bench's own decks and other devices are heard. A device is heard while it plays, and with a mixer known, while it is on air.

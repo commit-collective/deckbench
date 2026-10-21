@@ -47,6 +47,7 @@ from .. import profiles
 from ..net import share
 from . import startup
 from .mixer import LinkMixer, parse_on_air
+from .monitor import Monitor
 from .startup import MAGIC
 BROADCAST = "127.255.255.255"
 DB_PORT = 1051
@@ -280,6 +281,8 @@ class LinkDeck:
         if loss and random.random() < loss:
             return
         sock.sendto(packet, addr)
+        if addr[0] != self.broadcast:                   # a broadcast comes back to the sockets that listen, a packet to one device does not
+            self.net.monitor.feed(packet, self.address, addr[1], to=addr[0])
 
     def announce(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -343,6 +346,7 @@ class LinkDeck:
         deck, world = self.deck, self.net.world
         while True:
             data, addr = s.recvfrom(2048)
+            self.net.monitor.feed(data, addr[0], self.ports.beat, to=self.address)
             if not deck.enabled or deck.unplugged or len(data) < 0x25 or data[:10] != MAGIC:
                 continue
             kind, sender = data[0x0A], data[0x21]
@@ -539,6 +543,7 @@ class Prolink(Protocol):
         self.world = world
         self.ports = ports
         self.claim = claim
+        self.monitor = Monitor(self)         # a log of the packets heard, and the devices on the link
         self.defended = {}                  # (claimer's address, number): when it was last told that the number is in use
         self.mixer = LinkMixer(self, mixer_name if isinstance(mixer_name, bytes) else mixer_name.encode(), 33,
                                mixer_address, broadcast, mixer_channels)
@@ -622,6 +627,32 @@ class Prolink(Protocol):
         count += 1 if time.time() - self.unit["announced"] < 10 else 0
         return count
 
+    def align_synced(self, device, now):
+        """A device that is the tempo master has told of a beat (see Monitor.beat): the bench's decks that are synced and play go to its
+        grid, as a player does that syncs to it, and not only to its tempo. A deck is moved to the nearest place on the master's bar, by
+        a jump of no more than two beats, and only when it is more than 20 ms out. Not while a deck of the bench is the master, and not
+        a deck that loops (its place is its own)."""
+        st, phase = device["status"], device["phase"]
+        if not (st and st["master"] and st["play"] and phase and not device["ours"]):
+            return
+        world = self.world
+        with world.lock:
+            if world.master_deck() is not None:
+                return
+            t, pos, bpm = phase
+            master = pos + (now - t) * bpm / 60.0
+            moved = False
+            for deck in world.decks.values():
+                if not (deck.enabled and deck.playing and deck.sync and not deck.master and not deck.loop):
+                    continue
+                place = deck.position(now)
+                target = master + 4 * round((place - master) / 4.0)
+                if abs(place - target) * 60.0 / max(bpm, 1.0) > 0.02:
+                    deck.anchor_t, deck.anchor_pos = now, target
+                    moved = True
+            if moved:
+                world.changed()
+
     def mixer_gone(self):
         """The mixer was switched off: the decks are no longer told whether they are on air."""
         with self.world.lock:
@@ -656,6 +687,7 @@ class Prolink(Protocol):
         s.bind(("", self.ports.beat))
         while True:
             data, addr = s.recvfrom(2048)
+            self.monitor.feed(data, addr[0], self.ports.beat)
             flags = parse_on_air(data)
             if flags is not None:
                 with self.world.lock:
@@ -696,7 +728,7 @@ class Prolink(Protocol):
 
     def info(self):
         return {"unit": dict(self.unit) if self.unit["number"] else None, "settings": self.settings(),
-                "mixer": self.mixer.snapshot()}
+                "mixer": self.mixer.snapshot(), "devices": self.monitor.snapshot()}
 
     @staticmethod
     def truthy(value):
@@ -903,7 +935,9 @@ class Prolink(Protocol):
             ready, _, _ = select.select([s for s, _ in socks], [], [], 0.5)
             for s in ready:
                 data, addr = s.recvfrom(2048)
-                port = s.getsockname()[1]
+                bound = s.getsockname()
+                port = bound[1]
+                self.monitor.feed(data, addr[0], port, to="*" if bound[0] == "0.0.0.0" else bound[0])
                 if len(data) < 0x30 or data[:10] != MAGIC:
                     continue
                 if port == self.ports.announce and startup.claimed_number(data) is not None:

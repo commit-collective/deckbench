@@ -24,6 +24,8 @@
                                      `event` (each event of the device under test), `scenario` (how far it is)
     POST /api/mixer/on/<0|1>          the simulated mixer on or off (also master/<0|1>)
     POST /api/mixer/channel/<n>/fader/<0-100>, .../fader_start/<0|1>, .../command/<start|stop>
+    GET  /api/packets?since=<n>&noisy=0|1   the packets heard on the link (the statuses and beats too unless noisy=0), from the n-th on
+    POST /api/packets/clear          forget them
     GET  /api/unit                   what is known of the device under test: the network's word and the adapters' (lamps...)
     POST /api/unit/press/<control>   press a control of the device under test through an adapter (sync, master)
     POST /api/settings/<name>/<value>  strict and refuse_db (0 or 1), model (the name the decks announce)
@@ -184,6 +186,17 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
                     self.send(200, f.read(), KINDS.get(os.path.splitext(name)[1], "application/octet-stream"))
             elif path == "/api/state":
                 self.send(200, json.dumps(world.snapshot()))
+            elif path == "/api/packets":
+                query = parse_qs(urlparse(self.path).query)
+                try:
+                    since, limit = int(query.get("since", ["0"])[0]), int(query.get("limit", ["400"])[0])
+                except ValueError:
+                    since, limit = 0, 400
+                found = [p for p in world.protocols if hasattr(p, "monitor")]
+                if not found:
+                    self.send(200, json.dumps({"packets": [], "next": 0, "counts": {}}))
+                else:
+                    self.send(200, json.dumps(found[0].monitor.since(since, query.get("noisy", ["1"])[0] != "0", max(1, min(limit, 2000)))))
             elif path == "/api/unit":
                 self.send(200, json.dumps(world.unit_state()))
             elif path == "/api/examples":
@@ -213,6 +226,11 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
                         world.changed()
                         return self.send(result[0], json.dumps(result[1] if result[0] != 200 else world.snapshot()))
                 return self.send(404, '{"error": "no mixer here"}')
+            if parts == ["api", "packets", "clear"]:
+                for protocol in world.protocols:
+                    if hasattr(protocol, "monitor"):
+                        protocol.monitor.clear()
+                return self.send(200, "{}")
             if len(parts) == 4 and parts[:3] == ["api", "unit", "press"]:
                 ok, why = world.press_unit(control=unquote(parts[3]))
                 if not ok:

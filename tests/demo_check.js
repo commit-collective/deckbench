@@ -5,7 +5,7 @@ const path = require("path");
 const vm = require("vm");
 
 const transport = {};
-const sandbox = {transport, setTimeout, clearTimeout, console, Date, JSON, Object, Math, Promise, URLSearchParams, encodeURIComponent,
+const sandbox = {transport, setTimeout, clearTimeout, setInterval, clearInterval, console, Date, JSON, Object, Math, Promise, URLSearchParams, encodeURIComponent,
   decodeURIComponent, Number, Array, String, Infinity};
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "deckbench", "ui", "demo.js"), "utf8"), sandbox);
@@ -110,6 +110,28 @@ const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
 
   await post("api/events/clear");
   check("events cleared", (await get("api/events?since=0")).length === 0);
+  // the other device on the link, and the log of the link
+  state = await get("api/state");
+  const devices = state.protocols.prolink.devices;
+  check("a device on the link", devices.length === 1 && devices[0].model === "CDJ-2000NXS2" && devices[0].number === 5 && devices[0].online, devices);
+  check("it says what it does", devices[0].status.play && devices[0].status.bpm === 124 && Array.isArray(devices[0].phase) && devices[0].phase[2] === 124, devices[0].status);
+  check("its place is a whole beat on its phase", Number.isInteger(devices[0].phase[1]) && devices[0].phase[1] + 1 === devices[0].status.track_beat, devices[0].phase);
+  await post("api/deck/4/on/1");
+  await post("api/deck/4/play/1");
+  state = await get("api/state");
+  check("a stopped deck has a place", state.decks[2].play === false && typeof state.decks[2].at === "number", state.decks[2].at);
+  check("a playing deck has none", state.decks[4].play === true && state.decks[4].at === null, state.decks[4].at);
+  await sleep(2.3);
+  let log = await get("api/packets?since=0&noisy=0&limit=100");
+  check("keep-alives of the decks and of the device", log.packets.some((p) => p.kind === "keep-alive" && p.ours) && log.packets.some((p) => p.kind === "keep-alive" && !p.ours && p.src === "192.168.1.20"), log.packets.map((p) => p.kind));
+  check("the statuses and beats are kept apart", !log.packets.some((p) => p.kind === "status" || p.kind === "beat"));
+  const all = await get("api/packets?since=0&noisy=1&limit=2000");
+  check("and are there when asked for", all.packets.some((p) => p.kind === "status") && all.packets.some((p) => p.kind === "beat") && all.counts.status > 3, all.counts);
+  check("the lines are in order, and say what they are", all.packets.every((p, i) => i === 0 || p.n > all.packets[i - 1].n) && /#5: beat \d of 4/.test(all.packets.find((p) => p.kind === "beat" && !p.ours).text));
+  const later = await get("api/packets?since=" + all.next + "&noisy=1");
+  check("from where it was", later.packets.every((p) => p.n > all.next));
+  await post("api/packets/clear");
+  check("cleared", (await get("api/packets?since=0&noisy=1")).packets.length === 0);
   console.log(failures ? failures + " failed" : "ok");
   process.exit(failures ? 1 : 0);
 })();
