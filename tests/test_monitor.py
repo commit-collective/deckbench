@@ -295,6 +295,21 @@ class Aligned(unittest.TestCase):
         d = deck.position(at) - (master_position + (time.time() - at) * 0)
         return (d + 2) % 4 - 2
 
+    def goes_to(self, deck, master, seconds=4.0):
+        """Whether the deck gets onto the master's beat within `seconds`. The master tells its beat again every half second until it
+        does: the status that says who the master is comes on a port of its own, and on a busy machine the beat can be taken before
+        it is known, and is then no master's beat. (Real players tell it at every beat.)"""
+        last = [0.0]
+
+        def there():
+            now = time.time()
+            if now - last[0] > 0.6:
+                last[0] = now
+                self.tell(round(master.position(now)))
+            now = time.time()
+            return abs(((deck.position(now) - master.position(now)) + 2) % 4 - 2) < 0.3
+        return wait(there, seconds)
+
     def test_a_synced_deck_goes_to_the_masters_beat(self):
         master = self.other_world.decks[5]
         master.enabled, master.playing, master.master, master.sync, master.base_bpm = True, True, True, False, 120.0
@@ -303,18 +318,13 @@ class Aligned(unittest.TestCase):
         self.world.set_play(deck, True)
         self.world.set_sync(deck, True)
         deck.base_bpm = 120.0
-        deck.anchor_pos, deck.anchor_t = 0.4, time.time()                  # 0.4 beats into its bar, the master on a beat
-        self.tell(2)
-        t = time.time()
-        # (the beat arrives some time after it was sent, and a busy machine can make that 0.1 s, which is 0.2 of a beat: the deck started
-        # 1.6 beats away, so within 0.3 of a beat is still the master's beat and not a tempo that was only followed)
-        found = wait(lambda: abs(((deck.position(time.time()) - 2.0 - (time.time() - t) * 2.0) + 2) % 4 - 2) < 0.3)
-        self.assertTrue(found, "the deck did not go to the master's beat: %.3f" % deck.position(time.time()))
+        deck.anchor_pos, deck.anchor_t = 0.4, time.time()                  # 0.4 beats into its bar
+        master.anchor_pos, master.anchor_t = 2.0, time.time()              # the master on a beat, 1.6 away: within 0.3 is its beat, not only its tempo
+        found = self.goes_to(deck, master)
+        self.assertTrue(found, "the deck did not go to the master's beat: %.3f, the master is at %.3f" % (deck.position(time.time()), master.position(time.time())))
         # and goes on being there, a beat at a time (the master at 120 BPM: 0.5 s a beat)
-        self.tell(3)
-        t = time.time()
-        found = wait(lambda: abs(((deck.position(time.time()) - 3.0 - (time.time() - t) * 2.0) + 2) % 4 - 2) < 0.3)
-        self.assertTrue(found)
+        master.anchor_pos, master.anchor_t = 3.0, time.time()
+        self.assertTrue(self.goes_to(deck, master))
 
     def test_not_a_deck_that_loops_nor_one_that_is_not_synced(self):
         deck3 = self.world.decks[3]
