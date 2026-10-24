@@ -4,68 +4,86 @@ Newest first. A release is a tagged commit.
 
 ## v0.2.0
 
-Tried on Ubuntu and Windows, with Python 3.8 and 3.12: the GitHub Action passes on all four.
+Tested on Ubuntu and Windows, with Python 3.8 and 3.12. The GitHub Action passes on all four.
 
-- The page has the look of commitcollective.cc: black and white, thin lines, square corners, Space Grotesk and JetBrains Mono. A
-  control that is on is filled. Colour is kept for what it means: green for on and on air, blue for sync, amber for the master,
-  purple for a loop, red for beat 1 and for a fault.
-- Two looks, each in dark and light, chosen in Settings: Commit (the default) and Classic, the first look of the page.
-  A look is a block of tokens at the top of `app.css`.
-- The mixer's channel rows no longer share a CSS class with the beat strips.
-- The bench hears the link (`protocols/monitor.py`). Other players and mixers on the network get a read-only card with what they
-  do and their model, and a log in the Network tab shows the Pro DJ Link packets as they come (`/api/packets`). The bench's own
-  packets, statuses and beats are options. See `docs/link.md`.
-- Each deck and each device has a scrolling strip with a grid of beats and bars, and a loop shows where it goes back.
-- The page is served by its own Cloudflare worker (`wrangler.toml`, `docs/hosting.md`), so a change to it needs no push to the website.
-- The tempo slider changes the tempo while it is dragged, not on release.
-- A synced deck snaps to the master's beat grid, not only to its tempo.
-- Each deck has its own sound, and other devices on the link can be heard too. The settings choose which.
-- The page can play the decks' beats (the Sound button): a kick, a snare and a hat for each deck that plays, in time with it, made with Web
-  Audio. With a mixer on only the decks that are on air are heard. The demo has a deck 1 too.
-- The API refuses a request from a web page of another origin (any site could drive a bench on localhost), unless `--allow-origin` names it,
-  and answers its CORS preflight, private network access included. `--token` makes the API want a token.
-- The page works hosted on another site and from a phone: `transport.js` takes the address and token of a bench (a dialog asks for
-  them), and `?demo` runs a bench made of JavaScript in the page (`demo.js`), tested in node. `docs/phone.md`,
-  `tools/copy_to_site.py`.
-- Releases: a tag makes a GitHub release with the changelog's entry (`.github/workflows/release.yml`, which can be run by hand for a tag
-  that has none). The test workflow says which test failed, and runs on Ubuntu and Windows.
+### Listen to the network
+
+- The bench now hears other players and mixers on the link and shows each as a read-only card with its model and what it does.
+- The Network tab has a log of the Pro DJ Link packets as they come (`/api/packets`). The bench's own packets, statuses and beats are options. See `docs/link.md`.
+- A synced deck now snaps to the master's beat grid, not only to its tempo.
+
+### The page
+
+- New look, the same as commitcollective.cc: black and white, thin lines, square corners. Colour only carries meaning: green for on and on air, blue for sync, amber for the master, purple for a loop, red for beat 1 and for a fault.
+- Two looks, each in dark and light, chosen in Settings: Commit (the default) and Classic, the first look.
+- Each deck and device has a scrolling strip with a grid of beats and bars. A loop shows where it goes back.
+- The tempo slider changes the tempo while you drag it, not on release.
+- The Sound button plays each playing deck's beat (kick, snare, hat). With a mixer, only decks on air are heard. Settings choose which decks and devices you hear.
+- The page can be hosted on another site and used from a phone. See `docs/phone.md`.
+- `?demo` runs a bench made of JavaScript inside the page, with no server.
+
+### Safety
+
+- The API now refuses requests from web pages of another origin, since any site could otherwise drive a bench on localhost. `--allow-origin` lets one in.
+- `--token` makes the API ask for a token.
+
+### Releases and hosting
+
+- A tag now makes a GitHub release with the changelog entry as its notes.
+- The tests run on Ubuntu and Windows, and the workflow says which test failed.
+- The page is served by its own Cloudflare worker, so changing it needs no push to the website. See `docs/hosting.md`.
+
+### Fixes
+
+- UDP sockets are shared with SO_REUSEPORT on macOS.
+- The page's server no longer does a reverse lookup at start, which held it up for many seconds on a macOS runner.
 - The WSL test of `Bench` only runs where a WSL distribution starts.
-- UDP sockets are shared with SO_REUSEPORT on macOS, and the page's server no longer does a reverse lookup when it starts, which held it
-  up for many seconds on a macOS runner.
+- The mixer's channel rows no longer share a CSS class with the beat strips.
 
 ## v0.1.0
 
 The first version.
 
-- Pro DJ Link decks: discovery, status, beats, tempo master, sync and hand-off, loops, and the database server for track titles.
-- A page and an HTTP API to drive them, a command line, scenarios with expectations, events of what the device under test did,
-  network faults, strict decks that behave as a CDJ-2000NXS2 does, and the decks' sound.
-- A new page: a card for each deck (switches, beat squares, tempo display and slider, loops, cable, a track from any deck's database),
-  and tabs for events (filter, pause, export), scenarios (editor, examples, saved ones, progress), the network and the settings.
-  It follows a server-sent event stream and works in light and dark. The page is files (`deckbench/ui`), not a string in Python.
-- Scenarios can expect things of the device under test (`expect_unit`: its master role, sync, tempo, and the lamps an adapter
-  reads) and of the decks (`expect_deck`), press its controls (`unit`), act only `when` it is in a given state, and say what
-  they `require`. A scenario that needs a unit or an adapter that is not there is skipped, not failed. `--scenario` takes
-  several files or a folder and ends with a summary. Matchers: `near`, `min`, `max`, `in`, `not`.
-- Adapters: `--adapter djs1000-emu` reads the DJS-1000 emulator's lamps and presses its SYNC and MASTER. `GET /api/unit`,
-  `POST /api/unit/press/<control>`, and the Network tab shows the unit's state with buttons.
-- A library of scenarios for a unit (`deckbench/examples/unit`): it follows a master deck and its tempo, the master role passes
-  between a deck and the unit, and it keeps following after a cable pull and with 30 % of the packets lost.
-- More of the unit is heard: synced, playing, on air and the beat, and `unit_sync` and `unit_play` events.
-- A simulated DJM mixer (`--mixer`, the Mixer tab, `/api/mixer`, the `mixer` scenario step): it announces itself as device 33,
-  reports which channels are on the air and starts and stops players with fader start. The decks' on-air flag follows any mixer.
-  `--claim` makes a deck do what a player does when it comes online (hellos, the three claim stages), and a deck that is on defends
-  its number against another device that claims it. The keep-alive counts the devices on the network.
-- `--profile` (and a Settings choice): the decks stand in for a CDJ-2000 (nexus), CDJ-2000NXS2, XDJ-1000MK2 or CDJ-3000, with its name,
-  the length of its statuses and its nexus byte. The DJS-1000 emulator follows a master under each of them.
-- Library scenario `unit/40-on-air.json`: the unit says it is on air when the mixer's channel 1 is open. Example 04 shows the
-  mixer starting and stopping the decks.
-- Settings that can be changed while it runs: strict decks, database refusal and the model name (`/api/settings`).
-- A track can come from another deck's database and slot (`/api/deck/<n>/load/<id>?source=&slot=`). A title with a percent sign
-  is no longer decoded twice.
-- Example scenarios in `deckbench/examples`.
+### Simulated decks
+
+- Pro DJ Link decks with discovery, status, beats, tempo master, sync and hand-off, loops, and the database server for track titles.
+- `--profile` makes the decks stand in for a CDJ-2000 (nexus), CDJ-2000NXS2, XDJ-1000MK2 or CDJ-3000, with its name, status length and nexus byte.
+- A deck can load a track from another deck's database and slot.
+- `--claim` makes a deck do what a real player does when it comes online. A deck that is on defends its number against another device.
+- Strict decks behave as a CDJ-2000NXS2 does.
+- A simulated DJM mixer (`--mixer`) announces itself as device 33, reports which channels are on air, and starts and stops players with fader start.
+- Each deck has sound.
+- Network faults can be simulated, for example 30 % packet loss.
+
+### The page and the API
+
+- A card for each deck: switches, beat squares, tempo display and slider, loops, cable, and a track from any deck's database.
+- Tabs for events (filter, pause, export), scenarios (editor, examples, saved), the network and the settings. Works in light and dark.
+- An HTTP API and a command line drive the same things.
+- Some settings change while it runs (`/api/settings`): strict decks, database refusal and the model name.
+
+### Scenarios
+
+- Scenarios script the decks and check what the device under test did.
+- `expect_unit` checks its master role, sync, tempo and lamps. `expect_deck` checks the decks.
+- `unit` presses its controls, `when` acts only in a given state, and `require` says what the scenario needs. A scenario that needs a unit or adapter that is missing is skipped, not failed.
+- Matchers: `near`, `min`, `max`, `in`, `not`.
+- `--scenario` takes several files or a folder and ends with a summary.
+- Examples are in `deckbench/examples`.
+
+### Testing a DJS-1000
+
+- `--adapter djs1000-emu` reads the emulator's lamps and presses its SYNC and MASTER. The Network tab shows the unit's state with buttons.
+- A library of scenarios in `deckbench/examples/unit`: the unit follows a master deck and its tempo, the master role passes between deck and unit, and it keeps following after a cable pull and with 30 % packet loss. `40-on-air.json` checks that the unit says it is on air when the mixer's channel 1 is open.
+- More of the unit is heard: synced, playing, on air and the beat, with `unit_sync` and `unit_play` events.
+
+### Running it
+
 - `--port-shift` moves every port of the decks. The bench names the port it cannot have when it starts.
-- `--ready-file`, `GET /api/ready` and `deckbench.testing.Bench` to start a bench from a test without guessing a delay.
-- Runs on Linux and Windows, Python 3.8 and later: the GitHub Action passes on Ubuntu and on Windows with 3.8 and 3.12. The tests use ports
-  of their own, so a running bench or rekordbox does not matter. The DJS-1000 emulator scenarios ran in WSL2.
-  On macOS the loopback carries no broadcasts, so decks on 127.0.0.n are not heard and 27 of the tests fail: it is not tested. Use `--bind` there.
+- `--ready-file`, `GET /api/ready` and `deckbench.testing.Bench` start a bench from a test without guessing a delay.
+- Runs on Linux and Windows with Python 3.8 and later. The tests use ports of their own, so a running bench or rekordbox does not matter.
+- Not supported on macOS: the loopback carries no broadcasts, so decks on 127.0.0.n are not heard. Use `--bind` there.
+
+### Fixes
+
+- A title with a percent sign is no longer decoded twice.
