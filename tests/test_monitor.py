@@ -163,7 +163,9 @@ class Heard(unittest.TestCase):
             mixer.send(startup.keepalive(b"DJM-900NXS2", 33, "127.0.0.8", bytes(6), 4, False, kind=startup.MIXER), self.ports.announce)
             mixer.send(mixer_module.on_air_packet(b"DJM-900NXS2", 33, {1: True, 2: False, 3: True, 4: False}), self.ports.beat)
             mixer.send(mixer_module.fader_start_packet(b"DJM-900NXS2", 33, {2: "start", 3: "stop"}), self.ports.beat)
-            found = wait(lambda: (self.device("127.0.0.8") or {}).get("air") and (self.device("127.0.0.8") or {}).get("fader") and self.device("127.0.0.8"))
+            # what it says comes on another port than who it is (the keep-alive), so the two can arrive in either order: wait for all of it
+            found = wait(lambda: (self.device("127.0.0.8") or {}).get("air") and (self.device("127.0.0.8") or {}).get("fader") and
+                         (self.device("127.0.0.8") or {}).get("peers") and self.device("127.0.0.8"))
             self.assertTrue(found)
             self.assertEqual((found["kind"], found["number"], found["name"], found["peers"]), ("mixer", 33, "DJM-900NXS2", 4))
             self.assertEqual(found["air"], {"1": True, "2": False, "3": True, "4": False} if False else {1: True, 2: False, 3: True, 4: False})
@@ -176,7 +178,8 @@ class Heard(unittest.TestCase):
         try:
             unit.announce()
             unit.status(master=True, playing=True, bpm=120.0)
-            found = wait(lambda: self.device("127.0.0.1") and self.device("127.0.0.1")["status"] and self.device("127.0.0.1"))
+            found = wait(lambda: self.device("127.0.0.1") and self.device("127.0.0.1")["status"] and self.device("127.0.0.1")["name"] == "DJS-1000" and
+                         self.device("127.0.0.1"))
             self.assertTrue(found)
             self.assertTrue(found["unit"])
             self.assertEqual((found["name"], found["number"], found["status"]["master"]), ("DJS-1000", 1, True))
@@ -202,17 +205,22 @@ class Heard(unittest.TestCase):
         self.assertGreater(self.monitor.counts["status"], 0)
 
     def test_09_a_packet_that_cannot_be_read_does_not_stop_it(self):
+        first = None
         for kind_port, t, size in ((self.ports.update, 0x0A, 0x40), (self.ports.beat, 0x28, 0x30), (self.ports.announce, 0x06, 0x28), (self.ports.beat, 0x03, 0x2D),
                                    (self.ports.beat, 0x02, 0x24)):
             p = bytearray(size)
             p[:10], p[0x0A] = startup.MAGIC, t
+            first = first or (bytes(p), kind_port)
             self.player.send(bytes(p), kind_port)
         self.player.send(b"not a packet at all", self.ports.update)
         self.player.send(b"", self.ports.beat)
-        self.monitor.feed(b"\x51" * 5, "127.0.0.77", self.ports.update)        # and straight to it
-        found = wait(lambda: any(p["src"] == "127.0.0.77" for p in self.monitor.since(0)["packets"]))
-        self.assertTrue(found)
-        self.assertTrue(any(p["text"].startswith("type 0x0a, 64 bytes") for p in self.monitor.since(0)["packets"]))
+        self.monitor.feed(b"\x51" * 5, "127.0.0.77", self.ports.update)        # and straight to it: this one is there at once, the others come by the network
+        self.assertTrue(any(p["src"] == "127.0.0.77" for p in self.monitor.since(0)["packets"]))
+
+        def heard():                                                     # the listener may be late with the first: say it again until it hears
+            self.player.send(*first)
+            return any(p["text"].startswith("type 0x0a, 64 bytes") for p in self.monitor.since(0)["packets"])
+        self.assertTrue(wait(heard))
         self.assertTrue(self.device(), "the device was lost")
 
 
