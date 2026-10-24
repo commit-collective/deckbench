@@ -2,7 +2,9 @@
 
 Newest first. A release is a tagged commit.
 
-## Not yet released
+## v0.2.0
+
+Tried on Ubuntu and Windows, with Python 3.8 and 3.12: the GitHub Action passes on all four.
 
 - The page has the look of commitcollective.cc: black and white, thin lines, square corners, Space Grotesk and JetBrains Mono. A
   control that is on is filled. Colour is kept for what it means: green for on and on air, blue for sync, amber for the master,
@@ -20,7 +22,6 @@ Newest first. A release is a tagged commit.
 - Each deck has its own sound, and other devices on the link can be heard too. The settings choose which.
 - The page can play the decks' beats (the Sound button): a kick, a snare and a hat for each deck that plays, in time with it, made with Web
   Audio. With a mixer on only the decks that are on air are heard. The demo has a deck 1 too.
-
 - The API refuses a request from a web page of another origin (any site could drive a bench on localhost), unless `--allow-origin` names it,
   and answers its CORS preflight, private network access included. `--token` makes the API want a token.
 - The page works hosted on another site and from a phone: `transport.js` takes the address and token of a bench (a dialog asks for
