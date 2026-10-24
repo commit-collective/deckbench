@@ -97,7 +97,8 @@ class Heard(unittest.TestCase):
             self.player.send(link.keepalive(), self.ports.announce)
             self.player.send(link.status(), self.ports.update)
             time.sleep(0.1)
-            return (self.device() or {}).get("status") and self.device()
+            # the keep-alive (who it is) and the status (what it does) come on two ports, and either can be taken first: wait for both
+            return (self.device() or {}).get("status") and (self.device() or {}).get("mac") and self.device()
         found = wait(heard, 8.0)
         self.assertTrue(found, "the device was not found")
         self.assertEqual((found["number"], found["model"], found["name"], found["kind"], found["online"]),
