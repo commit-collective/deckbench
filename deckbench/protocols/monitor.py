@@ -59,6 +59,7 @@ class Monitor:
         self.devices = {}                       # by address
         self.counts = collections.Counter()
         self.recent = {}                        # (source, port, bytes): when it was last heard
+        self.busy = 0                           # packets being read now, by whichever thread: 0 when everything heard is taken in
 
     # -- who is ours --
     def own_addresses(self):
@@ -79,6 +80,8 @@ class Monitor:
     def feed(self, data, source, port, to="*"):
         """A datagram heard (or, for one the bench sends to a single device, sent) from `source`, on `port`. `to` is the address
         it was heard at ("*": any). Never raises."""
+        with self.lock:
+            self.busy += 1
         try:
             self._feed(bytes(data), source, port, to)
         except Exception as e:                    # an odd packet is not worth the sniffer thread
@@ -86,6 +89,9 @@ class Monitor:
                 self.complained = True
                 from ..core import log
                 log("the monitor could not read a packet (%s): %s" % (type(e).__name__, e))
+        finally:
+            with self.lock:
+                self.busy -= 1
 
     def _feed(self, data, source, port, to):
         ports = self.net.ports

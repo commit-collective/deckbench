@@ -343,6 +343,7 @@ class LinkDeck:
         s.bind((self.address, self.ports.beat))
         out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         out.bind((self.address, 0))
+        self.net.listening()
         deck, world = self.deck, self.net.world
         while True:
             data, addr = s.recvfrom(2048)
@@ -422,6 +423,7 @@ class LinkDeck:
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         srv.bind((self.address, self.ports.query))
         srv.listen(5)
+        self.net.listening()
         while True:
             conn, _ = srv.accept()
             if not self.deck.enabled or self.deck.unplugged:
@@ -441,6 +443,7 @@ class LinkDeck:
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         srv.bind((self.address, self.ports.db))
         srv.listen(5)
+        self.net.listening()
         while True:
             conn, _ = srv.accept()
             if not self.deck.enabled or self.deck.unplugged:
@@ -543,6 +546,11 @@ class Prolink(Protocol):
         self.world = world
         self.ports = ports
         self.claim = claim
+        # Set when every socket that listens is bound (see listening()): a packet sent before is not lost for want of a listener.
+        self.ready = threading.Event()
+        self._bound = 0
+        self._expected = 0
+        self._bound_lock = threading.Lock()
         self.monitor = Monitor(self)         # a log of the packets heard, and the devices on the link
         self.defended = {}                  # (claimer's address, number): when it was last told that the number is in use
         self.mixer = LinkMixer(self, mixer_name if isinstance(mixer_name, bytes) else mixer_name.encode(), 33,
@@ -594,8 +602,17 @@ class Prolink(Protocol):
             finally:
                 s.close()
 
+    def listening(self):
+        """A thread of the bench has bound its socket and is about to listen on it. `ready` is set when all have."""
+        with self._bound_lock:
+            self._bound += 1
+            if self._bound >= self._expected:
+                self.ready.set()
+
     def start(self):
         self.check_ports()
+        # the listeners: each deck's UDP socket for what is sent to it and its two TCP servers, the sniffer and the fader listener
+        self._expected = 3 * len(self.decks) + 2
         for n, link in self.decks.items():
             deck = link.deck
             for target in (link.announce, link.beats, link.control, link.serve_port, link.serve_db):
@@ -685,6 +702,7 @@ class Prolink(Protocol):
         of the players 1 to 4, 0 start, 1 stop, 2 leave it."""
         s = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
         s.bind(("", self.ports.beat))
+        self.listening()
         while True:
             data, addr = s.recvfrom(2048)
             self.monitor.feed(data, addr[0], self.ports.beat)
@@ -930,6 +948,7 @@ class Prolink(Protocol):
             s.bind((link.address, self.ports.update))
             s.settimeout(0.5)
             socks.append((s, self.ports.update))
+        self.listening()
         world, unit = self.world, self.unit
         while True:
             ready, _, _ = select.select([s for s, _ in socks], [], [], 0.5)

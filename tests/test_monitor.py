@@ -7,6 +7,7 @@ import time
 import unittest
 import urllib.request
 
+from _flush import flush
 from _ports import fresh
 from deckbench.core import Deck, World
 from deckbench.net import share
@@ -73,6 +74,8 @@ class Heard(unittest.TestCase):
         cls.ports = fresh()
         cls.net = Prolink(cls.world, ports=cls.ports)
         cls.net.start()
+        if not cls.net.ready.wait(10):
+            raise RuntimeError("the bench's sockets did not come up")
         cls.monitor = cls.net.monitor
         # a CDJ of its own: its packets are built by a bench that is not started, sent from another address
         cls.other_world = world_of(5)
@@ -88,19 +91,19 @@ class Heard(unittest.TestCase):
     def device(self, ip="127.0.0.5"):
         return next((d for d in self.monitor.snapshot() if d["ip"] == ip), None)
 
+    def sent(self, *ports, sender=None):
+        """Everything sent to these ports so far is taken in by the monitor (see _flush.py): what a test looks at next is all there."""
+        self.assertTrue(flush(self.monitor, sender or self.player, ports), "the monitor did not take in what was sent")
+
     def test_01_a_player_that_is_heard_is_a_device(self):
         deck = self.other_world.decks[5]
         deck.enabled = True
         link = self.other.decks[5]
-
-        def heard():                                             # the listener may not be bound yet: say it again until it hears
-            self.player.send(link.keepalive(), self.ports.announce)
-            self.player.send(link.status(), self.ports.update)
-            time.sleep(0.1)
-            # the keep-alive (who it is) and the status (what it does) come on two ports, and either can be taken first: wait for both
-            return (self.device() or {}).get("status") and (self.device() or {}).get("mac") and self.device()
-        found = wait(heard, 8.0)
-        self.assertTrue(found, "the device was not found")
+        self.player.send(link.keepalive(), self.ports.announce)
+        self.player.send(link.status(), self.ports.update)
+        self.sent(self.ports.announce, self.ports.update)
+        found = self.device()
+        self.assertTrue(found and found["status"], "the device was not found")
         self.assertEqual((found["number"], found["model"], found["name"], found["kind"], found["online"]),
                          (5, "CDJ-2000NXS2", "CDJ-2000NXS2", "player", True))
         self.assertEqual((found["mac"], found["peers"]), ("02:fa:4e:de:c0:05", 1))
@@ -113,7 +116,8 @@ class Heard(unittest.TestCase):
         deck.playing, deck.master, deck.sync, deck.base_bpm, deck.anchor_pos, deck.anchor_t = True, True, True, 124.0, 6.0, time.time()
         link = self.other.decks[5]
         self.player.send(link.status(), self.ports.update)
-        found = wait(lambda: (self.device() or {}).get("status", {}) and self.device()["status"]["play"] and self.device())
+        self.sent(self.ports.update)
+        found = self.device()
         st = found["status"]
         self.assertEqual((st["play"], st["master"], st["sync"], st["on_air"], st["state"]), (True, True, True, True, "playing"))
         self.assertEqual((st["bpm"], st["pitch"]), (124.0, 0.0))
@@ -126,26 +130,30 @@ class Heard(unittest.TestCase):
         deck = self.other_world.decks[5]
         deck.anchor_pos, deck.anchor_t = 6.0, time.time()
         self.player.send(link.status(), self.ports.update)
-        wait(lambda: (self.device() or {}).get("status") and self.device()["status"]["track_beat"] == 7)
+        self.sent(self.ports.update)
+        self.assertEqual(self.device()["status"]["track_beat"], 7)
         self.player.send(link.beat(6.0), self.ports.beat)        # beat 3 of its bar, the 7th of its track
-        found = wait(lambda: (self.device() or {}).get("phase") and self.device())
+        self.sent(self.ports.beat)
+        found = self.device()
         t, pos, bpm = found["phase"]
         self.assertEqual((pos, bpm), (6.0, 124.0))
         self.assertLess(abs(t - time.time()), 2.0)
         # a loop sends the track's count back, and the place with it
         deck.anchor_pos, deck.anchor_t = 4.0, time.time()
         self.player.send(link.status(), self.ports.update)
-        wait(lambda: (self.device() or {}).get("status") and self.device()["status"]["track_beat"] == 5)
+        self.sent(self.ports.update)
+        self.assertEqual(self.device()["status"]["track_beat"], 5)
         self.player.send(link.beat(4.0), self.ports.beat)
-        found = wait(lambda: self.device()["phase"] and self.device()["phase"][1] == 4.0 and self.device())
-        self.assertTrue(found, "the phase did not follow the track beat")
+        self.sent(self.ports.beat)
+        self.assertEqual(self.device()["phase"][1], 4.0, "the phase did not follow the track beat")
 
     def test_04_a_player_that_stops_has_a_place_and_no_phase(self):
         deck = self.other_world.decks[5]
         deck.playing, deck.master = False, False
         deck.anchor_pos = 9.0
         self.player.send(self.other.decks[5].status(), self.ports.update)
-        found = wait(lambda: (self.device() or {}).get("at") is not None and self.device())
+        self.sent(self.ports.update)
+        found = self.device()
         self.assertEqual(found["at"], 9.0)
         self.assertIsNone(found["phase"])
         self.assertEqual(found["status"]["state"], "paused")
@@ -164,9 +172,8 @@ class Heard(unittest.TestCase):
             mixer.send(startup.keepalive(b"DJM-900NXS2", 33, "127.0.0.8", bytes(6), 4, False, kind=startup.MIXER), self.ports.announce)
             mixer.send(mixer_module.on_air_packet(b"DJM-900NXS2", 33, {1: True, 2: False, 3: True, 4: False}), self.ports.beat)
             mixer.send(mixer_module.fader_start_packet(b"DJM-900NXS2", 33, {2: "start", 3: "stop"}), self.ports.beat)
-            # what it says comes on another port than who it is (the keep-alive), so the two can arrive in either order: wait for all of it
-            found = wait(lambda: (self.device("127.0.0.8") or {}).get("air") and (self.device("127.0.0.8") or {}).get("fader") and
-                         (self.device("127.0.0.8") or {}).get("peers") and self.device("127.0.0.8"))
+            self.sent(self.ports.announce, self.ports.beat, sender=mixer)
+            found = self.device("127.0.0.8")
             self.assertTrue(found)
             self.assertEqual((found["kind"], found["number"], found["name"], found["peers"]), ("mixer", 33, "DJM-900NXS2", 4))
             self.assertEqual(found["air"], {"1": True, "2": False, "3": True, "4": False} if False else {1: True, 2: False, 3: True, 4: False})
@@ -179,9 +186,9 @@ class Heard(unittest.TestCase):
         try:
             unit.announce()
             unit.status(master=True, playing=True, bpm=120.0)
-            found = wait(lambda: self.device("127.0.0.1") and self.device("127.0.0.1")["status"] and self.device("127.0.0.1")["name"] == "DJS-1000" and
-                         self.device("127.0.0.1"))
-            self.assertTrue(found)
+            self.sent(self.ports.announce, self.ports.update)
+            found = self.device("127.0.0.1")
+            self.assertTrue(found and found["status"])
             self.assertTrue(found["unit"])
             self.assertEqual((found["name"], found["number"], found["status"]["master"]), ("DJS-1000", 1, True))
         finally:
@@ -206,22 +213,17 @@ class Heard(unittest.TestCase):
         self.assertGreater(self.monitor.counts["status"], 0)
 
     def test_09_a_packet_that_cannot_be_read_does_not_stop_it(self):
-        first = None
         for kind_port, t, size in ((self.ports.update, 0x0A, 0x40), (self.ports.beat, 0x28, 0x30), (self.ports.announce, 0x06, 0x28), (self.ports.beat, 0x03, 0x2D),
                                    (self.ports.beat, 0x02, 0x24)):
             p = bytearray(size)
             p[:10], p[0x0A] = startup.MAGIC, t
-            first = first or (bytes(p), kind_port)
             self.player.send(bytes(p), kind_port)
         self.player.send(b"not a packet at all", self.ports.update)
         self.player.send(b"", self.ports.beat)
-        self.monitor.feed(b"\x51" * 5, "127.0.0.77", self.ports.update)        # and straight to it: this one is there at once, the others come by the network
+        self.monitor.feed(b"\x51" * 5, "127.0.0.77", self.ports.update)        # and straight to it
+        self.sent(self.ports.update, self.ports.beat, self.ports.announce)
         self.assertTrue(any(p["src"] == "127.0.0.77" for p in self.monitor.since(0)["packets"]))
-
-        def heard():                                                     # the listener may be late with the first: say it again until it hears
-            self.player.send(*first)
-            return any(p["text"].startswith("type 0x0a, 64 bytes") for p in self.monitor.since(0)["packets"])
-        self.assertTrue(wait(heard))
+        self.assertTrue(any(p["text"].startswith("type 0x0a, 64 bytes") for p in self.monitor.since(0)["packets"]))
         self.assertTrue(self.device(), "the device was lost")
 
 
@@ -272,6 +274,8 @@ class Aligned(unittest.TestCase):
         cls.ports = fresh()
         cls.net = Prolink(cls.world, ports=cls.ports)
         cls.net.start()
+        if not cls.net.ready.wait(10):
+            raise RuntimeError("the bench's sockets did not come up")
         cls.other_world = world_of(5)
         cls.other = Prolink(cls.other_world, ports=cls.ports, profile="cdj-2000nxs2")
         cls.player = Sender(cls.ports, "127.0.0.5")
@@ -288,25 +292,20 @@ class Aligned(unittest.TestCase):
         master.anchor_pos, master.anchor_t = float(position), time.time()
         link = self.other.decks[5]
         self.player.send(link.status(), self.ports.update)
-        time.sleep(0.1)
+        self.assertTrue(flush(self.net.monitor, self.player, (self.ports.update,)))       # who the master is is known before its beat
         self.player.send(link.beat(float(position)), self.ports.beat)
+        self.assertTrue(flush(self.net.monitor, self.player, (self.ports.beat,)))
 
     def off_by(self, deck, master_position, at):
         """How far the deck is from the master's bar, in beats, whichever bar: -2 to 2."""
         d = deck.position(at) - (master_position + (time.time() - at) * 0)
         return (d + 2) % 4 - 2
 
-    def goes_to(self, deck, master, seconds=4.0):
-        """Whether the deck gets onto the master's beat within `seconds`. The master tells its beat again every half second until it
-        does: the status that says who the master is comes on a port of its own, and on a busy machine the beat can be taken before
-        it is known, and is then no master's beat. (Real players tell it at every beat.)"""
-        last = [0.0]
+    def goes_to(self, deck, master, seconds=2.0):
+        """Whether the deck is on the master's beat once the master has told its beat (tell() waits until it has been taken in)."""
+        self.tell(round(master.position(time.time())))
 
         def there():
-            now = time.time()
-            if now - last[0] > 0.6:
-                last[0] = now
-                self.tell(round(master.position(now)))
             now = time.time()
             return abs(((deck.position(now) - master.position(now)) + 2) % 4 - 2) < 0.3
         return wait(there, seconds)
