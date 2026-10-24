@@ -609,7 +609,9 @@ class Prolink(Protocol):
             if self._bound >= self._expected:
                 self.ready.set()
 
-    def start(self):
+    def start(self, wait=5.0):
+        """Starts the threads, and waits (up to `wait` seconds) until every socket that listens is bound: what is sent from the moment
+        this returns is heard."""
         self.check_ports()
         # the listeners: each deck's UDP socket for what is sent to it and its two TCP servers, the sniffer and the fader listener
         self._expected = 3 * len(self.decks) + 2
@@ -622,6 +624,8 @@ class Prolink(Protocol):
         threading.Thread(target=self.sniff, daemon=True).start()
         threading.Thread(target=self.faders, daemon=True).start()
         threading.Thread(target=self.mixer.run, daemon=True).start()
+        if wait:
+            self.ready.wait(wait)
 
     def apply_profile(self, name, rename=True, resize=True, **_):
         """Stands in for another model of player (profiles.py): its name, the length of its statuses, its nexus byte and

@@ -178,7 +178,6 @@ def main(argv=None):
         link.start()
     except PortError as e:
         ap.exit(2, "deckbench: %s\n" % e)
-    link.ready.wait(5.0)                        # every socket that listens is bound: what is sent from now on is heard
     if a.mixer and not link.mixer.set_on(True):
         ap.error("--mixer: the mixer cannot use %s" % link.mixer.address)
     world.info["strict"] = a.strict
