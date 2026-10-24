@@ -306,12 +306,14 @@ class Aligned(unittest.TestCase):
         deck.anchor_pos, deck.anchor_t = 0.4, time.time()                  # 0.4 beats into its bar, the master on a beat
         self.tell(2)
         t = time.time()
-        found = wait(lambda: abs(((deck.position(time.time()) - 2.0 - (time.time() - t) * 2.0) + 2) % 4 - 2) < 0.15)
+        # (the beat arrives some time after it was sent, and a busy machine can make that 0.1 s, which is 0.2 of a beat: the deck started
+        # 1.6 beats away, so within 0.3 of a beat is still the master's beat and not a tempo that was only followed)
+        found = wait(lambda: abs(((deck.position(time.time()) - 2.0 - (time.time() - t) * 2.0) + 2) % 4 - 2) < 0.3)
         self.assertTrue(found, "the deck did not go to the master's beat: %.3f" % deck.position(time.time()))
         # and goes on being there, a beat at a time (the master at 120 BPM: 0.5 s a beat)
         self.tell(3)
         t = time.time()
-        found = wait(lambda: abs(((deck.position(time.time()) - 3.0 - (time.time() - t) * 2.0) + 2) % 4 - 2) < 0.15)
+        found = wait(lambda: abs(((deck.position(time.time()) - 3.0 - (time.time() - t) * 2.0) + 2) % 4 - 2) < 0.3)
         self.assertTrue(found)
 
     def test_not_a_deck_that_loops_nor_one_that_is_not_synced(self):

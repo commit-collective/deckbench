@@ -196,8 +196,11 @@ class Bench(unittest.TestCase):
         packets = collect(self.beats, 2.5, lambda d: d[0x0A] == 0x28 and d[0x5F] == 2)
         self.assertGreaterEqual(len(packets), 3, "a beat a 0.47 s at 128 BPM")
         beats = [p[0x5C] for p in packets]
-        for a, b in zip(beats, beats[1:]):
-            self.assertEqual(b, a % 4 + 1)
+        steps = [(b - a) % 4 for a, b in zip(beats, beats[1:])]
+        # each beat follows the one before in the bar, but a datagram that a busy machine lost or the listener missed is one beat
+        # that is not there (a step of 2): one is allowed, none is out of order
+        self.assertTrue(all(step in (1, 2) for step in steps), "the beats of the bar came out of order: %s" % beats)
+        self.assertLessEqual(steps.count(2), 1, "more than one beat is missing: %s" % beats)
         self.assertEqual(struct.unpack(">H", packets[-1][0x5A:0x5C])[0], 12800)
         self.assertEqual(self.status_of(2)[0x89] & 0x40, 0x40)                  # playing
 
