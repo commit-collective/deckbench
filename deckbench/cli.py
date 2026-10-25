@@ -78,6 +78,11 @@ def main(argv=None):
                     help="serve the decks' sound (a drum loop in time with each playing deck) on this TCP port, as raw "
                          "stereo 16-bit 44.1 kHz samples in real time (default 0: none; 7320 is the emulator's)")
     ap.add_argument("--audio-decks", metavar="N,N,...", help="the decks that are heard (default all)")
+    ap.add_argument("--track", action="append", default=[], metavar="DECK=FILE@BPM[@START]",
+                    help="a deck plays this sound file instead of its drum loop (a WAV, or anything ffmpeg reads), made at BPM "
+                         "(you give it: nothing finds the beats), the first beat START seconds into it (default 0). The deck loads "
+                         "it as a track, titled with the file's name, and plays it at the deck's tempo. Again for more decks. The "
+                         "sound is heard on --audio-port"),
     ap.add_argument("--scenario", action="append", default=[], metavar="FILE|FOLDER",
                     help="play a scenario (see docs/scenarios.md) once it runs. Again for more, or a folder for each .json "
                          "in it, in order (deckbench/examples/unit is a suite)")
@@ -198,6 +203,20 @@ def main(argv=None):
             for word in what.split(","):
                 if word.startswith("loop") and word[4:].isdigit():
                     deck.loop = (0.0, float(word[4:]))
+    for item in a.track:
+        deck_no, _, rest = item.partition("=")
+        fields = rest.split("@")
+        try:
+            deck = world.decks[int(deck_no)]
+            if len(fields) < 2 or not fields[0]:
+                raise ValueError("it is DECK=FILE@BPM")
+            world.load_audio(deck, fields[0], float(fields[1]), offset=float(fields[2]) if len(fields) > 2 else 0.0)
+        except KeyError:
+            ap.error("--track %s: no such deck" % item)
+        except ValueError as e:                                # (an AudioError is a ValueError)
+            ap.error("--track %s: %s" % (item, e))
+    if a.track and not a.audio_port:
+        log("--track without --audio-port: the tracks are loaded, but nothing serves their sound")
     for adapter, spec in adapters:
         world.adapters.append(adapter)
         adapter.start(world)

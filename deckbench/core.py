@@ -9,6 +9,7 @@ protocols' (deckbench.protocols), which are told what changes and may take
 part in it: a protocol can handle who becomes the master (Pro DJ Link asks the
 unit under test, for one), and can say what a deck shows besides this.
 """
+import os
 import sys
 import threading
 import time
@@ -41,6 +42,7 @@ class Deck:
         # The cable is pulled: it says nothing and answers nothing (the protocols see to that).
         self.unplugged = False
         self.track = None                    # the track it has loaded: (rekordbox id, title), or None for its first
+        self.audio = None                    # a sound file it plays (audio.Track), or None: its drum loop
         self.on_air = None                   # what a mixer said (True or False), None: none did, so it is on air while it plays
 
     def position(self, now):
@@ -172,6 +174,8 @@ class World:
                          "master": d.master and d.enabled, "bpm": round(d.tempo(), 2),
                          "name": d.name, "loop": d.loop[1] if d.loop else 0, "loop_from": d.loop[0] if d.loop else 0,
                          "unplugged": d.unplugged,
+                         "audio": None if not d.audio else {"file": os.path.basename(d.audio.path), "bpm": d.audio.bpm,
+                                                            "seconds": round(d.audio.seconds, 1), "offset": d.audio.offset},
                          "phase": [d.anchor_t, d.anchor_pos, round(d.tempo(), 2)]
                          if d.enabled and d.playing else None}
                 for protocol in self.protocols:
@@ -234,6 +238,7 @@ class World:
         tempo): it starts from its first beat, as a loaded track does, and the protocols tell the network."""
         def change():
             deck.track = (int(rbid), title)
+            deck.audio = None                # a track of the bench's own, not of a file (load_audio gives the file after)
             if bpm:
                 deck.base_bpm = float(bpm)
             deck.anchor_t = time.time()
@@ -243,6 +248,27 @@ class World:
         for protocol in self.protocols:
             protocol.track_loaded(deck, int(rbid), title, source, slot)
         log("%s loads track %d%s" % (deck.name, int(rbid), " (%s)" % title if title else ""))
+        self.changed()
+
+    def load_audio(self, deck, path, bpm=None, title=None, rbid=None, offset=0.0, source=None, slot=None):
+        """The deck loads a track of its own: the sound file `path` (a path on the machine the bench runs on), made at `bpm` (the
+        deck's tempo now if none is given), starting `offset` seconds into the file. The network is told of it as of any track, with
+        the file's name for its title unless one is given, and the deck's sound (audio.py) is the file, played at the deck's
+        tempo. Raises audio.AudioError, and changes nothing, if the file will not do."""
+        from .audio import load_file
+        track = load_file(path, bpm or deck.base_bpm, offset)
+        title = title or os.path.splitext(os.path.basename(path))[0]
+        self.load_track(deck, rbid or 1000 + deck.number, title, track.bpm, source, slot)
+        with self.lock:
+            deck.audio = track
+        log("%s plays %s (%.1f s, made at %.1f BPM)" % (deck.name, os.path.basename(path), track.seconds, track.bpm))
+        self.changed()
+        return track
+
+    def clear_audio(self, deck):
+        """The deck is back to its drum loop (the track it has loaded stays loaded)."""
+        with self.lock:
+            deck.audio = None
         self.changed()
 
     def set_unplugged(self, deck, on):

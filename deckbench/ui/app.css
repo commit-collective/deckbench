@@ -197,6 +197,8 @@ textarea { height: auto; padding: 8px; width: 100%; resize: vertical; line-heigh
 input:disabled, select:disabled, textarea:disabled { opacity: .5; }
 
 details.fold { border-top: 1px solid var(--line); padding-top: 10px; }
+details.fold .pick { display: flex; gap: 6px; }
+details.fold .pick input[type="text"] { flex: 1; min-width: 0; }
 details.fold summary { cursor: pointer; color: var(--muted); font: 400 11px var(--lab); letter-spacing: var(--ls); text-transform: var(--tt); list-style: none;
   user-select: none; }
 details.fold summary:hover { color: var(--text); }

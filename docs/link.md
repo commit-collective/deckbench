@@ -16,7 +16,7 @@ under test), `online`, `status`, `phase` (only while it plays), `at` (only while
 ## Strips
 
 Each deck, and each device with beats, has a strip: a grid that scrolls past a fixed playhead, one line for every beat and a heavier
-line for every bar, with the beat of the track written on it. It has no waveform. All the strips share one time scale, so decks that
+line for every bar, with the beat of the track written on it. It has no waveform, except for a bench deck that plays a sound file of its own (see audio.md): its waveform is drawn faintly behind the grid, beat by beat, so that the beats can be seen to fall where they should and a loop's jump back shows in it. All the strips share one time scale, so decks that
 are synced line up and one that is not drifts. A loop is tinted and marked where it goes back. For a device the page draws the beats
 it was told of, and goes on at its tempo from the last.
 

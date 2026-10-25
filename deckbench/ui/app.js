@@ -55,7 +55,7 @@ const act = (path, options) => api(path, options).catch(() => {});
 
 function apply(state) {
   S.state = state;
-  S.offset = state.now - Date.now() / 1000;
+  S.offset = S.clock = Strip.followClock(S.clock, state.now - Date.now() / 1000);
   render();
 }
 
@@ -177,6 +177,14 @@ function buildDeck(n, numbers) {
         h("label", {}, "Rekordbox id", h("input", {type: "number", class: "t-id", min: 1, placeholder: String(100 + Number(n))})),
         h("label", {}, "BPM", h("input", {type: "number", class: "t-bpm", step: 0.1, min: 40, max: 220, placeholder: "keep"})),
         h("label", {class: "wide"}, "Title", h("input", {type: "text", class: "t-title", placeholder: "Track of deck " + n})),
+        transport.demo ? null : h("label", {class: "wide", title: "A WAV (or anything ffmpeg reads). Browse sends one from this computer to the bench, or give a path on the machine the bench runs on. The BPM above is the one it was made at"},
+          "Sound file",
+          h("span", {class: "pick"},
+            h("input", {type: "text", class: "t-audio", placeholder: "none: its drum loop"}),
+            h("button", {class: "btn small t-browse", type: "button", onclick: () => card.querySelector(".t-file").click()}, "Browse\u2026"),
+            h("input", {type: "file", class: "t-file", hidden: true, accept: "audio/*,.wav,.mp3,.flac,.aif,.aiff,.ogg,.m4a",
+              onchange: (e) => sendFile(card, e.target.files[0])}))),
+        transport.demo ? null : h("label", {title: "Seconds of the file before its first beat"}, "First beat at", h("input", {type: "number", class: "t-offset", step: 0.01, min: 0, placeholder: "0"})),
         h("label", {}, "From the database of",
           h("select", {class: "t-source"}, numbers.map((m) => h("option", {value: m, selected: m === n}, "deck " + m + (m === n ? " (itself)" : ""))))),
         h("label", {}, "Slot", h("select", {class: "t-slot"},
@@ -199,6 +207,27 @@ function buildDeck(n, numbers) {
   return card;
 }
 
+/* Browse: the file goes to the bench (the browser's file picker finds it on this computer, which may not be the bench's), which keeps it
+   and says where: that path is what a load asks for. The title and the BPM are guessed from the name if they are empty. */
+async function sendFile(card, file) {
+  if (!file) return;
+  const button = card.querySelector(".t-browse");
+  button.disabled = true;
+  button.textContent = "Sending\u2026";
+  try {
+    const sent = await api("api/upload?name=" + encodeURIComponent(file.name), {body: file});
+    card.querySelector(".t-audio").value = sent.path;
+    const title = card.querySelector(".t-title"), bpm = card.querySelector(".t-bpm");
+    if (!title.value) title.value = file.name.replace(/\.[^.]+$/, "");
+    const guess = /(\d{2,3}(?:\.\d+)?)\s*bpm/i.exec(file.name);
+    if (!bpm.value && guess) bpm.value = guess[1];
+    toast("Sent " + file.name + " (" + (file.size / 1048576).toFixed(1) + " MB). Set the BPM it was made at, then load it.");
+  } catch (e) { /* a toast said why */ }
+  button.disabled = false;
+  button.textContent = "Browse\u2026";
+  card.querySelector(".t-file").value = "";
+}
+
 function loadTrack(n, card) {
   const v = (cls) => card.querySelector("." + cls).value.trim();
   const id = v("t-id") || String(100 + Number(n));
@@ -207,6 +236,10 @@ function loadTrack(n, card) {
   if (v("t-bpm")) params.set("bpm", v("t-bpm"));
   params.set("source", v("t-source"));
   params.set("slot", v("t-slot"));
+  if (v("t-audio")) {
+    params.set("audio", v("t-audio"));
+    if (v("t-offset")) params.set("offset", v("t-offset"));
+  }
   act("api/deck/" + n + "/load/" + encodeURIComponent(id) + "?" + params);
 }
 
@@ -250,12 +283,28 @@ function devicesOf(state) {
 
 const devId = (ip) => "dev-" + ip.replace(/[^\w]/g, "-");
 
+/* The waveform of a deck's sound file, got from the bench once for each file: null while it comes, or when the deck has none. */
+const waves = {};
+function waveOf(n, d) {
+  if (!d.audio || transport.demo) return null;
+  const id = n + "/" + d.audio.file + "/" + d.audio.seconds;
+  if (!(id in waves)) {
+    waves[id] = null;
+    transport.fetch("api/deck/" + n + "/waveform")
+      .then((r) => { if (!r.ok) throw new Error("none"); return r.json(); })
+      .then((w) => { waves[id] = {peaks: Strip.smooth(w.peaks), rate: w.rate}; })
+      .catch(() => { waves[id] = false; });                       /* not got: not asked for again until the file changes */
+  }
+  const w = waves[id];
+  return w ? Object.assign({offset: d.audio.offset, bpm: d.audio.bpm}, w) : null;
+}
+
 function strips() {
   if (!S.state) return;
   const now = Date.now() / 1000;
   for (const [n, d] of Object.entries(S.state.decks)) {
     const card = $("deck" + n), canvas = card && card.querySelector(".strip");
-    if (canvas && d.on) Strip.draw(canvas, Strip.layout(d, now, S.offset), {});
+    if (canvas && d.on) Strip.draw(canvas, Strip.layout(d, now, S.offset), {wave: waveOf(n, d)});
     else if (canvas) canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
   }
   for (const d of devicesOf(S.state)) {

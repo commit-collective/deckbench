@@ -2,6 +2,22 @@
 
 Newest first. A release is a tagged commit.
 
+## Unreleased
+
+### Tracks of your own
+
+- A deck can play a sound file instead of its drum loop: `--track DECK=FILE@BPM[@START]`, the page's "Load a track" fold, or
+  `?audio=` on the load request of the API. You say the BPM it was made at, and the deck plays it at its own tempo. See `docs/audio.md`.
+- A deck that plays a sound file has its waveform behind its strip's beat grid, laid out from the BPM and the first beat you gave, so that a wrong
+  one is seen. It comes from `/api/deck/N/waveform`.
+- The strips no longer jump a few pixels now and then. The page took the bench's clock from each state as it arrived, so the delay of that message (a few milliseconds, more through WSL) moved them. It now follows the quickest messages and ignores the slow ones.
+- The waveform is one smooth shape, with the loudness taken between its values, and does not shimmer as the strip scrolls.
+- The bench's server keeps a queue of 128 connections instead of 5. A page that opened its event stream and a dozen requests at once, with
+  something else asking too, could have one held back a second, or refused through WSL's forwarding of localhost, and said "The bench does not answer."
+- The page's Sound button plays a deck's file when it has one (it played the drums of every deck). It is fetched from `/api/deck/N/audio.wav`.
+- The page's Browse button opens the browser's file picker and sends the file to the bench (`/api/upload`), so a bench in WSL or on
+  another machine gets a file from the one the browser is on.
+
 ## v0.2.0
 
 Tested on Ubuntu and Windows, with Python 3.8 and 3.12. The GitHub Action passes on all four.

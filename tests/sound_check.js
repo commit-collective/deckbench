@@ -78,6 +78,20 @@ check("a beat knows its place in the track", beats[0].at === 10 && beats[1].at =
 beats = Sound.beats(looped, 0, 4.2, 1000);
 check("and a loop sends it back", beats.slice(0, 5).map((b) => b.at).join() === "4,5,6,7,4", beats.slice(0, 5).map((b) => b.at));
 
+// a deck with a file of its own: where in the file, how fast, and the loop (made at 100 BPM, its first beat 0.5 s in)
+const filed = {on: true, play: true, phase: [1000, 4.0, 100], loop: 0, loop_from: 0, audio: {file: "x.wav", bpm: 100, offset: 0.5, seconds: 30}};
+let plan = Sound.filePlan(filed, 5, 1000);              // the bench's clock is 1000 s ahead: it is 1005 there, 5 s after the phase: 4 + 5 * 100 / 60 beats
+check("the file's place follows the deck's beats", near(plan.from, 0.5 + (4 + 5 * 100 / 60) * 0.6, 1e-6), plan);
+check("at the tempo it was made at, the file plays as it is", near(plan.rate, 1) && plan.loop === null, plan);
+filed.phase = [1000, 4.0, 125];
+plan = Sound.filePlan(filed, 5, 1000);
+check("a faster deck plays it faster", near(plan.rate, 1.25) && near(plan.from, 0.5 + (4 + 5 * 125 / 60) * 0.6, 1e-6), plan);
+filed.loop = 4; filed.loop_from = 4;
+plan = Sound.filePlan(filed, 5, 1000);
+check("a loop is the file's loop", near(plan.loop.start, 0.5 + 4 * 0.6) && near(plan.loop.end, 0.5 + 8 * 0.6), plan);
+check("and its place goes round it", plan.from >= plan.loop.start && plan.from < plan.loop.end, plan);
+check("no file, or not playing, is no plan", Sound.filePlan({phase: [0, 0, 120]}, 0, 0) === null && Sound.filePlan({audio: {bpm: 120, offset: 0}, phase: null}, 0, 0) === null);
+
 // every voice runs on a stub of the audio graph, for each beat of the bar, and they are not one voice
 const nodes = [];
 const param = () => ({value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {}});

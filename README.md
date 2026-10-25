@@ -44,8 +44,8 @@ track (its id, title, BPM, the deck whose database it comes from and the slot). 
 - **Network**: the share of datagrams lost and the unit heard on the network.
 - **Settings**: strict decks, database refusal, claiming the number first, the model name, the look (Commit or Classic) and the colours (dark or light), and how the bench was started.
 
-**Sound** in the header plays each deck's beat in the browser (a kick, a snare and a hat, made with Web Audio), and with a mixer on only the
-decks on air are heard. It is the page's own sound, not the device under test's: see [docs/audio.md](docs/audio.md) for the stream that goes to an emulator.
+**Sound** in the header plays each deck's beat in the browser (a kick, a snare and a hat, made with Web Audio, or the deck's own sound file
+if it has one), and with a mixer on only the decks on air are heard. It is the page's own sound, not the device under test's: see [docs/audio.md](docs/audio.md) for the stream that goes to an emulator.
 
 `http://127.0.0.1:8750/#scenario` opens a tab. The decks of Pro DJ Link are at 127.0.0.<number>, so the device under test must
 see this machine's loopback: run both on the same machine and network namespace. The bench runs on Linux and Windows (tested by CI on both, with Python 3.8 and 3.12). On macOS the loopback carries no broadcasts, so
@@ -66,6 +66,8 @@ Options (`python -m deckbench --help`):
   themselves, a fifth device gets no answer and a unit that is not a player (a DJS-1000 in drum machine mode) has its
   requests turned down
 - `--audio-port PORT`, `--audio-decks N,N`: the decks' sound on a TCP port, in real time (see [docs/audio.md](docs/audio.md))
+- `--track DECK=FILE@BPM[@START]`: a deck plays your own sound file (a WAV, or what ffmpeg reads) instead of its drum loop, at the
+  tempo you say it was made at (see [docs/audio.md](docs/audio.md)). The page has the same in the deck's "Load a track" fold
 - `--scenario FILE`, `--then-exit`: play a timeline of what the decks do and what to expect of the device under test
   (see [docs/scenarios.md](docs/scenarios.md))
 - `--events FILE`: what the device under test did, a JSON object a line
@@ -98,7 +100,12 @@ Options (`python -m deckbench --help`):
     POST /api/deck/<n>/loop/<beats>   loop that many beats from the beat the deck is in (0: end it)
 
     POST /api/deck/<n>/tempo/<bpm>    the pitch fader: the deck plays at that tempo
-    POST /api/deck/<n>/load/<id>      the deck loads that track (optional ?title=...&bpm=...&source=<player>&slot=<n>), from its first beat
+    POST /api/deck/<n>/load/<id>      the deck loads that track (optional ?title=...&bpm=...&source=<player>&slot=<n>), from its first beat.
+                                      With ?audio=<path>&bpm=<what it was made at>&offset=<seconds> it plays that sound file (docs/audio.md)
+    POST /api/deck/<n>/audio/clear    the deck's drum loop again
+    POST /api/upload?name=<file>      the body is a sound file from the page's computer: the bench keeps it and answers {"path": ...}
+    GET  /api/deck/<n>/audio.wav      the deck's sound file as a WAV, which the page's Sound button plays for it (404 if it has none)
+    GET  /api/deck/<n>/waveform       its loudness, 100 values a second of 0 to 100, which the deck's strip draws behind its grid
     POST /api/deck/<n>/unplug         the cable is pulled (also plug, and silence/<seconds>)
     POST /api/settings/<name>/<value> strict and refuse_db (0 or 1), model (the name the decks announce)
     GET  /api/unit                    what is known of the device under test (the network's word, and the adapters')

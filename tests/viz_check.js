@@ -65,5 +65,59 @@ plan = Strip.layoutDevice("b", {status: {loop: false}}, 200.7);
 check("a device that plays on", !plan.looping && plan.ticks.every((t) => !t.wrap && !t.inLoop) && plan.ticks[plan.ticks.length - 1].at > 8, plan.ticks.map((t) => t.at));
 check("nothing heard, nothing drawn", Strip.layoutDevice("c", {status: null}, 5).ticks.length === 0);
 
+// the waveform of a deck's file: a shape for each run of beats, from where they are in the file, between values in proportion
+{
+  const paths = [];
+  const g = {fillStyle: "", globalAlpha: 1, pts: null,
+    beginPath() { this.pts = []; }, moveTo(px, y) { this.pts.push([px, y]); }, lineTo(px, y) { this.pts.push([px, y]); },
+    closePath() {}, fill() { paths.push({pts: this.pts, alpha: this.globalAlpha}); }};
+  const wave = {peaks: new Array(1000).fill(0).map((_, i) => (i < 500 ? 80 : 20)), rate: 100, offset: 0, bpm: 120};   // 10 s: loud for the first 5
+  const x = (dt) => 100 + dt * 50;                                                                              // 25 px a beat at 120 BPM
+  // beats 0 and 1 follow each other (one run), beat 10 and then 22 do not (a run each)
+  Strip.waveform(g, wave, [{dt: 0, at: 0}, {dt: 0.5, at: 1}, {dt: 5.0, at: 10}, {dt: 8.0, at: 22}], x, 25, 600, 40, "#fff");
+  check("a shape for each run of beats", paths.length === 3, paths.length);
+  const top = (path, px) => 20 - path.pts.find((q) => q[0] === px)[1];                 // the height above the middle at a pixel
+  check("a run of two beats is one shape over 50 pixels", paths[0].pts[0][0] === 100 && paths[0].pts.some((q) => q[0] === 150), paths[0].pts.slice(0, 2));
+  check("loud where the file is loud, and quiet where it is not", top(paths[0], 120) > 4 * top(paths[1], 360), [top(paths[0], 120), top(paths[1], 360)]);
+  const at120 = paths[0].pts.filter((q) => q[0] === 120).map((q) => q[1]);                  // its top and its bottom at a pixel
+  check("mirrored round the middle", at120.length >= 2 && near(Math.min(...at120) + Math.max(...at120), 40), at120);
+  check("and faint, behind the grid", paths.every((p) => p.alpha < 0.5));
+  check("nothing past the file's end (beat 22 is 11 s in)", paths[2].pts.every((q) => Math.abs(q[1] - 20) < 0.5), paths[2].pts.slice(0, 3));
+  // smooth: moving the strip a fraction of a pixel changes the height at a pixel a little, not by a jump
+  const heights = [0, 0.1, 0.2, 0.3, 0.4, 0.5].map((shift) => {
+    paths.length = 0;
+    Strip.waveform(g, {peaks: Strip.smooth(new Array(400).fill(0).map((_, i) => (i % 7 < 2 ? 90 : 10))), rate: 100, offset: 0, bpm: 120},
+                   [{dt: 0, at: 0}, {dt: 0.5, at: 1}], (dt) => 100 + dt * 50 + shift, 25, 600, 40, "#fff");
+    return top(paths[0], 120);
+  });
+  const steps = heights.slice(1).map((v, i) => Math.abs(v - heights[i]));
+  check("moving a tenth of a pixel changes it by a little, not a jump", Math.max(...steps) < 2.5, steps);
+  paths.length = 0;
+  Strip.waveform(g, {peaks: [], rate: 100, offset: 0, bpm: 120}, [{dt: 0, at: 0}], x, 25, 600, 40, "#fff");
+  Strip.waveform(g, {peaks: [50], rate: 100, offset: 0, bpm: 0}, [{dt: 0, at: 0}], x, 25, 600, 40, "#fff");
+  check("no peaks, or no tempo, draws nothing", paths.length === 0);
+  const smooth = Strip.smooth([0, 100, 0, 0]);
+  check("smoothing spreads a peak to its neighbours", near(smooth[0], 25) && near(smooth[1], 50) && near(smooth[2], 25) && near(smooth[3], 0), smooth);
+}
+
+// the clock: samples that are late by different delays do not move the strips
+{
+  let seed = 7;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  const truth = 1000, floor = 0.004;                                  // the bench is 1000 s ahead, and the quickest message takes 4 ms
+  let est = null, rawSteps = [], steps = [], prevRaw = null;
+  for (let i = 0; i < 300; i++) {
+    const sample = truth - (floor + (rnd() < 0.2 ? rnd() * 0.06 : rnd() * 0.01));      // a few messages are slow
+    if (prevRaw != null) rawSteps.push(Math.abs(sample - prevRaw));
+    prevRaw = sample;
+    const next = Strip.followClock(est, sample);
+    if (est != null && i > 20) steps.push(Math.abs(next - est));
+    est = next;
+  }
+  check("the estimate is near the quickest message", Math.abs(est - (truth - floor)) < 0.004, est - truth);
+  check("and it moves less than the samples do", Math.max(...steps) < Math.max(...rawSteps) / 3, [Math.max(...steps), Math.max(...rawSteps)]);
+  check("a new clock (the bench started again) is taken at once", Strip.followClock(1000, 5) === 5 && Strip.followClock(null, 7) === 7);
+}
+
 console.log(failures ? failures + " failed" : "ok");
 process.exit(failures ? 1 : 0);

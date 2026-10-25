@@ -30,24 +30,41 @@
     POST /api/unit/press/<control>   press a control of the device under test through an adapter (sync, master)
     POST /api/settings/<name>/<value>  strict and refuse_db (0 or 1), model (the name the decks announce)
     POST /api/deck/<n>/load/<id>     also ?source=<player>&slot=<n>: the track is in that player's database
+    POST /api/deck/<n>/load/<id>     also ?audio=<a path on the bench's machine>&bpm=<what it was made at>&offset=<seconds>: the deck plays
+                                     that sound file (a WAV, or what ffmpeg reads) at its tempo instead of its drum loop. 400 and
+                                     {"error": ...} if the file will not do
+    POST /api/deck/<n>/audio/clear   the deck's drum loop again
+    GET  /api/deck/<n>/waveform      the deck's sound file's loudness, {"rate": values a second, "peaks": [0 to 100 ...]}, for the page to draw
+                                     (404 if it has none)
+    GET  /api/deck/<n>/audio.wav     the deck's sound file as a 16-bit stereo 44.1 kHz WAV (404 if it plays its drum loop): what the
+                                     page plays for it, as it plays the drum loop for the others
+    POST /api/upload?name=<file name>   the body is a sound file, which the bench keeps (until it leaves) in a folder of its own: the
+                                     answer is {"path", "name", "bytes"}, the path to give a deck's ?audio=. It is how a page picks a
+                                     file from the machine the browser is on (413 above 300 MB)
 
 The page (deckbench/ui: index.html, app.css, app.js, no build step and no packages) follows /api/stream and counts the
 beat squares on from each deck's phase, so it needs nothing but a browser, on the machine or any that can reach the port
 (by default it listens on 127.0.0.1 only).
 """
+import atexit
 import hmac
 import json
 import os
+import re
+import shutil
+import tempfile
 import threading
 import time
 from urllib.parse import parse_qs, unquote, urlparse
 import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from .audio import AudioError
 from .core import log
 from .scenario import Runner, ScenarioError
 
 UI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
+UPLOAD_LIMIT = 300 * 1024 * 1024          # bytes of one uploaded sound file
 KINDS = {".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml",
          ".png": "image/png", ".ico": "image/x-icon"}
 
@@ -68,6 +85,10 @@ def examples():
 
 class Server(ThreadingHTTPServer):
     daemon_threads = True
+    # The queue of connections waiting to be accepted. The default, 5, overflows when a page opens (its event stream and a dozen requests
+    # at once, with other programs asking too): the connection that does not fit is held back a second (or, through WSL's forwarding of
+    # localhost, refused), and the page says the bench does not answer.
+    request_queue_size = 128
 
     def server_bind(self):
         """As HTTPServer's, without the reverse lookup of the address (socket.getfqdn), which can take many seconds on a machine
@@ -85,6 +106,28 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
     as `?token=...` or `Authorization: Bearer ...`. The page's own files are served to anyone who can reach the port."""
     allowed = {o.rstrip("/") for o in allow_origins}
     runner = Runner(world)
+    uploads = {"dir": None, "n": 0}           # the folder the page's files are kept in (made when the first comes, removed at exit)
+
+    def keep_upload(name, source, length):
+        """Writes `length` bytes of `source` (a file object) to a file of the bench's own and gives its path."""
+        if uploads["dir"] is None:
+            uploads["dir"] = tempfile.mkdtemp(prefix="deckbench-tracks-")
+            atexit.register(shutil.rmtree, uploads["dir"], True)
+        uploads["n"] += 1
+        safe = re.sub(r"[^\w.\- ]+", "_", os.path.basename(name.replace("\\", "/")))[:80] or "track"
+        path = os.path.join(uploads["dir"], "%d-%s" % (uploads["n"], safe))
+        left = length
+        with open(path, "wb") as f:
+            while left > 0:
+                chunk = source.read(min(left, 1 << 20))
+                if not chunk:
+                    break
+                f.write(chunk)
+                left -= len(chunk)
+        if left:                                  # the page went away half way
+            os.remove(path)
+            raise OSError("the file did not come whole")
+        return path
     STATIC = set(os.listdir(UI)) if os.path.isdir(UI) else set()
 
     class Handler(BaseHTTPRequestHandler):
@@ -186,6 +229,20 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
                     self.send(200, f.read(), KINDS.get(os.path.splitext(name)[1], "application/octet-stream"))
             elif path == "/api/state":
                 self.send(200, json.dumps(world.snapshot()))
+            elif re.fullmatch(r"/api/deck/\d+/waveform", path):
+                deck = world.decks.get(int(path.split("/")[3]))
+                track = deck.audio if deck else None
+                if track:
+                    self.send(200, json.dumps(dict(track.peaks(), file=os.path.basename(track.path))))
+                else:
+                    self.send(404, '{"error": "that deck has no sound file"}')
+            elif re.fullmatch(r"/api/deck/\d+/audio\.wav", path):
+                deck = world.decks.get(int(path.split("/")[3]))
+                track = deck.audio if deck else None
+                if track:
+                    self.send(200, track.wav(), "audio/wav")
+                else:
+                    self.send(404, '{"error": "that deck has no sound file"}')
             elif path == "/api/packets":
                 query = parse_qs(urlparse(self.path).query)
                 try:
@@ -226,6 +283,21 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
                         world.changed()
                         return self.send(result[0], json.dumps(result[1] if result[0] != 200 else world.snapshot()))
                 return self.send(404, '{"error": "no mixer here"}')
+            if parts == ["api", "upload"]:
+                try:
+                    length = int(self.headers.get("Content-Length") or 0)
+                except ValueError:
+                    length = 0
+                if length <= 0:
+                    return self.send(400, json.dumps({"error": "the body is the sound file, and has a length"}))
+                if length > UPLOAD_LIMIT:
+                    self.close_connection = True
+                    return self.send(413, json.dumps({"error": "that file is over %d MB" % (UPLOAD_LIMIT >> 20)}))
+                try:
+                    path = keep_upload(query.get("name", ["track"])[0], self.rfile, length)
+                except OSError as e:
+                    return self.send(400, json.dumps({"error": str(e)}))
+                return self.send(200, json.dumps({"path": path, "name": os.path.basename(path), "bytes": length}))
             if parts == ["api", "packets", "clear"]:
                 for protocol in world.protocols:
                     if hasattr(protocol, "monitor"):
@@ -267,7 +339,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
                     return self.send(400, '{"error": "no such share"}')
                 return self.send(200, json.dumps(world.snapshot()))
             if len(parts) in (4, 5) and parts[:2] == ["api", "deck"] and parts[3] in (
-                    "tempo", "load", "unplug", "plug", "silence"):
+                    "tempo", "load", "unplug", "plug", "silence", "audio"):
                 try:
                     deck = world.decks[int(parts[2])]
                 except (ValueError, KeyError):
@@ -279,9 +351,17 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
                     elif what == "load" and len(parts) == 5:
                         bpm = query.get("bpm", [None])[0]
                         source, slot = query.get("source", [None])[0], query.get("slot", [None])[0]
-                        world.load_track(deck, int(parts[4]), query["title"][0] if "title" in query else None,
-                                         float(bpm) if bpm else None, int(source) if source else None,
-                                         int(slot) if slot else None)
+                        audio, offset = query.get("audio", [None])[0], query.get("offset", [None])[0]
+                        if audio:
+                            world.load_audio(deck, audio, float(bpm) if bpm else None, query["title"][0] if "title" in query else None,
+                                             int(parts[4]), float(offset) if offset else 0.0,
+                                             int(source) if source else None, int(slot) if slot else None)
+                        else:
+                            world.load_track(deck, int(parts[4]), query["title"][0] if "title" in query else None,
+                                             float(bpm) if bpm else None, int(source) if source else None,
+                                             int(slot) if slot else None)
+                    elif what == "audio" and len(parts) == 5 and parts[4] == "clear":
+                        world.clear_audio(deck)
                     elif what == "unplug" and len(parts) == 4:
                         world.set_unplugged(deck, True)
                     elif what == "plug" and len(parts) == 4:
@@ -290,6 +370,8 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
                         world.silence(deck, float(parts[4]))
                     else:
                         return self.send(400, '{"error": "no such action"}')
+                except AudioError as e:
+                    return self.send(400, json.dumps({"error": str(e)}))
                 except ValueError:
                     return self.send(400, '{"error": "no such value"}')
                 return self.send(200, json.dumps(world.snapshot()))

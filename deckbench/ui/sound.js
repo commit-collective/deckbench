@@ -1,12 +1,14 @@
 /* Sound in the page: a drum pattern for each deck that plays, on its beat, made with Web Audio. It is only what the page shows turned
- * into sound (the decks' tempo and place in the bar): nothing is sent to the device under test. With a mixer on, only the decks that
- * are on the air are heard, as on a real mixer. For the sound the bench itself serves, see docs/audio.md (--audio-port). */
+ * into sound (the decks' tempo and place in the bar): nothing is sent to the device under test. A deck that has a sound file of its own
+ * is heard as the file, played at the deck's tempo, and not as drums. With a mixer on, only the decks that are on the air are heard, as
+ * on a real mixer. For the sound the bench itself serves, see docs/audio.md (--audio-port). */
 "use strict";
 
 const Sound = (() => {
   const LOOKAHEAD = 0.18;                     /* seconds of beats scheduled ahead of the clock */
   const s = {ctx: null, on: false, timer: null, last: {}, played: 0,   /* played: how many beats were sounded (for a check) */
-             options: {own: true, other: true}, volume: 0.4};
+             options: {own: true, other: true}, volume: 0.4,
+             files: {}, buffers: {}};   /* files: the sound file each deck plays now; buffers: the files got from the bench, by deck and name */
 
   /* The beats of a deck between two moments (seconds, the page's clock), as {k, time, beat}: k counts the beats of the deck's
    * timeline, beat is its place in the bar (1 to 4, as in a loop). `offset` is what to add to the page's clock to get the bench's.
@@ -23,6 +25,23 @@ const Sound = (() => {
       out.push({k, at, time: t + (k - pos) / rate - offset, beat: ((at % 4) + 4) % 4 + 1, half: 0.5 / rate});
     }
     return out;
+  };
+
+  /* A deck's own sound file: where in it to start, how fast to play it and the loop, from the deck's phase, as `beats` takes it. The file's
+   * second of beat b is offset + b * 60 / bpm (bpm is the tempo it was made at), and it plays at tempo / bpm of its own speed, as a CDJ with
+   * its master tempo off does. null if the deck has no file or does not play. */
+  s.filePlan = (deck, now, offset) => {
+    if (!deck.phase || !deck.audio) return null;
+    const [t, pos, tempo] = deck.phase, a = deck.audio;
+    if (!(tempo > 0) || !(a.bpm > 0)) return null;
+    let at = pos + (now + offset - t) * tempo / 60;
+    if (deck.loop && at >= deck.loop_from + deck.loop) at = deck.loop_from + ((at - deck.loop_from) % deck.loop);
+    const perBeat = 60 / a.bpm, plan = {from: a.offset + at * perBeat, rate: tempo / a.bpm, loop: null};
+    if (deck.loop) {
+      const start = a.offset + deck.loop_from * perBeat;
+      plan.loop = {start, end: start + deck.loop * perBeat};
+    }
+    return plan;
   };
 
   /* is a deck heard: it plays, and with a mixer on it is on the air */
@@ -155,6 +174,52 @@ const Sound = (() => {
     s.played++;
   }
 
+  /* the WAV of a deck's file, from the bench, decoded once: null while it comes, false if it could not be got */
+  function fileBuffer(number, a) {
+    const id = number + "/" + a.file + "/" + a.seconds;
+    if (!(id in s.buffers)) {
+      s.buffers[id] = null;
+      transport.fetch("api/deck/" + number + "/audio.wav")
+        .then((r) => { if (!r.ok) throw new Error("no file"); return r.arrayBuffer(); })
+        .then((data) => s.ctx.decodeAudioData(data))
+        .then((buffer) => { s.buffers[id] = buffer; })
+        .catch(() => { s.buffers[id] = false; });
+    }
+    return s.buffers[id];
+  }
+
+  function stopFile(key) {
+    const f = s.files[key];
+    if (!f) return;
+    try { f.node.stop(); } catch (e) { /* it had not started */ }
+    f.node.disconnect();
+    delete s.files[key];
+  }
+
+  /* A deck's file: started where the deck is when its phase (or its file, or its loop) changes, and left to play from there. */
+  function playFile(key, number, d, now, offset) {
+    const buffer = fileBuffer(number, d.audio), plan = s.filePlan(d, now, offset);
+    if (!buffer || !plan) return;
+    const sig = [d.phase.join(","), d.audio.bpm, d.audio.offset, d.audio.file, d.loop, d.loop_from].join("|"), cur = s.files[key];
+    if (cur && cur.sig === sig) return;
+    stopFile(key);
+    let from = plan.from, delay = 0;
+    if (from < 0) { delay = -from / plan.rate; from = 0; }            /* the deck is before the file's first sound */
+    if (from >= buffer.duration && !plan.loop) return;                /* after its end: silence */
+    const ctx = s.ctx, node = ctx.createBufferSource(), pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    node.buffer = buffer;
+    node.playbackRate.value = plan.rate;
+    if (plan.loop) {
+      node.loop = true;
+      node.loopStart = plan.loop.start;
+      node.loopEnd = Math.min(buffer.duration, plan.loop.end);
+    }
+    if (pan) { pan.pan.value = Math.max(-0.8, Math.min(0.8, (number - 2.5) * 0.4)); node.connect(pan); pan.connect(s.master); }
+    else node.connect(s.master);
+    node.start(ctx.currentTime + delay, Math.min(from, buffer.duration));
+    s.files[key] = {sig, node};
+  }
+
   function tick() {
     const state = typeof S !== "undefined" ? S.state : null;
     if (!state || !s.ctx || s.ctx.state !== "running") return;
@@ -162,7 +227,12 @@ const Sound = (() => {
     const clock = s.ctx.currentTime - now;      /* the page's clock to the audio clock */
     const heard = s.sources(state, s.options), keys = new Set(heard.map((x) => x.key));
     for (const key of Object.keys(s.last)) if (!keys.has(key)) delete s.last[key];
+    for (const key of Object.keys(s.files)) {
+      const d = (heard.find((x) => x.key === key) || {}).deck;
+      if (!d || !d.audio) stopFile(key);                                /* it stopped, or went back to its drums */
+    }
     for (const {key, number, deck: d} of heard) {
+      if (d.audio) { playFile(key, number, d, now, offset); continue; }
       const sig = d.phase.join(","), last = s.last[key];
       const beats = s.beats(d, now, now + LOOKAHEAD, offset);
       if (!last || last.sig !== sig) {          /* a new phase: from here on, not the beats that were */
@@ -191,6 +261,7 @@ const Sound = (() => {
       s.on = false;
       clearInterval(s.timer);
       s.last = {};
+      for (const key of Object.keys(s.files)) stopFile(key);
       return false;
     }
     const Context = window.AudioContext || window.webkitAudioContext;
