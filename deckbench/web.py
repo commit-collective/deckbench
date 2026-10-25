@@ -282,9 +282,15 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
             parts = self.path.split("?")[0].strip("/").split("/")
             query = parse_qs(urlparse(self.path).query)
             if parts == ["api", "journal", "start"]:
-                return self.send(200, json.dumps(journal.start(world)))
+                got = journal.start(world)
+                world.info["recording"] = True                    # the page says so
+                world.changed()
+                return self.send(200, json.dumps(got))
             if parts == ["api", "journal", "stop"]:
-                return self.send(200, json.dumps(journal.stop()))
+                got = journal.stop()
+                world.info["recording"] = False
+                world.changed()
+                return self.send(200, json.dumps(got))
             journal.note(self.path)
             if parts[:2] == ["api", "mixer"]:
                 for protocol in world.protocols:

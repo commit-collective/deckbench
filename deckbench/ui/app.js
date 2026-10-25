@@ -104,8 +104,8 @@ function mixerOf(state) {
   return link && link.mixer;
 }
 
-function chip(text, kind, strong) {
-  return h("span", {class: "chip " + (kind || "")}, kind ? h("i", {class: "dot"}) : null, strong ? h("b", {}, strong) : null, text);
+function chip(text, kind, strong, title) {
+  return h("span", {class: "chip " + (kind || ""), title: title || null}, kind ? h("i", {class: "dot"}) : null, strong ? h("b", {}, strong) : null, text);
 }
 
 function renderChips() {
@@ -125,7 +125,9 @@ function renderChips() {
   if (mixer && mixer.on) box.append(chip(mixer.name, "ok", "mixer "));
   if (set.claim) box.append(chip("claims its number"));
   if (info.ports && info.ports.announce !== 50000) box.append(chip("ports +" + (info.ports.announce - 50000)));
-  if (info.audio) box.append(chip(info.audio, null, "sound "));
+  if (info.audio) box.append(chip(info.audio, null, "unit input ",
+    "The decks' sound is served on this port, for a unit's input (the emulator's --input-tcp). The Listen button plays it in this browser instead"));
+  if (info.recording) box.append(chip("recording a session", "bad", null, "A program (the emulator's REC) is keeping what is done to the decks, to play it back"));
 }
 
 /* ---- the decks ---- */
@@ -718,7 +720,7 @@ function renderSettings() {
     ["Decks", (b.numbers || []).join(", ")],
     ["UDP", ports.announce ? [ports.announce, ports.beat, ports.update].join(", ") + " (keep-alive, beat, status)" : "?"],
     ["TCP", ports.query ? ports.query + ", " + ports.db + " (port query, database)" : "?"],
-    ["Sound", b.audio || "off"]]));
+    ["Sound port", b.audio || "off"]]));
 }
 
 function theme(value) {
@@ -744,7 +746,7 @@ $("sound").addEventListener("click", async () => {
   try {
     const on = await Sound.toggle();
     $("sound").setAttribute("aria-pressed", String(on));
-    $("sound").textContent = on ? "Sound on" : "Sound";
+    $("sound").textContent = on ? "Listening" : "Listen";
   } catch (e) {
     toast(e.message || "The browser would not start the sound.");
   }

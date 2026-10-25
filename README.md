@@ -104,7 +104,7 @@ Options (`python -m deckbench --help`):
                                       With ?audio=<path>&bpm=<what it was made at>&offset=<seconds> it plays that sound file (docs/audio.md)
     POST /api/deck/<n>/audio/clear    the deck's drum loop again
     POST /api/upload?name=<file>      the body is a sound file from the page's computer: the bench keeps it and answers {"path": ...}
-    GET  /api/deck/<n>/audio.wav      the deck's sound file as a WAV, which the page's Sound button plays for it (404 if it has none)
+    GET  /api/deck/<n>/audio.wav      the deck's sound file as a WAV, which the page's Listen button plays for it (404 if it has none)
     GET  /api/deck/<n>/waveform       its loudness, 100 values a second of 0 to 100, which the deck's strip draws behind its grid
     POST /api/deck/<n>/unplug         the cable is pulled (also plug, and silence/<seconds>)
     POST /api/settings/<name>/<value> strict and refuse_db (0 or 1), model (the name the decks announce)

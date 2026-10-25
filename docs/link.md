@@ -49,5 +49,5 @@ arrives twice within 30 ms.
 
 ## Sound
 
-The Sound button plays the bench's decks, each with its own voice (bass, drums, keys, percussion). The settings choose whether the
+The Listen button plays the bench's decks, each with its own voice (bass, drums, keys, percussion). The settings choose whether the
 bench's own decks and other devices are heard. A device is heard while it plays, and with a mixer known, while it is on air.

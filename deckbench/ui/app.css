@@ -125,13 +125,16 @@ button { cursor: pointer; }
 /* ---- layout ---- */
 .layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); padding: 16px; max-width: 1560px; margin: 0 auto; }
 @media (min-width: 1040px) { .layout { grid-template-columns: minmax(0, 1fr) 440px; align-items: start; } }
-#decks { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--gap); }
+#decks { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--gap); align-items: start; }
 .empty { padding: 40px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line-2); border-radius: var(--r-lg); font-family: var(--lab); font-size: 12px; }
 
 /* ---- a deck ---- */
 .deck { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px;
   display: flex; flex-direction: column; gap: 14px; transition: opacity .15s, border-color .15s; }
 .deck.off { opacity: .6; }
+/* A deck that is off has nothing to drive but its ON switch: the rest is out of the way until it is switched on (a device of the link is not a deck) */
+.deck.off:not(.device) .live, .deck.off:not(.device) .strip, .deck.off:not(.device) .row, .deck.off:not(.device) .fold,
+.deck.off:not(.device) .sw:not([data-what="on"]) { display: none; }
 .deck.unplugged { border-color: var(--danger); }
 .deck-head { display: flex; gap: 12px; align-items: center; min-width: 0; }
 .num { flex: none; width: 38px; height: 38px; display: grid; place-items: center; font-weight: 500; border-radius: var(--r);
