@@ -11,7 +11,7 @@
   /* colour */
   --bg: #000; --surface: #000; --surface-2: rgba(255,255,255,.05); --line: rgba(255,255,255,.2); --line-2: rgba(255,255,255,.4);
   --text: #fff; --muted: rgba(255,255,255,.55); --accent: #fff; --on: #4cc38a; --play: #4cc38a; --sync: #5b9cf5;
-  --master: #f0a03c; --loop: #b98af0; --danger: #ff6b6b; --first: #ef4444; --beat: rgba(255,255,255,.6);
+  --master: #f0a03c; --loop: #b98af0; --danger: #ff6b6b; --warn: #e8c14a; --first: #ef4444; --beat: rgba(255,255,255,.6);
   --lcd-bg: #000; --lcd: #fff; --unlit: rgba(255,255,255,.08); --log: rgba(255,255,255,.75); --log-k: #fff; --ev-k: #fff;
   /* shape and type */
   --sans: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -33,7 +33,7 @@
   :root:not([data-theme="dark"]) {
     --bg: #fff; --surface: #fff; --surface-2: rgba(0,0,0,.04); --line: rgba(0,0,0,.2); --line-2: rgba(0,0,0,.4);
     --text: #000; --muted: rgba(0,0,0,.6); --accent: #000; --on: #168a55; --play: #168a55; --sync: #2563eb;
-    --master: #b45f06; --loop: #7c3aed; --danger: #c62828; --first: #dc2626; --beat: rgba(0,0,0,.5);
+    --master: #b45f06; --loop: #7c3aed; --danger: #c62828; --warn: #a16207; --first: #dc2626; --beat: rgba(0,0,0,.5);
     --lcd-bg: #fff; --lcd: #000; --unlit: rgba(0,0,0,.07); --log: rgba(0,0,0,.75); --log-k: #000; --ev-k: #000;
     color-scheme: light;
   }
@@ -41,7 +41,7 @@
 :root[data-theme="light"] {
   --bg: #fff; --surface: #fff; --surface-2: rgba(0,0,0,.04); --line: rgba(0,0,0,.2); --line-2: rgba(0,0,0,.4);
   --text: #000; --muted: rgba(0,0,0,.6); --accent: #000; --on: #168a55; --play: #168a55; --sync: #2563eb;
-  --master: #b45f06; --loop: #7c3aed; --danger: #c62828; --first: #dc2626; --beat: rgba(0,0,0,.5);
+  --master: #b45f06; --loop: #7c3aed; --danger: #c62828; --warn: #a16207; --first: #dc2626; --beat: rgba(0,0,0,.5);
   --lcd-bg: #fff; --lcd: #000; --unlit: rgba(0,0,0,.07); --log: rgba(0,0,0,.75); --log-k: #000; --ev-k: #000;
   color-scheme: light;
 }
@@ -50,7 +50,7 @@
 :root[data-style="classic"] {
   --bg: #0e0f12; --surface: #16181c; --surface-2: #1d2025; --line: #2a2d34; --line-2: #3a3e47;
   --text: #e6e8ec; --muted: #8f95a1; --accent: #5b9cf5; --on: #4cc38a; --play: #4cc38a; --sync: #5b9cf5;
-  --master: #f0a03c; --loop: #b98af0; --danger: #ef5b5b; --first: #ef4444; --beat: #3b82f6;
+  --master: #f0a03c; --loop: #b98af0; --danger: #ef5b5b; --warn: #e8c14a; --first: #ef4444; --beat: #3b82f6;
   --lcd-bg: #0a0c0e; --lcd: #9fe870; --unlit: #23262c; --log: #e3e9e3; --log-k: #9fe870; --ev-k: #5b9cf5;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -69,7 +69,7 @@
   :root[data-style="classic"]:not([data-theme="dark"]) {
     --bg: #f2f3f5; --surface: #ffffff; --surface-2: #f6f7f9; --line: #dcdfe5; --line-2: #c4c8d0;
     --text: #1a1c20; --muted: #596070; --accent: #2563eb; --on: #168a55; --play: #168a55; --sync: #2563eb;
-    --master: #b45f06; --loop: #7c3aed; --danger: #c62828; --first: #dc2626; --beat: #2563eb;
+    --master: #b45f06; --loop: #7c3aed; --danger: #c62828; --warn: #a16207; --first: #dc2626; --beat: #2563eb;
     --lcd-bg: #1b2218; --lcd: #9fe870; --unlit: #e3e5ea; --log: #e3e9e3; --log-k: #9fe870; --ev-k: #2563eb;
     color-scheme: light;
   }
@@ -77,7 +77,7 @@
 :root[data-style="classic"][data-theme="light"] {
   --bg: #f2f3f5; --surface: #ffffff; --surface-2: #f6f7f9; --line: #dcdfe5; --line-2: #c4c8d0;
   --text: #1a1c20; --muted: #596070; --accent: #2563eb; --on: #168a55; --play: #168a55; --sync: #2563eb;
-  --master: #b45f06; --loop: #7c3aed; --danger: #c62828; --first: #dc2626; --beat: #2563eb;
+  --master: #b45f06; --loop: #7c3aed; --danger: #c62828; --warn: #a16207; --first: #dc2626; --beat: #2563eb;
   --lcd-bg: #1b2218; --lcd: #9fe870; --unlit: #e3e5ea; --log: #e3e9e3; --log-k: #9fe870; --ev-k: #2563eb;
   color-scheme: light;
 }
@@ -318,6 +318,8 @@ h2:first-child { margin-top: 0; }
 #toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 20; max-width: min(420px, calc(100vw - 32px)); }
 .toast { padding: 10px 14px; background: var(--bg); border: 1px solid var(--danger); border-radius: var(--r-lg); font-size: 13px; }
 .toast.info { border-color: var(--line-2); }
+.toast.ok { border-color: var(--on); }                  /* something went through: green, as a deck that is on */
+.toast.warn { border-color: var(--warn); }              /* it went through, but...: yellow. No kind is an error: red */
 
 @media (max-width: 520px) {
   .layout { padding: 12px; } .bar { padding: 8px 12px; }

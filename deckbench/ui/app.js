@@ -29,6 +29,7 @@ const S = {state: null, offset: 0, events: [], paused: false, frozen: 0, hidden:
 
 /* ---- talking to the bench ---- */
 
+/* kind: none is an error (red), "ok" went through (green), "warn" went through with a caveat (yellow), "info" is neutral */
 function toast(text, kind) {
   const t = h("div", {class: "toast" + (kind ? " " + kind : "")}, text);
   $("toasts").append(t);
@@ -221,7 +222,7 @@ async function sendFile(card, file) {
     if (!title.value) title.value = file.name.replace(/\.[^.]+$/, "");
     const guess = /(\d{2,3}(?:\.\d+)?)\s*bpm/i.exec(file.name);
     if (!bpm.value && guess) bpm.value = guess[1];
-    toast("Sent " + file.name + " (" + (file.size / 1048576).toFixed(1) + " MB). Set the BPM it was made at, then load it.");
+    toast("Sent " + file.name + " (" + (file.size / 1048576).toFixed(1) + " MB). Set the BPM it was made at, then load it.", "ok");
   } catch (e) { /* a toast said why */ }
   button.disabled = false;
   button.textContent = "Browse\u2026";
@@ -624,7 +625,7 @@ $("scsave").addEventListener("click", () => {
   fillSaved();
   $("scsaved").value = r.data.name;
   $("scdelete").hidden = false;
-  toast("Kept in this browser as “" + r.data.name + "”.", "info");
+  toast("Kept in this browser as “" + r.data.name + "”.", "ok");
 });
 $("scdownload").addEventListener("click", () => {
   const r = validate();
@@ -646,7 +647,7 @@ $("scrun").addEventListener("click", async () => {
 });
 $("scstop").addEventListener("click", () => act("api/scenario/stop"));
 $("sccopy").addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText(JSON.stringify(S.scenario, null, 1)); toast("Result copied.", "info"); }
+  try { await navigator.clipboard.writeText(JSON.stringify(S.scenario, null, 1)); toast("Result copied.", "ok"); }
   catch (e) { toast("The browser would not let the page copy."); }
 });
 

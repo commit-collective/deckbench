@@ -4,6 +4,10 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+### The page
+
+- A message that something went through (a file sent, a scenario kept or copied) has a green outline, like a deck that is on. The red outline is for errors, and there is a yellow one for a warning (`toast(text, "warn")`).
+
 ### A journal of a session
 
 - `POST /api/journal/start` begins keeping every request that changes the decks, with its time, after a baseline of requests that would put
