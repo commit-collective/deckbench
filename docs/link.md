@@ -25,6 +25,16 @@ it was told of, and goes on at its tempo from the last.
 A deck that is synced to the master snaps to its beat grid, not only to its tempo. The bench takes the master's place from the
 master's own beat packets, including the unit's.
 
+## The journal
+
+`POST /api/journal/start` begins a journal and answers `{"began", "baseline"}`: the requests (paths with their query) that would put the decks where
+they are now (which are on, their tempo, a sync or master, a file they play, a loop, which play). From then on each `POST` that changes something
+(a deck's switch, tempo, load, loop, unplug, the mixer, a setting) is kept with its time. `POST /api/journal/stop` ends it and answers
+`{"began", "baseline", "actions": [[time, "/api/..."], ...]}`, the times from the bench's clock (`time.time()`). Playing it back is sending the baseline and
+then each action at its time after the start. A deck that plays starts from the first beat of its bar, as it does when it is started, so the phase of a
+deck that was already playing when the journal began is not the same. A deck's file is named by the path it had on the bench's machine. Uploads are kept only
+until the bench leaves. Requests for `journal`, `upload`, `packets`, `events` and `scenario` are not kept, and neither is a `token`.
+
 ## The log
 
 The Network tab has a real-time log of the packets. Keep-alives, claims, on air, fader start and the like are shown by default.

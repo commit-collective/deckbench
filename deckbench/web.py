@@ -38,6 +38,9 @@
                                      (404 if it has none)
     GET  /api/deck/<n>/audio.wav     the deck's sound file as a 16-bit stereo 44.1 kHz WAV (404 if it plays its drum loop): what the
                                      page plays for it, as it plays the drum loop for the others
+    POST /api/journal/start          starts keeping every request that changes the decks, with its time, after a baseline (the requests
+                                     that would put the decks where they are): answers {"began", "baseline"}
+    POST /api/journal/stop           ends it, and answers {"began", "baseline", "actions": [[time, "/api/..."], ...]} (see journal.py)
     POST /api/upload?name=<file name>   the body is a sound file, which the bench keeps (until it leaves) in a folder of its own: the
                                      answer is {"path", "name", "bytes"}, the path to give a deck's ?audio=. It is how a page picks a
                                      file from the machine the browser is on (413 above 300 MB)
@@ -61,6 +64,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .audio import AudioError
 from .core import log
+from .journal import Journal
 from .scenario import Runner, ScenarioError
 
 UI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
@@ -106,6 +110,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
     as `?token=...` or `Authorization: Bearer ...`. The page's own files are served to anyone who can reach the port."""
     allowed = {o.rstrip("/") for o in allow_origins}
     runner = Runner(world)
+    journal = Journal()
     uploads = {"dir": None, "n": 0}           # the folder the page's files are kept in (made when the first comes, removed at exit)
 
     def keep_upload(name, source, length):
@@ -276,6 +281,11 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
                 return
             parts = self.path.split("?")[0].strip("/").split("/")
             query = parse_qs(urlparse(self.path).query)
+            if parts == ["api", "journal", "start"]:
+                return self.send(200, json.dumps(journal.start(world)))
+            if parts == ["api", "journal", "stop"]:
+                return self.send(200, json.dumps(journal.stop()))
+            journal.note(self.path)
             if parts[:2] == ["api", "mixer"]:
                 for protocol in world.protocols:
                     result = protocol.handle_api(parts[1:], query)

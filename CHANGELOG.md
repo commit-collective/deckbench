@@ -4,6 +4,12 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+### A journal of a session
+
+- `POST /api/journal/start` begins keeping every request that changes the decks, with its time, after a baseline of requests that would put
+  the decks where they are. `POST /api/journal/stop` answers both. A program that records a session (the DJS-1000 emulator's REC) keeps it and
+  sends it again to a bench to play the session back. See `docs/link.md`.
+
 ### Tracks of your own
 
 - A deck can play a sound file instead of its drum loop: `--track DECK=FILE@BPM[@START]`, the page's "Load a track" fold, or
