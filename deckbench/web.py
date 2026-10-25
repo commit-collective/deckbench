@@ -8,6 +8,8 @@
                                  play, sync or master; answers the new state
     POST /api/deck/<n>/<what>/<0|1>
                                  sets the switch instead of toggling it
+    POST /api/deck/<n>/cue[/<1|0>]   CUE: pressed (1) and let go (0), or a tap. Playing: back to the cue point, paused. Paused on it: plays
+                                     while held. Paused elsewhere: that is the cue point (play pauses and plays on from where it is)
     POST /api/deck/<n>/loop/<beats>  a loop of that many beats from the beat the
                                  deck is in (0 ends it)
     POST /api/deck/<n>/tempo/<bpm>   the pitch fader: the deck plays at that tempo
@@ -397,6 +399,13 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
                 except (ValueError, KeyError):
                     return self.send(404, '{"error": "no such deck"}')
                 what = parts[3]
+                if what == "cue":                       # CUE: down (cue/1) and up (cue/0), or a tap
+                    if deck.enabled:
+                        if len(parts) == 5:
+                            world.set_cue(deck, parts[4] == "1")
+                        else:
+                            world.toggle(deck, "cue")
+                    return self.send(200, json.dumps(world.snapshot()))
                 if what == "loop" and len(parts) == 5:      # the loop's length in beats, 0 for none
                     try:
                         beats = int(parts[4])

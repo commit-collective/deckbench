@@ -34,7 +34,7 @@ Python 3.8 or later, no packages to install.
 
     python -m deckbench --numbers 2,3,4 --on
 
-then open <http://127.0.0.1:8750/>. A deck is a card with ON, PLAY, SYNC and MASTER, the four beat squares of its bar and its
+then open <http://127.0.0.1:8750/>. A deck is a card whose number switches it on and off, with PLAY (and PAUSE), CUE, SYNC and MASTER, the four beat squares of its bar and its
 tempo display, its loops, its tempo (the pitch fader), its cable (pull it, or silence it for a while) and a fold to load a
 track (its id, title, BPM, the deck whose database it comes from and the slot). The side panel has five tabs:
 
@@ -97,6 +97,9 @@ Options (`python -m deckbench --help`):
     GET  /api/state                   what the decks are, as JSON
     POST /api/deck/<n>/<what>         a click on a switch: on, play, sync, master
     POST /api/deck/<n>/<what>/<0|1>   set the switch instead
+    POST /api/deck/<n>/cue[/<1|0>]    CUE, pressed (1) and let go (0), or a tap: back to the cue point while playing, plays while held on it,
+                                      sets the cue point when paused elsewhere
+    POST /api/journal/start|stop      keeps every request that changes the decks, with its time (see docs/link.md)
     POST /api/deck/<n>/loop/<beats>   loop that many beats from the beat the deck is in (0: end it)
 
     POST /api/deck/<n>/tempo/<bpm>    the pitch fader: the deck plays at that tempo

@@ -109,7 +109,7 @@ class Heard(unittest.TestCase):
         self.assertEqual((found["mac"], found["peers"]), ("02:fa:4e:de:c0:05", 1))
         self.assertFalse(found["unit"])
         self.assertFalse(found["status"]["play"])
-        self.assertEqual(found["status"]["state"], "paused")
+        self.assertEqual(found["status"]["state"], "cued")           # at its first beat, which is its cue point
 
     def test_02_what_it_says_of_itself(self):
         deck = self.other_world.decks[5]

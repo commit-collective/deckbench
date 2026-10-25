@@ -134,9 +134,12 @@ button { cursor: pointer; }
 .deck.off { opacity: .6; }
 /* A deck that is off has nothing to drive but its ON switch: the rest is out of the way until it is switched on (a device of the link is not a deck) */
 .deck.off:not(.device) .live, .deck.off:not(.device) .strip, .deck.off:not(.device) .row, .deck.off:not(.device) .fold,
-.deck.off:not(.device) .sw:not([data-what="on"]) { display: none; }
+.deck.off:not(.device) .switches { display: none; }
 .deck.unplugged { border-color: var(--danger); }
 .deck-head { display: flex; gap: 12px; align-items: center; min-width: 0; }
+button.num { cursor: pointer; padding: 0; }
+button.num:hover:not(:disabled) { border-color: var(--text); }
+button.num:disabled { cursor: default; opacity: .5; }
 .num { flex: none; width: 38px; height: 38px; display: grid; place-items: center; font-weight: 500; border-radius: var(--r);
   font-size: 16px; background: transparent; color: var(--muted); border: 1px solid var(--line-2); }
 .deck.on .num { color: #0b0c0e; background: var(--on); border-color: var(--on); box-shadow: 0 0 10px -2px color-mix(in srgb, var(--on) var(--glow), transparent); }
@@ -177,7 +180,7 @@ button { cursor: pointer; }
 .sw[aria-pressed="true"] { color: var(--on-fg); background: var(--on-bg); border-color: var(--on-bd); }
 .sw[aria-pressed="true"]::before { background: var(--lamp); box-shadow: 0 0 8px color-mix(in srgb, var(--lamp) var(--glow), transparent); }
 :root[data-style="classic"] .sw[aria-pressed="true"] { border-color: var(--lamp); }
-.sw[data-what=on] { --lamp: var(--on); } .sw[data-what=play] { --lamp: var(--play); }
+.sw[data-what=cue] { --lamp: var(--master); } .sw[data-what=play] { --lamp: var(--play); }
 .sw[data-what=sync] { --lamp: var(--sync); } .sw[data-what=master] { --lamp: var(--master); }
 .sw:disabled { opacity: .35; cursor: default; }
 

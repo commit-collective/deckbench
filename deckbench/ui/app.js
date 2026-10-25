@@ -4,7 +4,7 @@
 const $ = (id) => document.getElementById(id);
 const SLOTS = {1: "CD", 2: "SD", 3: "USB", 4: "rekordbox"};
 const LOOPS = [1, 2, 4, 8, 16, 32];
-const SWITCHES = [["on", "ON"], ["play", "PLAY"], ["sync", "SYNC"], ["master", "MASTER"]];
+const SWITCHES = [["play", "PLAY"], ["cue", "CUE"], ["sync", "SYNC"], ["master", "MASTER"]];      /* the deck's number is its on / off switch */
 
 const store = {
   get(key, fallback) { try { const v = localStorage.getItem(key); return v === null ? fallback : v; } catch (e) { return fallback; } },
@@ -148,7 +148,8 @@ function buildDeck(n, numbers) {
   const q = (cls) => card.querySelector("." + cls);
   const card = h("article", {class: "deck off", id: "deck" + n, "aria-label": "Deck " + n},
     h("div", {class: "deck-head"},
-      h("div", {class: "num", "aria-hidden": "true"}, n),
+      h("button", {class: "num", type: "button", "aria-pressed": "false", title: "Switch deck " + n + " on or off",
+        "aria-label": "Deck " + n + " on", onclick: () => act("api/deck/" + n + "/on")}, n),
       h("div", {class: "deck-id"}, h("div", {class: "model"}), h("div", {class: "track"})),
       h("div", {class: "tags"})),
     h("div", {class: "live"},
@@ -156,8 +157,17 @@ function buildDeck(n, numbers) {
       h("div", {class: "lcd", "aria-label": "Tempo"}, h("b", {}, "--"), h("span", {}, "BPM"))),
     h("canvas", {class: "strip", "aria-hidden": "true"}),
     h("div", {class: "switches", role: "group", "aria-label": "Deck " + n + " switches"},
-      SWITCHES.map(([what, label]) => h("button", {class: "sw", "data-what": what, "aria-pressed": "false",
-        onclick: () => act("api/deck/" + n + "/" + what)}, label))),
+      SWITCHES.map(([what, label]) => what === "cue"
+        /* CUE is held: down plays from the cue point when the deck is paused on it, and up goes back */
+        ? h("button", {class: "sw", "data-what": what, "aria-pressed": "false",
+            title: "Playing: back to the cue point. Paused on it: plays while held. Paused elsewhere: sets the cue point",
+            onpointerdown: (e) => { e.currentTarget.setPointerCapture(e.pointerId); act("api/deck/" + n + "/cue/1"); },
+            onpointerup: () => act("api/deck/" + n + "/cue/0"),
+            onpointercancel: () => act("api/deck/" + n + "/cue/0"),
+            onkeydown: (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); act("api/deck/" + n + "/cue/1"); } },
+            onkeyup: (e) => { if (e.key === " " || e.key === "Enter") act("api/deck/" + n + "/cue/0"); }}, label)
+        : h("button", {class: "sw", "data-what": what, "aria-pressed": "false",
+            onclick: () => act("api/deck/" + n + "/" + what)}, label))),
     h("div", {class: "row"}, h("label", {for: "tempo" + n}, "Tempo"),
       h("input", {type: "range", id: "tempo" + n, class: "tempo-range", min: 60, max: 200, step: 0.1,
         "aria-label": "Tempo of deck " + n}),
@@ -420,15 +430,18 @@ function render() {
     if (mixer && mixer.on && d.on) tags.append(h("span", {class: "tag " + (d.on_air ? "air-tag" : "off-air")}, d.on_air ? "ON AIR" : "OFF AIR"));
 
     q("lcd").firstChild.textContent = d.on ? d.bpm.toFixed(1) : "--";
+    const power = q("num");                  /* the number: the deck's on / off switch */
+    if (power.tagName === "BUTTON") {
+      const clash = !!unit && unit.number === Number(n) && !d.on;
+      power.setAttribute("aria-pressed", String(!!d.on));
+      power.disabled = clash;
+      power.title = clash ? "This is the unit's own number: a deck here is a clash" : "Switch deck " + n + (d.on ? " off" : " on");
+    }
     for (const b of card.querySelectorAll(".sw")) {
       const what = b.dataset.what;
-      b.setAttribute("aria-pressed", String(!!d[what] && (what === "on" || d.on)));
-      b.disabled = what !== "on" && !d.on;
-      if (what === "on") {
-        const clash = !!unit && unit.number === Number(n) && !d.on;
-        b.disabled = clash;
-        b.title = clash ? "This is the unit's own number: a deck here is a clash" : "";
-      }
+      b.setAttribute("aria-pressed", String(!!d[what] && d.on));
+      b.disabled = !d.on;
+      if (what === "play") b.textContent = d.play ? "PAUSE" : "PLAY";
     }
     const range = q("tempo-range"), num = q("tempo-num");
     if (active !== range) range.value = d.bpm;

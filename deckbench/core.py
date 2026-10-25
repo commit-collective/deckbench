@@ -43,6 +43,8 @@ class Deck:
         self.unplugged = False
         self.track = None                    # the track it has loaded: (rekordbox id, title), or None for its first
         self.audio = None                    # a sound file it plays (audio.Track), or None: its drum loop
+        self.cue = 0.0                       # the cue point, in beats (where CUE takes the deck back to: the first beat of a track)
+        self.cueing = False                  # CUE is held where the deck was paused, so that it plays until it is let go
         self.on_air = None                   # what a mixer said (True or False), None: none did, so it is on air while it plays
 
     def position(self, now):
@@ -59,6 +61,10 @@ class Deck:
     def reanchor(self, now):
         self.anchor_pos = self.position(now)
         self.anchor_t = now
+
+    def at_cue(self, now=None):
+        """Paused on the cue point."""
+        return not self.playing and abs(self.position(time.time() if now is None else now) - self.cue) < 0.02
 
     @property
     def beat_in_bar(self):
@@ -168,7 +174,7 @@ class World:
         with self.lock:
             decks = {}
             for n, d in self.decks.items():
-                entry = {"on": d.enabled, "play": d.playing, "sync": d.sync,
+                entry = {"on": d.enabled, "play": d.playing, "sync": d.sync, "cue": d.cueing or d.at_cue(),
                          "on_air": d.on_air if d.on_air is not None else d.playing,
                          "at": None if d.playing else round(d.position(time.time()), 3),    # where a stopped deck is, in beats
                          "master": d.master and d.enabled, "bpm": round(d.tempo(), 2),
@@ -203,13 +209,36 @@ class World:
         return True
 
     def set_play(self, deck, on):
+        """Play, or pause: a deck that pauses stays where it is and plays on from there (a deck that has not played since its track was
+        loaded is at its first beat)."""
         def change():
             deck.playing = on
-            if on:                           # from the first beat of a bar
+            deck.cueing = False
+            if on:
                 deck.anchor_t = time.time()
-                deck.anchor_pos = 0.0
         self.settle(change)
-        log("%s %s" % (deck.name, "plays" if on else "stops"))
+        log("%s %s" % (deck.name, "plays" if on else "pauses"))
+        self.changed()
+
+    def set_cue(self, deck, down):
+        """CUE as a CDJ has it. Pressed while the deck plays: it goes back to the cue point and pauses. Pressed while it is paused at the
+        cue point: it plays for as long as CUE is held, and goes back when it is let go. Pressed while it is paused elsewhere: that is
+        the new cue point."""
+        def change():
+            if down:
+                if deck.playing:
+                    deck.playing = deck.cueing = False
+                    deck.anchor_pos = deck.cue
+                elif abs(deck.anchor_pos - deck.cue) < 0.02:
+                    deck.playing = deck.cueing = True
+                    deck.anchor_t = time.time()
+                else:
+                    deck.cue = deck.anchor_pos
+            elif deck.cueing:
+                deck.playing = deck.cueing = False
+                deck.anchor_pos = deck.cue
+        self.settle(change)
+        log("%s cue %s" % (deck.name, "down" if down else "up"))
         self.changed()
 
     def set_loop(self, deck, beats):
@@ -238,6 +267,7 @@ class World:
         tempo): it starts from its first beat, as a loaded track does, and the protocols tell the network."""
         def change():
             deck.track = (int(rbid), title)
+            deck.cue, deck.cueing = 0.0, False
             deck.audio = None                # a track of the bench's own, not of a file (load_audio gives the file after)
             if bpm:
                 deck.base_bpm = float(bpm)
@@ -325,9 +355,12 @@ class World:
         if what == "on":
             self.set_enabled(deck, not deck.enabled)
         elif not deck.enabled:
-            return what in ("play", "sync", "master")
+            return what in ("play", "cue", "sync", "master")
         elif what == "play":
             self.set_play(deck, not deck.playing)
+        elif what == "cue":                     # a tap: down and up
+            self.set_cue(deck, True)
+            self.set_cue(deck, False)
         elif what == "sync":
             self.set_sync(deck, not deck.sync)
         elif what == "master":

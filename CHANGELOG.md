@@ -6,7 +6,12 @@ Newest first. A release is a tagged commit.
 
 ### The page
 
-- A deck that is off shows only its ON switch, so the page is not mostly dimmed controls. Its card is as tall as that, not as tall as the decks that are on.
+- Play is play and pause: a deck that pauses stays where it is and plays on from there (it used to start again from its first beat). A deck is at its
+  first beat when its track is loaded.
+- CUE, as a CDJ has it: while playing it goes back to the cue point and pauses, held on the cue point it plays until let go, paused elsewhere it sets the
+  cue point. `POST /api/deck/<n>/cue[/<1|0>]`. The status says `cued` and `cue playing` besides `paused` and `playing`.
+- The deck's number is its on / off switch, and the ON button is gone.
+- A deck that is off shows only its number and its name, so the page is not mostly dimmed controls. Its card is as tall as that, not as tall as the decks that are on.
 - The header says what each sound is for: the chip `unit input` is the port the decks' sound is served on for a unit, and the button `Listen` plays it in the browser (it was `Sound`).
 - A chip `recording a session` shows while a journal is kept (see `docs/link.md`).
 - A message that something went through (a file sent, a scenario kept or copied) has a green outline, like a deck that is on. The red outline is for errors, and there is a yellow one for a warning (`toast(text, "warn")`).

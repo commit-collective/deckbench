@@ -56,7 +56,7 @@ class DemoBench {
     this.began = Date.now() / 1000;
     this.decks = {};
     numbers.forEach((n, i) => {
-      this.decks[n] = {number: n, on: false, play: false, sync: false, master: false, loop: null, base: 128 - 2 * i, unplugged: false,
+      this.decks[n] = {number: n, on: false, play: false, sync: false, master: false, loop: null, cue: 0, cueing: false, base: 128 - 2 * i, unplugged: false,
         anchorT: this.now(), anchorPos: 0, on_air: null, track: {id: 100 + n, title: "Track of deck " + n, source: n, slot: 3}};
     });
     this.loss = 0;
@@ -166,7 +166,7 @@ class DemoBench {
     const decks = {};
     for (const d of Object.values(this.decks)) {
       const bpm = Math.round(this.tempo(d) * 100) / 100;
-      decks[d.number] = {on: d.on, play: d.play, sync: d.sync, on_air: this.onAir(d), master: d.master && d.on, bpm,
+      decks[d.number] = {on: d.on, play: d.play, sync: d.sync, cue: d.cueing || (!d.play && Math.abs(this.position(d) - d.cue) < 0.02), on_air: this.onAir(d), master: d.master && d.on, bpm,
         name: "deck " + d.number, loop: d.loop ? d.loop[1] : 0, loop_from: d.loop ? d.loop[0] : 0, unplugged: d.unplugged,
         at: d.play ? null : Math.round(this.position(d) * 1000) / 1000,
         phase: d.on && d.play ? [d.anchorT, d.anchorPos, bpm] : null,
@@ -194,13 +194,25 @@ class DemoBench {
   }
 
   /* -- what is done to it -- */
+  /* CUE as a CDJ has it (core.py set_cue): playing, back to the cue point and paused. Paused on it, plays while held. Paused elsewhere, sets it. */
+  cue(d, down) {
+    if (!d.on) return;
+    this.settle(() => {
+      if (down) {
+        if (d.play) { d.play = d.cueing = false; d.anchorPos = d.cue; }
+        else if (Math.abs(d.anchorPos - d.cue) < 0.02) { d.play = d.cueing = true; d.anchorT = this.now(); }
+        else d.cue = d.anchorPos;
+      } else if (d.cueing) { d.play = d.cueing = false; d.anchorPos = d.cue; }
+    });
+  }
+
   toggle(d, what, want) {
     if (what === "on") {
       this.settle(() => { d.on = want ?? !d.on; if (!d.on) { d.master = false; d.play = false; } });
     } else if (!d.on) {
       return;
     } else if (what === "play") {
-      this.settle(() => { d.play = want ?? !d.play; if (d.play) { d.anchorT = this.now(); d.anchorPos = 0; } });
+      this.settle(() => { d.play = want ?? !d.play; d.cueing = false; if (d.play) d.anchorT = this.now(); });      /* pause keeps the place, play goes on from it */
     } else if (what === "sync") {
       this.settle(() => { d.sync = want ?? !d.sync; });
     } else if (what === "master") {
@@ -253,6 +265,10 @@ class DemoBench {
       const d = this.decks[Number(parts[2])];
       if (!d) return fail(404, "no such deck");
       const what = parts[3], arg = parts[4];
+      if (what === "cue") {
+        if (arg === undefined) { this.cue(d, true); this.cue(d, false); } else this.cue(d, arg === "1");
+        return ok();
+      }
       if (["on", "play", "sync", "master"].includes(what)) { this.toggle(d, what, arg === undefined ? undefined : arg === "1"); return ok(); }
       if (what === "loop") {
         const beats = Number(arg);
@@ -266,7 +282,7 @@ class DemoBench {
         this.settle(() => {
           d.track = {id: Number(arg), title: title || "Track " + arg, source: Number(query.get("source") || d.number), slot: Number(query.get("slot") || d.track.slot)};
           if (bpm) d.base = Number(bpm);
-          d.anchorT = this.now(); d.anchorPos = 0; d.loop = null;
+          d.anchorT = this.now(); d.anchorPos = 0; d.loop = null; d.cue = 0; d.cueing = false;
         });
         return ok();
       }
