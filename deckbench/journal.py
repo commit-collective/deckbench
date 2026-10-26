@@ -12,7 +12,7 @@ import time
 from urllib.parse import quote
 
 # the requests that are not changes of the decks: they are not kept
-IGNORED = ("journal", "upload", "packets", "events", "scenario")
+IGNORED = ("journal", "upload", "uploads", "packets", "events", "scenario")
 
 
 def baseline(world):

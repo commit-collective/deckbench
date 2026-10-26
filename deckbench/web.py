@@ -43,21 +43,21 @@
     POST /api/journal/start          starts keeping every request that changes the decks, with its time, after a baseline (the requests
                                      that would put the decks where they are): answers {"began", "baseline"}
     POST /api/journal/stop           ends it, and answers {"began", "baseline", "actions": [[time, "/api/..."], ...]} (see journal.py)
-    POST /api/upload?name=<file name>   the body is a sound file, which the bench keeps (until it leaves) in a folder of its own: the
-                                     answer is {"path", "name", "bytes"}, the path to give a deck's ?audio=. It is how a page picks a
-                                     file from the machine the browser is on (413 above 300 MB)
+    POST /api/upload?name=<file name>   the body is a sound file, which the bench keeps in a folder of its own on its machine (~/.deckbench/tracks,
+                                     see uploads.py: named by a hash of the file, so the same file is one, kept between runs and removed when unused
+                                     for a month): the answer is {"path", "name", "bytes"}, the path to give a deck's ?audio=. It is how a page
+                                     picks a file from the machine the browser is on (413 above 300 MB)
+    GET  /api/uploads                the folder and what it holds: {"dir", "files", "bytes"}
+    POST /api/uploads/clear          removes the sent files (not one a deck has loaded): {"removed", "bytes"}
 
 The page (deckbench/ui: index.html, app.css, app.js, no build step and no packages) follows /api/stream and counts the
 beat squares on from each deck's phase, so it needs nothing but a browser, on the machine or any that can reach the port
 (by default it listens on 127.0.0.1 only).
 """
-import atexit
 import hmac
 import json
 import os
 import re
-import shutil
-import tempfile
 import threading
 import time
 from urllib.parse import parse_qs, unquote, urlparse
@@ -65,6 +65,7 @@ import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .audio import AudioError
+from . import uploads as upload_store
 from .core import log
 from .journal import Journal
 from .scenario import Runner, ScenarioError
@@ -103,38 +104,31 @@ class Server(ThreadingHTTPServer):
         self.server_name, self.server_port = self.server_address[:2]
 
 
-def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
+def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, tracks=None):
     """Starts the server in a thread; returns it.
 
     A request to the API that comes from a page (it has an Origin header) is refused unless that page is the bench's own
     or its origin is in `allow_origins` (for a page hosted elsewhere, such as https://commitcollective.cc), which is
     then given the CORS headers it needs, a preflight for a private network included. With a `token` the API wants it,
-    as `?token=...` or `Authorization: Bearer ...`. The page's own files are served to anyone who can reach the port."""
+    as `?token=...` or `Authorization: Bearer ...`. The page's own files are served to anyone who can reach the port. The files the page
+    sends are kept in the folder `tracks` (default uploads.default_dir())."""
     allowed = {o.rstrip("/") for o in allow_origins}
     runner = Runner(world)
     journal = Journal()
-    uploads = {"dir": None, "n": 0}           # the folder the page's files are kept in (made when the first comes, removed at exit)
+    folder = tracks or upload_store.default_dir()
+
+    def loaded():
+        """The files the decks play now."""
+        with world.lock:
+            return [d.audio.path for d in world.decks.values() if d.audio]
+
+    removed, freed = upload_store.trim(folder)
+    if removed:
+        log("removed %d unused file%s (%.1f MB) from %s" % (removed, "" if removed == 1 else "s", freed / 1048576.0, folder))
 
     def keep_upload(name, source, length):
-        """Writes `length` bytes of `source` (a file object) to a file of the bench's own and gives its path."""
-        if uploads["dir"] is None:
-            uploads["dir"] = tempfile.mkdtemp(prefix="deckbench-tracks-")
-            atexit.register(shutil.rmtree, uploads["dir"], True)
-        uploads["n"] += 1
-        safe = re.sub(r"[^\w.\- ]+", "_", os.path.basename(name.replace("\\", "/")))[:80] or "track"
-        path = os.path.join(uploads["dir"], "%d-%s" % (uploads["n"], safe))
-        left = length
-        with open(path, "wb") as f:
-            while left > 0:
-                chunk = source.read(min(left, 1 << 20))
-                if not chunk:
-                    break
-                f.write(chunk)
-                left -= len(chunk)
-        if left:                                  # the page went away half way
-            os.remove(path)
-            raise OSError("the file did not come whole")
-        return path
+        """Writes `length` bytes of `source` (a file object) to the bench's folder of sent files and gives its path."""
+        return upload_store.keep(folder, name, source, length)
     STATIC = set(os.listdir(UI)) if os.path.isdir(UI) else set()
 
     class Handler(BaseHTTPRequestHandler):
@@ -236,6 +230,8 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
                     self.send(200, f.read(), KINDS.get(os.path.splitext(name)[1], "application/octet-stream"))
             elif path == "/api/state":
                 self.send(200, json.dumps(world.snapshot()))
+            elif path == "/api/uploads":
+                self.send(200, json.dumps(upload_store.summary(folder)))
             elif re.fullmatch(r"/api/deck/\d+/waveform", path):
                 deck = world.decks.get(int(path.split("/")[3]))
                 track = deck.audio if deck else None
@@ -316,6 +312,9 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
                 except OSError as e:
                     return self.send(400, json.dumps({"error": str(e)}))
                 return self.send(200, json.dumps({"path": path, "name": os.path.basename(path), "bytes": length}))
+            if parts == ["api", "uploads", "clear"]:
+                count, size = upload_store.clear(folder, loaded())
+                return self.send(200, json.dumps({"removed": count, "bytes": size}))
             if parts == ["api", "packets", "clear"]:
                 for protocol in world.protocols:
                     if hasattr(protocol, "monitor"):
@@ -374,6 +373,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None):
                             world.load_audio(deck, audio, float(bpm) if bpm else None, query["title"][0] if "title" in query else None,
                                              int(parts[4]), float(offset) if offset else 0.0,
                                              int(source) if source else None, int(slot) if slot else None)
+                            upload_store.touch(audio)             # a file of the folder that is in use is not old
                         else:
                             world.load_track(deck, int(parts[4]), query["title"][0] if "title" in query else None,
                                              float(bpm) if bpm else None, int(source) if source else None,

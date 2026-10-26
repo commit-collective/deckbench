@@ -753,6 +753,15 @@ $("look").value = store.get("deckbench.look", "commit");
 look($("look").value);
 $("look").addEventListener("change", (e) => { store.set("deckbench.look", e.target.value); look(e.target.value); });
 
+/* ---- the files this page sends ---- */
+
+if ($("clearuploads")) $("clearuploads").addEventListener("click", async () => {
+  try {
+    const got = await api("api/uploads/clear");
+    toast("Removed " + got.removed + " sent file" + (got.removed === 1 ? "" : "s") + " (" + (got.bytes / 1048576).toFixed(1) + " MB).", "ok");
+  } catch (e) { /* a toast said why */ }
+});
+
 /* ---- sound ---- */
 
 $("sound").addEventListener("click", async () => {

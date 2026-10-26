@@ -16,6 +16,14 @@ Newest first. A release is a tagged commit.
 - A chip `recording a session` shows while a journal is kept (see `docs/link.md`).
 - A message that something went through (a file sent, a scenario kept or copied) has a green outline, like a deck that is on. The red outline is for errors, and there is a yellow one for a warning (`toast(text, "warn")`).
 
+### Sent files are kept
+
+- The files the page sends with Browse are kept between runs in `~/.deckbench/tracks` (`--tracks-dir`, `$DECKBENCH_TRACKS`), named by a hash of their contents, so the same
+  file is one file and a path a session recorded is found again. They used to be in a temporary folder that was only removed when the bench exited by itself, and was left behind
+  when it was stopped (`pkill`, the emulator's `start.py stop`).
+- Files unused for a month are removed at the start, and the oldest when the folder passes 2 GB. A file a deck has loaded stays. `--clear-uploads`, `POST /api/uploads/clear` and
+  a button in the page's Settings empty it, and `GET /api/uploads` says what it holds.
+
 ### A journal of a session
 
 - `POST /api/journal/start` begins keeping every request that changes the decks, with its time, after a baseline of requests that would put

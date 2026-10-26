@@ -36,14 +36,22 @@ Cut a track down to a loop if it is long. A bench that lives in WSL (the DJS-100
 file where it runs: give it the WSL path (`/mnt/c/loops/break.wav`), not the Windows one.
 
 In the page, the deck's "Load a track" fold has a **Sound file** field and **First beat at**. **Browse** opens the browser's own file
-picker: the file is sent to the bench (up to 300 MB, kept in a folder of its own that goes when the bench leaves) and its path fills the
-field, so the bench and the browser need not be on the same machine, or on the same side of WSL. The title and the BPM are filled from the
+picker: the file is sent to the bench (up to 300 MB) and its path fills the field, so the bench and the browser need not be on the same machine, or on the same side of WSL. The title and the BPM are filled from the
 file's name if they are empty (a "128bpm" in it is taken). Or type a path on the machine the bench runs on. The BPM there is the one the
-file was made at. Through the API:
+file was made at.
+
+**Where a sent file goes.** A browser tells a page only what is in a file, never where it is, so Browse has to send the bytes. The bench keeps them
+on the machine it runs on, in `~/.deckbench/tracks` (`--tracks-dir` or `$DECKBENCH_TRACKS` change it), under a name made of a hash of the contents and
+the file's name, such as `3f9a1c20bb-break.wav`. The same file sent twice is one file, and the folder stays between runs, so a path that a session
+recorded (a journal, the emulator's REC) is found again. Files unused for a month are removed when the bench starts, and the oldest go if the folder
+holds over 2 GB. A file a deck has loaded is never removed. **Clear sent files** in the page's Settings, `POST /api/uploads/clear` and `--clear-uploads`
+empty it. Typing a path loads the file where it is and copies nothing. Through the API:
 
     POST /api/deck/2/load/1002?audio=C:/loops/break.wav&bpm=128&offset=0.05
     POST /api/deck/2/audio/clear
     POST /api/upload?name=break.wav          (the body is the file: the answer has the path to give ?audio=)
+    GET  /api/uploads                        (the folder, and how many files and bytes it holds)
+    POST /api/uploads/clear                  (removes them, but not one a deck has loaded)
 
 A file that will not do is answered with 400 and `{"error": ...}`, and nothing changes. The state has each deck's `audio` (its
 `file`, `bpm`, `seconds` and `offset`), or null.

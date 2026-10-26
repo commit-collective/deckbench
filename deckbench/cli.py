@@ -138,6 +138,10 @@ def main(argv=None):
                     help="the API wants this token (?token=... or Authorization: Bearer ...). `auto` makes one and says it")
     ap.add_argument("--http-host", default="127.0.0.1", metavar="ADDRESS",
                     help="the address the page listens on (default 127.0.0.1)")
+    ap.add_argument("--tracks-dir", metavar="DIR",
+                    help="where the page keeps the sound files it sends (Browse...), kept between runs (default ~/.deckbench/tracks or "
+                         "$DECKBENCH_TRACKS). Files unused for a month are removed at the start, and the oldest if it holds over 2 GB")
+    ap.add_argument("--clear-uploads", action="store_true", help="empty that folder at the start")
     a = ap.parse_args(argv)
 
     numbers = [int(x) for x in a.numbers.split(",")] if a.numbers else list(range(1, a.decks + 1))
@@ -232,7 +236,11 @@ def main(argv=None):
         log("the API wants a token: open the page as http://127.0.0.1:PORT/#token=%s" % token)
     elif token:
         log("the API wants a token: %s (open the page with #token=%s)" % (token, token))
-    server = serve(world, a.http_host, a.http_port, a.allow_origin, token) if a.http_port >= 0 else None
+    if a.clear_uploads:
+        from . import uploads
+        count, size = uploads.clear(a.tracks_dir or uploads.default_dir())
+        log("removed %d sent file%s (%.1f MB)" % (count, "" if count == 1 else "s", size / 1048576.0))
+    server = serve(world, a.http_host, a.http_port, a.allow_origin, token, a.tracks_dir) if a.http_port >= 0 else None
     if server:
         world.info["http"] = "http://%s:%d/" % (a.http_host, server.server_address[1])
     if a.ready_file:

@@ -247,13 +247,58 @@ class Upload(unittest.TestCase):
     def setUpClass(cls):
         cls.world = World()
         cls.world.decks[2] = Deck(cls.world, 2, 120.0)
-        cls.server = serve(cls.world, "127.0.0.1", 0)
+        cls.folder = tempfile.mkdtemp(prefix="deckbench-test-tracks-")      # not the user's own folder of sent files
+        cls.server = serve(cls.world, "127.0.0.1", 0, tracks=cls.folder)
         cls.base = "http://127.0.0.1:%d/" % cls.server.server_address[1]
 
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
         cls.server.server_close()
+        shutil.rmtree(cls.folder, True)
+
+    def test_the_same_file_is_one_file_and_stays(self):
+        data = self.wav_bytes()
+        first = self.post("api/upload?name=same.wav", data)[1]["path"]
+        second = self.post("api/upload?name=same.wav", data)[1]["path"]
+        self.assertEqual(first, second)
+        self.assertEqual(os.path.dirname(first), self.folder)
+        self.assertTrue(os.path.basename(first).endswith("-same.wav"))
+        other = self.post("api/upload?name=same.wav", data + b"x")[1]["path"]      # other contents, other file
+        self.assertNotEqual(first, other)
+
+    def test_what_is_kept_is_told_and_cleared_but_not_what_a_deck_plays(self):
+        playing = self.post("api/upload?name=playing.wav", self.wav_bytes())[1]["path"]
+        self.post("api/upload?name=spare.wav", b"spare" * 100)
+        self.post("api/deck/2/load/60?bpm=120&audio=" + urllib.request.quote(playing))
+        with urllib.request.urlopen(self.base + "api/uploads", timeout=5) as r:
+            said = json.loads(r.read().decode("utf-8"))
+        self.assertEqual(said["dir"], self.folder)
+        self.assertGreaterEqual(said["files"], 2)
+        code, got = self.post("api/uploads/clear")
+        self.assertEqual(code, 200)
+        self.assertGreaterEqual(got["removed"], 1)
+        self.assertTrue(os.path.exists(playing))                 # a deck plays it
+        with urllib.request.urlopen(self.base + "api/uploads", timeout=5) as r:
+            self.assertEqual(json.loads(r.read().decode("utf-8"))["files"], 1)
+
+    def test_old_files_and_the_oldest_over_the_size_go(self):
+        from deckbench import uploads
+        folder = tempfile.mkdtemp(prefix="deckbench-trim-")
+        self.addCleanup(shutil.rmtree, folder, True)
+        now = time.time()
+        for name, size, age in (("a-old.wav", 10, 40 * 86400), ("b-mid.wav", 600, 5 * 86400), ("c-new.wav", 600, 60)):
+            path = os.path.join(folder, name)
+            with open(path, "wb") as f:
+                f.write(b"x" * size)
+            os.utime(path, (now - age, now - age))
+        count, size = uploads.trim(folder, max_age=30 * 86400, max_total=1000)
+        left = sorted(os.listdir(folder))
+        self.assertEqual(left, ["c-new.wav"])                      # the old one by its age, the middle one because 1200 > 1000
+        self.assertEqual(count, 2)
+        keep = os.path.join(folder, "c-new.wav")
+        os.utime(keep, (now - 60 * 86400, now - 60 * 86400))
+        self.assertEqual(uploads.trim(folder, busy=[keep], max_age=30 * 86400)[0], 0)       # but not one that is in use
 
     def post(self, path, body=None):
         request = urllib.request.Request(self.base + path, data=body, method="POST")
