@@ -8,6 +8,11 @@
                                  play, sync or master; answers the new state
     POST /api/deck/<n>/<what>/<0|1>
                                  sets the switch instead of toggling it
+    POST /api/deck/<n>/seek/<beat>   the deck goes to that beat of its track (0 is the first), on the grid, and a loop ends
+    POST /api/deck/<n>/jump/<beats>  and that many beats from the beat it is at (negative: back)
+                                     Any of the switches, cue, loop, seek and jump may have `?at=<bench time>`: the moment the page was clicked
+                                     (the page knows the bench's clock). The action is made where the deck was then, not where it is when
+                                     the request arrives (a pause stops right at the playhead), if that was within 5 s.
     POST /api/deck/<n>/cue[/<1|0>]   CUE: pressed (1) and let go (0), or a tap. Playing: back to the cue point, paused. Paused on it: plays
                                      while held. Paused elsewhere: that is the cue point (play pauses and plays on from where it is)
     POST /api/deck/<n>/loop/<beats>  a loop of that many beats from the beat the
@@ -406,12 +411,24 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 except (ValueError, KeyError):
                     return self.send(404, '{"error": "no such deck"}')
                 what = parts[3]
+                try:
+                    at = float(query["at"][0]) if "at" in query else None       # when the page was clicked, in bench time
+                except ValueError:
+                    at = None
                 if what == "cue":                       # CUE: down (cue/1) and up (cue/0), or a tap
                     if deck.enabled:
                         if len(parts) == 5:
-                            world.set_cue(deck, parts[4] == "1")
+                            world.set_cue(deck, parts[4] == "1", at)
                         else:
-                            world.toggle(deck, "cue")
+                            world.toggle(deck, "cue", at)
+                    return self.send(200, json.dumps(world.snapshot()))
+                if what in ("seek", "jump") and len(parts) == 5:      # seek/<beat>: to that beat. jump/<beats>: that far from here (negative: back)
+                    try:
+                        beats = int(parts[4])
+                    except ValueError:
+                        return self.send(400, '{"error": "no such place"}')
+                    if deck.enabled:
+                        world.seek(deck, beats, what == "jump", at)
                     return self.send(200, json.dumps(world.snapshot()))
                 if what == "loop" and len(parts) == 5:      # the loop's length in beats, 0 for none
                     try:
@@ -421,7 +438,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                     if not 0 <= beats <= 64:
                         return self.send(400, '{"error": "no such loop"}')
                     if deck.enabled:
-                        world.set_loop(deck, beats)
+                        world.set_loop(deck, beats, at)
                     return self.send(200, json.dumps(world.snapshot()))
                 if len(parts) == 5:             # set, not toggle
                     want = parts[4] == "1"
@@ -429,9 +446,9 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                                "master": deck.master}.get(what)
                     if current is None:
                         return self.send(400, '{"error": "no such switch"}')
-                    ok = current == want or world.toggle(deck, what)
+                    ok = current == want or world.toggle(deck, what, at)
                 else:
-                    ok = world.toggle(deck, what)
+                    ok = world.toggle(deck, what, at)
                 if not ok:
                     return self.send(400, '{"error": "no such switch"}')
                 return self.send(200, json.dumps(world.snapshot()))

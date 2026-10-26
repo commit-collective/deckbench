@@ -4,6 +4,11 @@
 const $ = (id) => document.getElementById(id);
 const SLOTS = {1: "CD", 2: "SD", 3: "USB", 4: "rekordbox"};
 const LOOPS = [1, 2, 4, 8, 16, 32];
+/* The moves in the track, in beats (4 to a bar): [label, request, title] */
+const MOVES = [["|◀", "seek/0", "To the first beat of the track"], ["◀◀", "jump/-16", "Back 4 bars"],
+               ["◀", "jump/-4", "Back a bar"], ["▶", "jump/4", "Forward a bar"], ["▶▶", "jump/16", "Forward 4 bars"]];
+/* A request for the moment the page was clicked, in the bench's time: a request that is slow to arrive acts where the playhead was then */
+const clicked = (path) => path + (path.includes("?") ? "&" : "?") + "at=" + (Date.now() / 1000 + S.offset).toFixed(3);
 const SWITCHES = [["play", "PLAY"], ["cue", "CUE"], ["sync", "SYNC"], ["master", "MASTER"]];      /* the deck's number is its on / off switch */
 
 const store = {
@@ -161,13 +166,13 @@ function buildDeck(n, numbers) {
         /* CUE is held: down plays from the cue point when the deck is paused on it, and up goes back */
         ? h("button", {class: "sw", "data-what": what, "aria-pressed": "false",
             title: "Playing: back to the cue point. Paused on it: plays while held. Paused elsewhere: sets the cue point",
-            onpointerdown: (e) => { e.currentTarget.setPointerCapture(e.pointerId); act("api/deck/" + n + "/cue/1"); },
+            onpointerdown: (e) => { e.currentTarget.setPointerCapture(e.pointerId); act(clicked("api/deck/" + n + "/cue/1")); },
             onpointerup: () => act("api/deck/" + n + "/cue/0"),
             onpointercancel: () => act("api/deck/" + n + "/cue/0"),
-            onkeydown: (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); act("api/deck/" + n + "/cue/1"); } },
+            onkeydown: (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); act(clicked("api/deck/" + n + "/cue/1")); } },
             onkeyup: (e) => { if (e.key === " " || e.key === "Enter") act("api/deck/" + n + "/cue/0"); }}, label)
         : h("button", {class: "sw", "data-what": what, "aria-pressed": "false",
-            onclick: () => act("api/deck/" + n + "/" + what)}, label))),
+            onclick: () => act(clicked("api/deck/" + n + "/" + what))}, label))),
     h("div", {class: "row"}, h("label", {for: "tempo" + n}, "Tempo"),
       h("input", {type: "range", id: "tempo" + n, class: "tempo-range", min: 60, max: 200, step: 0.1,
         "aria-label": "Tempo of deck " + n}),
@@ -176,7 +181,11 @@ function buildDeck(n, numbers) {
       h("div", {class: "seg", role: "group", "aria-label": "Loop of deck " + n},
         LOOPS.map((beats) => h("button", {"data-beats": beats, "aria-pressed": "false",
           title: beats + " beats from where the deck is. Again to end it",
-          onclick: () => { const d = S.state.decks[n]; act("api/deck/" + n + "/loop/" + (d.loop === beats ? 0 : beats)); }}, beats)))),
+          onclick: () => { const d = S.state.decks[n]; act(clicked("api/deck/" + n + "/loop/" + (d.loop === beats ? 0 : beats))); }}, beats)))),
+    h("div", {class: "row"}, h("span", {class: "lbl"}, "Move"),
+      h("div", {class: "seg moves", role: "group", "aria-label": "Move deck " + n + " in its track"},
+        MOVES.map(([label, what, title]) => h("button", {title, "data-move": what,
+          onclick: () => act(clicked("api/deck/" + n + "/" + what))}, label)))),
     h("div", {class: "row"}, h("span", {class: "lbl"}, "Cable"),
       h("button", {class: "btn small unplug", title: "Pull the cable: the deck says nothing and answers nothing",
         onclick: () => act("api/deck/" + n + "/" + (S.state.decks[n].unplugged ? "plug" : "unplug"))}, "Unplug"),

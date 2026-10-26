@@ -209,22 +209,51 @@ class World:
         self.changed()
         return True
 
-    def set_play(self, deck, on):
+    @staticmethod
+    def when(at):
+        """The moment a page says it was clicked (bench time), if it is a sane one: a request that was slow to arrive (the bench is on another
+        side of WSL, a connection that waited) still acts where the page's playhead was when the click was made. None: now."""
+        return at if at is not None and abs(time.time() - at) <= 5.0 else None
+
+    def set_play(self, deck, on, at=None):
         """Play, or pause: a deck that pauses stays where it is and plays on from there (a deck that has not played since its track was
-        loaded is at its first beat)."""
+        loaded is at its first beat). `at`: the moment of the click, which a pause is made at."""
+        at = self.when(at)
+        stop_at = deck.position(at) if at is not None and deck.playing and not on else None
+
         def change():
             deck.playing = on
             deck.cueing = False
             if on:
                 deck.anchor_t = time.time()
+            elif stop_at is not None:
+                deck.anchor_pos = stop_at
         self.settle(change)
         log("%s %s" % (deck.name, "plays" if on else "pauses"))
         self.changed()
 
-    def set_cue(self, deck, down):
+    def seek(self, deck, beats, relative=False, at=None):
+        """Moves the deck in its track, to a beat of the grid: that beat (the first is 0), or `beats` from the beat nearest to where it is (a
+        negative number goes back). A deck that plays goes on from there, one that is paused stays there. A loop ends. Never before the first
+        beat. `at`: the moment of the click, which the move is counted from."""
+        at = self.when(at)
+        here = deck.position(at if at is not None else time.time())
+        target = max(0.0, float(round(here) + beats if relative else round(beats)))
+
+        def change():
+            deck.anchor_pos = target
+            deck.anchor_t = time.time()
+            deck.loop = None
+            deck.cueing = False
+        self.settle(change)
+        log("%s goes to beat %d" % (deck.name, int(target)))
+        self.changed()
+
+    def set_cue(self, deck, down, at=None):
         """CUE as a CDJ has it. Pressed while the deck plays: it goes back to the cue point and pauses. Pressed while it is paused at the
         cue point: it plays for as long as CUE is held, and goes back when it is let go. Pressed while it is paused elsewhere: that is
-        the new cue point."""
+        the new cue point, on the nearest beat (before or after: the grid), and the deck is on it."""
+
         def change():
             if down:
                 if deck.playing:
@@ -234,7 +263,7 @@ class World:
                     deck.playing = deck.cueing = True
                     deck.anchor_t = time.time()
                 else:
-                    deck.cue = deck.anchor_pos
+                    deck.cue = deck.anchor_pos = max(0.0, float(round(deck.anchor_pos)))
             elif deck.cueing:
                 deck.playing = deck.cueing = False
                 deck.anchor_pos = deck.cue
@@ -242,12 +271,15 @@ class World:
         log("%s cue %s" % (deck.name, "down" if down else "up"))
         self.changed()
 
-    def set_loop(self, deck, beats):
-        """Sets a loop of `beats` beats (a whole number) that starts at the
-        beat the deck is in, or ends the loop (beats 0)."""
+    def set_loop(self, deck, beats, at=None):
+        """Sets a loop of `beats` beats (a whole number) that starts at the nearest beat to where the deck is (before or after: the grid), or
+        ends the loop (beats 0). `at`: the moment of the click."""
+        at = self.when(at)
+
         def change():
             if beats:
-                deck.loop = (float(int(deck.position(time.time()))), float(beats))
+                here = deck.position(at if at is not None else time.time())
+                deck.loop = (float(max(0, round(here))), float(beats))
             else:
                 deck.loop = None
         self.settle(change)
@@ -363,16 +395,16 @@ class World:
         log("%s is now the master" % deck.name)
         self.changed()
 
-    def toggle(self, deck, what):
-        """What a click on a deck's switch does; False if there is no such."""
+    def toggle(self, deck, what, at=None):
+        """What a click on a deck's switch does; False if there is no such. `at`: the moment of the click."""
         if what == "on":
             self.set_enabled(deck, not deck.enabled)
         elif not deck.enabled:
             return what in ("play", "cue", "sync", "master")
         elif what == "play":
-            self.set_play(deck, not deck.playing)
+            self.set_play(deck, not deck.playing, at)
         elif what == "cue":                     # a tap: down and up
-            self.set_cue(deck, True)
+            self.set_cue(deck, True, at)
             self.set_cue(deck, False)
         elif what == "sync":
             self.set_sync(deck, not deck.sync)

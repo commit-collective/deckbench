@@ -16,6 +16,15 @@ Newest first. A release is a tagged commit.
 - A chip `recording a session` shows while a journal is kept (see `docs/link.md`).
 - A message that something went through (a file sent, a scenario kept or copied) has a green outline, like a deck that is on. The red outline is for errors, and there is a yellow one for a warning (`toast(text, "warn")`).
 
+### Cue, loops and moves on the grid
+
+- CUE and a loop go to the nearest beat, before or after where the deck is (a loop started 0.3 beats late used to start on the beat before, and a cue was
+  wherever it was pressed). A deck that sets its cue is on it, so CUE held there plays from it.
+- The deck can be moved in its track: `POST /api/deck/N/seek/BEAT` and `jump/BEATS` (negative goes back), and a Move row on the page: to the first beat, and
+  a bar or four bars back or forward. A cue set late in a track could not be left before. A loop ends on a move.
+- A pause stops where the playhead was when the page was clicked. The page sends the moment of the click (`?at=`, in the bench's clock), so a request that is slow
+  to arrive (a bench across WSL) no longer makes the deck run on, or the strip jump, before it stops.
+
 ### The unit's input is one deck
 
 - `POST /api/audio/source/<n|all>` makes the sound port play only deck n, or all the decks again, while the bench runs (`--audio-decks` still sets the decks it is

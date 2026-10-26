@@ -97,6 +97,10 @@ Options (`python -m deckbench --help`):
     GET  /api/state                   what the decks are, as JSON
     POST /api/deck/<n>/<what>         a click on a switch: on, play, sync, master
     POST /api/deck/<n>/<what>/<0|1>   set the switch instead
+    POST /api/deck/<n>/seek/<beat>    the deck goes to that beat of its track (0 is the first), on the grid, and a loop ends
+    POST /api/deck/<n>/jump/<beats>   and that many beats from the beat it is at (negative: back)
+                                      Switches, cue, loops, seek and jump take `?at=<bench time>`, the moment of the click: a request that arrives
+                                      late acts where the deck was then (a pause stops right at the playhead)
     POST /api/deck/<n>/cue[/<1|0>]    CUE, pressed (1) and let go (0), or a tap: back to the cue point while playing, plays while held on it,
                                       sets the cue point when paused elsewhere
     POST /api/journal/start|stop      keeps every request that changes the decks, with its time (see docs/link.md)

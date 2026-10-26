@@ -201,7 +201,7 @@ class DemoBench {
       if (down) {
         if (d.play) { d.play = d.cueing = false; d.anchorPos = d.cue; }
         else if (Math.abs(d.anchorPos - d.cue) < 0.02) { d.play = d.cueing = true; d.anchorT = this.now(); }
-        else d.cue = d.anchorPos;
+        else d.cue = d.anchorPos = Math.max(0, Math.round(d.anchorPos));
       } else if (d.cueing) { d.play = d.cueing = false; d.anchorPos = d.cue; }
     });
   }
@@ -265,6 +265,15 @@ class DemoBench {
       const d = this.decks[Number(parts[2])];
       if (!d) return fail(404, "no such deck");
       const what = parts[3], arg = parts[4];
+      if (what === "seek" || what === "jump") {                      /* to a beat of the grid, or that far from the nearest one (see core.py seek) */
+        const beats = parseInt(arg, 10);
+        if (Number.isNaN(beats)) return fail(400, "no such place");
+        if (d.on) {
+          const target = Math.max(0, what === "jump" ? Math.round(this.position(d)) + beats : Math.round(beats));
+          this.settle(() => { d.anchorPos = target; d.anchorT = this.now(); d.loop = null; d.cueing = false; });
+        }
+        return ok();
+      }
       if (what === "cue") {
         if (arg === undefined) { this.cue(d, true); this.cue(d, false); } else this.cue(d, arg === "1");
         return ok();
@@ -273,7 +282,7 @@ class DemoBench {
       if (what === "loop") {
         const beats = Number(arg);
         if (!(beats >= 0 && beats <= 64)) return fail(400, "no such loop");
-        if (d.on) this.settle(() => { d.loop = beats ? [Math.floor(this.position(d)), beats] : null; });
+        if (d.on) this.settle(() => { d.loop = beats ? [Math.max(0, Math.round(this.position(d))), beats] : null; });
         return ok();
       }
       if (what === "tempo") { this.settle(() => { d.base = Number(arg); }); return ok(); }
