@@ -16,20 +16,22 @@ const Strip = (() => {
   v.layout = (deck, now, offset) => {
     const lo = now - BEHIND - 1, hi = now + AHEAD + 1;
     if (deck.phase) {
+      const end = deck.loop_from + deck.loop, going = !!deck.loop && deck.phase[1] < end;      /* moved past its loop: it is behind, as a mark */
       const ticks = Sound.beats(deck, lo, hi, offset).map((b) => ({
         dt: b.time - now, at: b.at, beat: b.beat,
-        inLoop: !!deck.loop && b.k >= deck.loop_from,
-        wrap: !!deck.loop && b.k >= deck.loop_from + deck.loop && (b.k - deck.loop_from) % deck.loop === 0}));
+        inLoop: !!deck.loop && b.k >= deck.loop_from && (going || b.k < end),
+        wrap: going && b.k >= end && (b.k - deck.loop_from) % deck.loop === 0}));
       const [t, pos, bpm] = deck.phase, here = pos + (now + offset - t) * bpm / 60;
       return {ticks, stopped: false, loop: deck.loop || 0, loopAhead: deck.loop && deck.loop_from > here ? deck.loop_from - here : 0};
     }
     const at = deck.at, rate = (deck.bpm || 120) / 60;
     if (at == null) return {ticks: [], stopped: true, loop: 0};
     const ticks = [], loop = deck.loop || 0, from = deck.loop_from || 0;       /* a loop that is set is seen when stopped too, and ahead of the playhead */
+    const going = !!loop && at < from + loop;                                  /* a deck that is past its loop has left it behind */
     for (let k = Math.ceil(at - (BEHIND + 1) * rate); k <= Math.floor(at + (AHEAD + 1) * rate); k++) {
-      const shown = loop && k >= from + loop ? from + ((k - from) % loop) : k;
-      ticks.push({dt: (k - at) / rate, at: shown, beat: ((shown % 4) + 4) % 4 + 1, inLoop: !!loop && k >= from,
-                  wrap: !!loop && k >= from + loop && (k - from) % loop === 0});
+      const shown = going && k >= from + loop ? from + ((k - from) % loop) : k;
+      ticks.push({dt: (k - at) / rate, at: shown, beat: ((shown % 4) + 4) % 4 + 1, inLoop: !!loop && k >= from && (going || k < from + loop),
+                  wrap: going && k >= from + loop && (k - from) % loop === 0});
     }
     return {ticks, stopped: true, loop, loopAhead: loop && from > at ? from - at : 0};
   };

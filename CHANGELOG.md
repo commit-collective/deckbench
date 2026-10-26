@@ -21,7 +21,8 @@ Newest first. A release is a tagged commit.
 - CUE and a loop go to the nearest beat, before or after where the deck is (a loop started 0.3 beats late used to start on the beat before, and a cue was
   wherever it was pressed). A deck that sets its cue is on it, so CUE held there plays from it.
 - The deck can be moved in its track: `POST /api/deck/N/seek/BEAT` and `jump/BEATS` (negative goes back), and a Move row on the page: to the first beat, and
-  a bar or four bars back or forward. A cue set late in a track could not be left before. A loop ends on a move.
+  a bar or four bars back or forward. A cue set late in a track could not be left before. A loop that is set stays through a move: waited for
+  when it is ahead, gone round when the deck is in it, left behind (still marked) when the deck is moved past it.
 - A pause stops where the playhead was when the page was clicked. The page sends the moment of the click (`?at=`, in the bench's clock), so a request that is slow
   to arrive (a bench across WSL) no longer makes the deck run on, or the strip jump, before it stops.
 

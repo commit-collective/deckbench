@@ -18,10 +18,10 @@ const Sound = (() => {
     const [t, pos, bpm] = deck.phase, rate = bpm / 60;
     if (!(rate > 0)) return [];
     const posAt = (w) => pos + (w + offset - t) * rate;
-    const out = [];
+    const out = [], going = deck.loop && pos < deck.loop_from + deck.loop;      /* a deck that was moved past its loop has left it behind */
     for (let k = Math.ceil(posAt(from) - 1e-9); k <= Math.floor(posAt(to)); k++) {
       let at = k;
-      if (deck.loop && at >= deck.loop_from + deck.loop) at = deck.loop_from + ((at - deck.loop_from) % deck.loop);
+      if (going && at >= deck.loop_from + deck.loop) at = deck.loop_from + ((at - deck.loop_from) % deck.loop);
       out.push({k, at, time: t + (k - pos) / rate - offset, beat: ((at % 4) + 4) % 4 + 1, half: 0.5 / rate});
     }
     return out;
@@ -35,9 +35,10 @@ const Sound = (() => {
     const [t, pos, tempo] = deck.phase, a = deck.audio;
     if (!(tempo > 0) || !(a.bpm > 0)) return null;
     let at = pos + (now + offset - t) * tempo / 60;
-    if (deck.loop && at >= deck.loop_from + deck.loop) at = deck.loop_from + ((at - deck.loop_from) % deck.loop);
+    const going = deck.loop && pos < deck.loop_from + deck.loop;
+    if (going && at >= deck.loop_from + deck.loop) at = deck.loop_from + ((at - deck.loop_from) % deck.loop);
     const perBeat = 60 / a.bpm, plan = {from: a.offset + at * perBeat, rate: tempo / a.bpm, loop: null};
-    if (deck.loop) {
+    if (going) {
       const start = a.offset + deck.loop_from * perBeat;
       plan.loop = {start, end: start + deck.loop * perBeat};
     }

@@ -54,8 +54,8 @@ class Deck:
         if not self.playing:
             return self.anchor_pos
         pos = self.anchor_pos + (now - self.anchor_t) * self.tempo() / 60.0
-        if self.loop and pos >= self.loop[0] + self.loop[1]:
-            pos = self.loop[0] + (pos - self.loop[0]) % self.loop[1]
+        if self.loop and pos >= self.loop[0] + self.loop[1] and self.anchor_pos < self.loop[0] + self.loop[1]:
+            pos = self.loop[0] + (pos - self.loop[0]) % self.loop[1]     # (a deck that was moved past the loop's end leaves it behind)
         return pos
 
     def reanchor(self, now):
@@ -234,8 +234,8 @@ class World:
 
     def seek(self, deck, beats, relative=False, at=None):
         """Moves the deck in its track, to a beat of the grid: that beat (the first is 0), or `beats` from the beat nearest to where it is (a
-        negative number goes back). A deck that plays goes on from there, one that is paused stays there. A loop ends. Never before the first
-        beat. `at`: the moment of the click, which the move is counted from."""
+        negative number goes back). A deck that plays goes on from there, one that is paused stays there. A loop that is set stays: ahead of
+        the deck it is waited for, inside it the deck goes round it, behind it it is left. Never before the first beat. `at`: the moment of the click, which the move is counted from."""
         at = self.when(at)
         here = deck.position(at if at is not None else time.time())
         target = max(0.0, float(round(here) + beats if relative else round(beats)))
@@ -243,7 +243,6 @@ class World:
         def change():
             deck.anchor_pos = target
             deck.anchor_t = time.time()
-            deck.loop = None
             deck.cueing = False
         self.settle(change)
         log("%s goes to beat %d" % (deck.name, int(target)))

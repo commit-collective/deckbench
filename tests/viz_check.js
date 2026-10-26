@@ -133,6 +133,9 @@ check("nothing heard, nothing drawn", Strip.layoutDevice("c", {status: null}, 5)
   const stopped = Strip.layout({at: 6.0, bpm: 120, loop: 4, loop_from: 8}, 0, 1000);
   check("a stopped deck with a loop set shows it", stopped.stopped && stopped.loop === 4 && stopped.loopAhead === 2
     && stopped.ticks.filter((t) => t.inLoop).length > 4 && stopped.ticks.some((t) => t.wrap));
+  const behind = Strip.layout({phase: [1000, 25.0, 120], loop: 4, loop_from: 20}, 0, 1000);
+  check("a loop the deck was moved past is behind it: marked, with no jump back", behind.ticks.filter((t) => t.inLoop).every((t) => t.at >= 20 && t.at < 24)
+    && !behind.ticks.some((t) => t.wrap), behind.ticks.map((t) => t.at + (t.inLoop ? "L" : "") + (t.wrap ? "W" : "")));
   const plain = Strip.layout({at: 6.0, bpm: 120, loop: 0, loop_from: 0}, 0, 1000);
   check("a stopped deck without one shows none", !plain.ticks.some((t) => t.inLoop || t.wrap) && plain.loopAhead === 0);
 }

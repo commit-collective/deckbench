@@ -8,7 +8,7 @@
                                  play, sync or master; answers the new state
     POST /api/deck/<n>/<what>/<0|1>
                                  sets the switch instead of toggling it
-    POST /api/deck/<n>/seek/<beat>   the deck goes to that beat of its track (0 is the first), on the grid, and a loop ends
+    POST /api/deck/<n>/seek/<beat>   the deck goes to that beat of its track (0 is the first), on the grid. A loop that is set stays: waited for when it is ahead, gone round when the deck is in it, left behind when the deck is past it
     POST /api/deck/<n>/jump/<beats>  and that many beats from the beat it is at (negative: back)
                                      Any of the switches, cue, loop, seek and jump may have `?at=<bench time>`: the moment the page was clicked
                                      (the page knows the bench's clock). The action is made where the deck was then, not where it is when

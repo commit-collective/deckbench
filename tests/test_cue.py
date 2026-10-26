@@ -175,15 +175,21 @@ class Grid(unittest.TestCase):
         world.seek(deck, -100, relative=True)                     # never before the first beat
         self.assertEqual(deck.position(time.time()), 0.0)
 
-    def test_seek_on_a_deck_that_plays_goes_on_from_there_and_ends_a_loop(self):
+    def test_a_move_keeps_the_loop_ahead_inside_and_behind(self):
         world, deck = self.deck_at(20.0, playing=True)
-        world.set_loop(deck, 4)
-        world.seek(deck, 100)
+        world.set_loop(deck, 4)                                   # beats 20 to 24
+        world.seek(deck, 100)                                     # past it: left behind, the deck goes on
         self.assertTrue(deck.playing)
-        self.assertIsNone(deck.loop)
+        self.assertEqual(deck.loop, (20.0, 4.0))
         self.assertAlmostEqual(deck.position(time.time()), 100.0, delta=0.05)
         deck.anchor_t -= 1.0                                      # a second at 120 BPM: two beats on
         self.assertAlmostEqual(deck.position(time.time()), 102.0, delta=0.05)
+        world.seek(deck, 8)                                       # ahead of it: it is waited for, and the deck goes round it
+        deck.anchor_t -= 8.0                                      # 16 beats on: 24 is the loop's end, so back to 20 and 4 more
+        self.assertAlmostEqual(deck.position(time.time()), 20.0 + (8.0 + 16.0 - 20.0) % 4.0, delta=0.1)
+        world.seek(deck, 22)                                      # inside it
+        deck.anchor_t -= 1.5                                      # 3 beats on: 25, round to 21
+        self.assertAlmostEqual(deck.position(time.time()), 21.0, delta=0.1)
 
     def test_a_pause_stops_where_the_page_was_clicked(self):
         world, deck = bench()
