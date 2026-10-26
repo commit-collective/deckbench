@@ -47,6 +47,8 @@
                                      see uploads.py: named by a hash of the file, so the same file is one, kept between runs and removed when unused
                                      for a month): the answer is {"path", "name", "bytes"}, the path to give a deck's ?audio=. It is how a page
                                      picks a file from the machine the browser is on (413 above 300 MB)
+    POST /api/audio/source/<n|all>   the sound port plays only deck n (the unit's input is one CDJ), or all the decks again: the state's
+                                     bench.audio_source says which. The emulator's deck does it when the INPUT SOURCE knob is turned
     GET  /api/uploads                the folder and what it holds: {"dir", "files", "bytes"}
     POST /api/uploads/clear          removes the sent files (not one a deck has loaded): {"removed", "bytes"}
 
@@ -312,6 +314,11 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 except OSError as e:
                     return self.send(400, json.dumps({"error": str(e)}))
                 return self.send(200, json.dumps({"path": path, "name": os.path.basename(path), "bytes": length}))
+            if len(parts) == 4 and parts[:3] == ["api", "audio", "source"]:
+                number = None if parts[3] == "all" else int(parts[3]) if parts[3].isdigit() else -1
+                if not world.set_audio_source(number):
+                    return self.send(404, '{"error": "no such deck"}')
+                return self.send(200, json.dumps(world.snapshot()))
             if parts == ["api", "uploads", "clear"]:
                 count, size = upload_store.clear(folder, loaded())
                 return self.send(200, json.dumps({"removed": count, "bytes": size}))

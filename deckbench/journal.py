@@ -52,6 +52,8 @@ def baseline(world):
                 out.append("/api/deck/%d/play/1" % n)
                 if d.loop:
                     out.append("/api/deck/%d/loop/%d" % (n, d.loop[1]))
+        if world.audio_decks and len(world.audio_decks) == 1:      # the deck the sound port plays
+            out.append("/api/audio/source/%d" % next(iter(world.audio_decks)))
     return out
 
 

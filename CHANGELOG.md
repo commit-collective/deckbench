@@ -16,6 +16,12 @@ Newest first. A release is a tagged commit.
 - A chip `recording a session` shows while a journal is kept (see `docs/link.md`).
 - A message that something went through (a file sent, a scenario kept or copied) has a green outline, like a deck that is on. The red outline is for errors, and there is a yellow one for a warning (`toast(text, "warn")`).
 
+### The unit's input is one deck
+
+- `POST /api/audio/source/<n|all>` makes the sound port play only deck n, or all the decks again, while the bench runs (`--audio-decks` still sets the decks it is
+  started with). The state says which in `bench.audio_source`, the page's "unit input" chip shows it, and a journal keeps it. The DJS-1000 emulator's deck calls it when
+  the INPUT SOURCE knob of LIVE SAMPLING is turned.
+
 ### Sent files are kept
 
 - The files the page sends with Browse are kept between runs in `~/.deckbench/tracks` (`--tracks-dir`, `$DECKBENCH_TRACKS`), named by a hash of their contents, so the same

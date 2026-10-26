@@ -53,6 +53,24 @@ class Journal(unittest.TestCase):
                 s.shutdown()
                 s.server_close()
 
+    def test_the_sound_port_source_is_in_the_baseline_and_the_journal(self):
+        world, server, base = bench()
+        other, other_server, other_base = bench()
+        try:
+            post(base, "/api/audio/source/2")
+            began = post(base, "/api/journal/start")
+            self.assertIn("/api/audio/source/2", began["baseline"])
+            post(base, "/api/audio/source/1")
+            got = post(base, "/api/journal/stop")
+            self.assertEqual([r for _, r in got["actions"]], ["/api/audio/source/1"])
+            for request in got["baseline"] + [r for _, r in got["actions"]]:
+                post(other_base, request)
+            self.assertEqual(other.audio_decks, {1})
+        finally:
+            for s in (server, other_server):
+                s.shutdown()
+                s.server_close()
+
     def test_nothing_is_kept_before_it_starts_or_after_it_stops(self):
         world, server, base = bench()
         try:

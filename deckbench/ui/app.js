@@ -125,7 +125,7 @@ function renderChips() {
   if (mixer && mixer.on) box.append(chip(mixer.name, "ok", "mixer "));
   if (set.claim) box.append(chip("claims its number"));
   if (info.ports && info.ports.announce !== 50000) box.append(chip("ports +" + (info.ports.announce - 50000)));
-  if (info.audio) box.append(chip(info.audio, null, "unit input ",
+  if (info.audio) box.append(chip(info.audio + (info.audio_source ? " · deck " + info.audio_source : ""), null, "unit input ",
     "The decks' sound is served on this port, for a unit's input (the emulator's --input-tcp). The Listen button plays it in this browser instead"));
   if (info.recording) box.append(chip("recording a session", "bad", null, "A program (the emulator's REC) is keeping what is done to the decks, to play it back"));
 }

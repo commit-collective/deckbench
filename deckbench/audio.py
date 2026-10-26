@@ -260,9 +260,10 @@ class Mixer:
         now = time.time() if now is None else now
         mix_l, mix_r = [0.0] * frames, [0.0] * frames
         with self.world.lock:
+            only = self.numbers if self.numbers is not None else self.world.audio_decks      # the decks started with, or the one chosen since
             heard = [(d.number, d.position(now), d.tempo(), getattr(d, "audio", None)) for d in self.world.decks.values()
                      if d.enabled and d.playing and not getattr(d, "unplugged", False)
-                     and (self.numbers is None or d.number in self.numbers)]
+                     and (only is None or d.number in only)]
         for number, position, tempo, track in heard:
             if track:                                  # a track of its own: the file, at the deck's tempo
                 left, right = track.block(position, tempo, frames)

@@ -84,3 +84,48 @@ class Cue(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AudioSource(unittest.TestCase):
+    """The sound port plays the one deck the unit's input is (its INPUT SOURCE knob), or all of them."""
+
+    def two_playing(self):
+        from deckbench.audio import Mixer, voice
+        world = World()
+        for n in (1, 2):
+            deck = world.decks[n] = Deck(world, n, 120.0)
+            deck.enabled = deck.playing = True
+        now = time.time()
+        for deck in world.decks.values():
+            deck.anchor_t = now
+        return world, Mixer(world), now, voice
+
+    def distance(self, block, voice, deck, now, world):
+        import array
+        a = array.array("h")
+        a.frombytes(block)
+        v = voice(deck.number, deck.position(now), deck.tempo(), 4096)
+        return sum(abs(int(x * 32767) - y) for x, y in zip(v, a[0::2]))
+
+    def test_only_the_chosen_deck_is_heard_and_all_again(self):
+        world, mixer, now, voice = self.two_playing()
+        both = mixer.block(4096, now)
+        self.assertTrue(world.set_audio_source(2))
+        only2 = mixer.block(4096, now)
+        self.assertEqual(self.distance(only2, voice, world.decks[2], now, world), 0)          # exactly deck 2's voice
+        self.assertNotEqual(both, only2)
+        self.assertEqual(world.snapshot()["bench"]["audio_source"], 2)
+        self.assertTrue(world.set_audio_source(None))
+        self.assertEqual(mixer.block(4096, now), both)
+
+    def test_no_such_deck(self):
+        world, mixer, now, voice = self.two_playing()
+        self.assertFalse(world.set_audio_source(9))
+        self.assertIsNone(world.audio_decks)
+
+    def test_a_bench_started_with_decks_keeps_them(self):
+        from deckbench.audio import Mixer
+        world, _, now, voice = self.two_playing()
+        mixer = Mixer(world, {1})
+        world.set_audio_source(2)
+        self.assertEqual(self.distance(mixer.block(4096, now), voice, world.decks[1], now, world), 0)       # --audio-decks wins

@@ -50,6 +50,7 @@ empty it. Typing a path loads the file where it is and copies nothing. Through t
     POST /api/deck/2/load/1002?audio=C:/loops/break.wav&bpm=128&offset=0.05
     POST /api/deck/2/audio/clear
     POST /api/upload?name=break.wav          (the body is the file: the answer has the path to give ?audio=)
+    POST /api/audio/source/2                 (the sound port plays only deck 2, a unit's input; `all` for every deck again)
     GET  /api/uploads                        (the folder, and how many files and bytes it holds)
     POST /api/uploads/clear                  (removes them, but not one a deck has loaded)
 

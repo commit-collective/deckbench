@@ -92,6 +92,7 @@ class World:
         self.loss = 0.0                      # the share of the datagrams of all the decks that is lost, 0 to 1
         self.info = {}                       # how the bench was started (strict, sound...), for the page to say
         self.adapters = []                   # what the device under test shows beyond the network (adapters/)
+        self.audio_decks = None              # the decks the sound port plays (a set of numbers), None: all of them (see set_audio_source)
 
     # -- the device under test --
     def unit_state(self):
@@ -300,6 +301,18 @@ class World:
         with self.lock:
             deck.audio = None
         self.changed()
+
+    def set_audio_source(self, number):
+        """The sound port plays only this deck (the unit's input is one CDJ: its INPUT SOURCE knob picks it), or all of them for None.
+        False if there is no such deck."""
+        if number is not None and number not in self.decks:
+            return False
+        with self.lock:
+            self.audio_decks = None if number is None else {number}
+            self.info["audio_source"] = number
+        log("the sound port plays %s" % ("all the decks" if number is None else self.decks[number].name))
+        self.changed()
+        return True
 
     def set_unplugged(self, deck, on):
         """Pulls the cable (the deck says nothing and answers nothing) or plugs it in again."""
