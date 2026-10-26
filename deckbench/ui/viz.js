@@ -20,15 +20,18 @@ const Strip = (() => {
         dt: b.time - now, at: b.at, beat: b.beat,
         inLoop: !!deck.loop && b.k >= deck.loop_from,
         wrap: !!deck.loop && b.k >= deck.loop_from + deck.loop && (b.k - deck.loop_from) % deck.loop === 0}));
-      return {ticks, stopped: false, loop: deck.loop || 0};
+      const [t, pos, bpm] = deck.phase, here = pos + (now + offset - t) * bpm / 60;
+      return {ticks, stopped: false, loop: deck.loop || 0, loopAhead: deck.loop && deck.loop_from > here ? deck.loop_from - here : 0};
     }
     const at = deck.at, rate = (deck.bpm || 120) / 60;
     if (at == null) return {ticks: [], stopped: true, loop: 0};
-    const ticks = [];
+    const ticks = [], loop = deck.loop || 0, from = deck.loop_from || 0;       /* a loop that is set is seen when stopped too, and ahead of the playhead */
     for (let k = Math.ceil(at - (BEHIND + 1) * rate); k <= Math.floor(at + (AHEAD + 1) * rate); k++) {
-      ticks.push({dt: (k - at) / rate, at: k, beat: ((k % 4) + 4) % 4 + 1, inLoop: false, wrap: false});
+      const shown = loop && k >= from + loop ? from + ((k - from) % loop) : k;
+      ticks.push({dt: (k - at) / rate, at: shown, beat: ((shown % 4) + 4) % 4 + 1, inLoop: !!loop && k >= from,
+                  wrap: !!loop && k >= from + loop && (k - from) % loop === 0});
     }
-    return {ticks, stopped: true, loop: 0};
+    return {ticks, stopped: true, loop, loopAhead: loop && from > at ? from - at : 0};
   };
 
   /* remember the beats a device is told of: each change of its phase is a beat, [bench time, place, tempo] */
@@ -116,11 +119,13 @@ const Strip = (() => {
    * made and the page reads its own clock when it arrives, so each sample is late by the delay of that message, which is not the same
    * from one to the next (a few milliseconds, more through WSL's forwarding of localhost): used as it came, it moved every strip a few
    * pixels at each state. The least delay is the truest. A sample that says the bench is further ahead (a message that came quicker)
-   * is followed half way at once, one that says less (a slow one) counts for little, and a clock that drifts is still followed. A
-   * change of over half a second is another clock (the bench started again): taken as it is. */
+   * is followed, but by 5 ms at most for each state: the answer to a click comes by another road than the stream and can be 100 ms quicker,
+   * and followed at once it moved the strip, and the sound, forward by that much, as if the deck caught up. One that says less (a slow
+   * one) counts for little, and a clock that drifts is still followed. A change of over half a second is another clock (the bench
+   * started again): taken as it is. */
   v.followClock = (previous, sample) => {
     if (previous == null || Math.abs(sample - previous) > 0.5) return sample;
-    return previous + (sample - previous) * (sample > previous ? 0.5 : 0.02);
+    return previous + (sample > previous ? Math.min((sample - previous) * 0.5, 0.005) : (sample - previous) * 0.02);
   };
 
   v.draw = (canvas, plan, options = {}) => {
@@ -192,7 +197,8 @@ const Strip = (() => {
     g.lineTo(head, 6);
     g.fill();
 
-    const label = options.label || (plan.stopped ? "stopped" : plan.loop ? "LOOP " + plan.loop : plan.looping ? "LOOP" : "");
+    const coming = plan.loop && plan.loopAhead > 0.05 ? "LOOP " + plan.loop + " in " + (Math.round(plan.loopAhead * 10) / 10) + " beats" : "";
+    const label = options.label || coming || (plan.stopped ? (plan.loop ? "stopped, LOOP " + plan.loop : "stopped") : plan.loop ? "LOOP " + plan.loop : plan.looping ? "LOOP" : "");
     if (label) {                                                    /* on a chip, so that it does not run into the numbers */
       g.font = "bold 10px ui-monospace, Menlo, Consolas, monospace";
       const width = g.measureText(label).width + 10;

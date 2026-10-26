@@ -117,6 +117,24 @@ check("nothing heard, nothing drawn", Strip.layoutDevice("c", {status: null}, 5)
   check("the estimate is near the quickest message", Math.abs(est - (truth - floor)) < 0.004, est - truth);
   check("and it moves less than the samples do", Math.max(...steps) < Math.max(...rawSteps) / 3, [Math.max(...steps), Math.max(...rawSteps)]);
   check("a new clock (the bench started again) is taken at once", Strip.followClock(1000, 5) === 5 && Strip.followClock(null, 7) === 7);
+  // the answer to a click can come 100 ms quicker than the stream: the strip must not jump forward by it
+  check("a quicker message moves the clock by 5 ms at most", near(Strip.followClock(1000, 1000.1), 1000.005) && near(Strip.followClock(1000, 1000.004), 1000.002));
+  check("and a slower one hardly at all", Math.abs(Strip.followClock(1000, 999.9) - 1000) <= 0.002 + 1e-9);
+}
+
+// a loop that is set is seen coming, and when the deck is stopped
+{
+  const ahead = Strip.layout({phase: [1000, 6.6, 120], loop: 4, loop_from: 8}, 0, 1000);
+  check("a loop ahead of the playhead is marked ahead: its beats, where it goes back", ahead.ticks.filter((t) => t.inLoop).map((t) => t.at).slice(0, 4).join() === "8,9,10,11"
+    && ahead.ticks.some((t) => t.wrap), ahead.ticks.map((t) => t.at + (t.inLoop ? "L" : "") + (t.wrap ? "W" : "")));
+  check("and the strip says it is coming", near(ahead.loopAhead, 1.4, 1e-6), ahead.loopAhead);
+  const inside = Strip.layout({phase: [1000, 9.5, 120], loop: 4, loop_from: 8}, 0, 1000);
+  check("inside it, nothing is ahead", inside.loopAhead === 0);
+  const stopped = Strip.layout({at: 6.0, bpm: 120, loop: 4, loop_from: 8}, 0, 1000);
+  check("a stopped deck with a loop set shows it", stopped.stopped && stopped.loop === 4 && stopped.loopAhead === 2
+    && stopped.ticks.filter((t) => t.inLoop).length > 4 && stopped.ticks.some((t) => t.wrap));
+  const plain = Strip.layout({at: 6.0, bpm: 120, loop: 0, loop_from: 0}, 0, 1000);
+  check("a stopped deck without one shows none", !plain.ticks.some((t) => t.inLoop || t.wrap) && plain.loopAhead === 0);
 }
 
 console.log(failures ? failures + " failed" : "ok");
