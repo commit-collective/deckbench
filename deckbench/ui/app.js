@@ -344,6 +344,7 @@ function buildDevice(d) {
       h("div", {class: "num", "aria-hidden": "true"}),
       h("div", {class: "deck-id"}, h("div", {class: "model"}), h("div", {class: "track"})),
       h("div", {class: "tags"})),
+    h("div", {class: "flags", "aria-label": "State"}),
     mixer ? h("div", {class: "airs", "aria-label": "Channels on air"}) : h("div", {class: "live"},
       h("div", {class: "beats", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")),
       h("div", {class: "lcd", "aria-label": "Tempo"}, h("b", {}, "--"), h("span", {}, "BPM"))),
@@ -382,12 +383,15 @@ function renderDevices() {
     const tags = q("tags");
     tags.textContent = "";
     if (d.unit) tags.append(h("span", {class: "tag unit"}, "UNIT UNDER TEST"));
-    if (!d.online) tags.append(h("span", {class: "tag offline"}, "OFFLINE"));
+    /* the state goes in a row of its own, side by side, and the row is always there: a flag that comes or goes does not change the card's height */
+    const flags = q("flags");
+    flags.textContent = "";
+    if (!d.online) flags.append(h("span", {class: "tag offline"}, "OFFLINE"));
     if (st && d.online) {
-      if (st.master) tags.append(h("span", {class: "tag master"}, "MASTER"));
-      if (st.sync) tags.append(h("span", {class: "tag sync"}, "SYNC"));
-      if (st.on_air) tags.append(h("span", {class: "tag air-tag"}, "ON AIR"));
-      if (st.loop) tags.append(h("span", {class: "tag loop"}, "LOOP"));
+      if (st.master) flags.append(h("span", {class: "tag master"}, "MASTER"));
+      if (st.sync) flags.append(h("span", {class: "tag sync"}, "SYNC"));
+      if (st.on_air) flags.append(h("span", {class: "tag air-tag"}, "ON AIR"));
+      if (st.loop) flags.append(h("span", {class: "tag loop"}, "LOOP"));
     }
     const facts = q("facts");
     facts.textContent = "";
