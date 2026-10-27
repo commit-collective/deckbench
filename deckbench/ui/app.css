@@ -283,7 +283,7 @@ h2:first-child { margin-top: 0; }
 .deck.device.offline { opacity: .5; }
 .deck.device .num { background: transparent; color: var(--text); border-color: var(--line-2); box-shadow: none; }
 .deck.device.online .num { border-color: var(--sync); color: var(--sync); }
-.deck.device .flags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 20px; }
+.deck.device .flags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; min-height: 18px; margin: -8px 0 -2px; }
 .deck.device .facts { color: var(--muted); font: 400 11px var(--lab); display: flex; flex-wrap: wrap; gap: 2px 14px; }
 .airs { display: flex; gap: 6px; flex-wrap: wrap; }
 .airs .air { padding: 3px 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); }
