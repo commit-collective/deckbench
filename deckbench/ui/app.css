@@ -283,8 +283,11 @@ h2:first-child { margin-top: 0; }
 .deck.device.offline { opacity: .5; }
 .deck.device .num { background: transparent; color: var(--text); border-color: var(--line-2); box-shadow: none; }
 .deck.device.online .num { border-color: var(--sync); color: var(--sync); }
-.deck.device .tags { align-self: flex-start; }
-.deck.device .flags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; min-height: 18px; margin: -8px 0 -2px; }
+/* a device's tags: the column at the right of the header is as tall as the number's box, the unit tag at the top and the state at the bottom, and the state
+   wraps onto a row under when it is wider than the share of the header it has */
+.deck.device .tags { flex: 0 1 auto; min-width: 0; max-width: 58%; min-height: 38px; justify-content: space-between; gap: 4px; }
+.deck.device .unit-slot { display: flex; justify-content: flex-end; min-height: 17px; }
+.deck.device .flags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 6px; min-height: 17px; }
 .deck.device .facts { color: var(--muted); font: 400 11px var(--lab); display: flex; flex-wrap: wrap; gap: 2px 14px; }
 .airs { display: flex; gap: 6px; flex-wrap: wrap; }
 .airs .air { padding: 3px 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); }

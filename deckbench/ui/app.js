@@ -343,8 +343,7 @@ function buildDevice(d) {
     h("div", {class: "deck-head"},
       h("div", {class: "num", "aria-hidden": "true"}),
       h("div", {class: "deck-id"}, h("div", {class: "model"}), h("div", {class: "track"})),
-      h("div", {class: "tags"})),
-    h("div", {class: "flags", "aria-label": "State"}),
+      h("div", {class: "tags"}, h("div", {class: "unit-slot"}), h("div", {class: "flags", "aria-label": "State"}))),
     mixer ? h("div", {class: "airs", "aria-label": "Channels on air"}) : h("div", {class: "live"},
       h("div", {class: "beats", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")),
       h("div", {class: "lcd", "aria-label": "Tempo"}, h("b", {}, "--"), h("span", {}, "BPM"))),
@@ -380,11 +379,11 @@ function renderDevices() {
     else if (st) {
       track.append(h("b", {}, st.state), st.rbid ? " \u00b7 player " + st.source + " \u00b7 " + (SLOTS[st.slot] || "slot " + st.slot) + " \u00b7 id " + st.rbid : "");
     } else track.textContent = d.online ? "no status yet" : "gone quiet";
-    const tags = q("tags");
-    tags.textContent = "";
-    if (d.unit) tags.append(h("span", {class: "tag unit"}, "UNIT UNDER TEST"));
-    /* the state goes in a row of its own, side by side, and the row is always there: a flag that comes or goes does not change the card's height */
-    const flags = q("flags");
+    /* the tags are a column at the right of the header, the height of the number's box: the unit tag at the top and the state (side by side, wrapping onto
+       a row under when there are too many for the width) at the bottom. The column is always there: a flag that comes or goes does not change the card's height */
+    const slot = q("unit-slot"), flags = q("flags");
+    slot.textContent = "";
+    if (d.unit) slot.append(h("span", {class: "tag unit"}, "UNIT UNDER TEST"));
     flags.textContent = "";
     if (!d.online) flags.append(h("span", {class: "tag offline"}, "OFFLINE"));
     if (st && d.online) {

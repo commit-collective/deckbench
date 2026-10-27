@@ -67,7 +67,7 @@ Newest first. A release is a tagged commit.
 ### Fixes
 
 - A DJS-1000 on the link has its beat strip follow the beat of its bar. It sends 0 for the beat in the track, which the page kept as a place, so the strip stood on one beat.
-- The state of another device on the link (MASTER, SYNC, ON AIR, LOOP, OFFLINE) is a row of its own, side by side. The row is always there, so a flag that comes or goes does not change the card's height.
+- The state of another device on the link (MASTER, SYNC, ON AIR, LOOP, OFFLINE) is side by side, right under the UNIT UNDER TEST tag, as tall together as the number's box. When there are too many for the width they wrap onto a row under. A flag that comes or goes does not change the card's height.
 
 ## v0.2.0
 
