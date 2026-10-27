@@ -64,6 +64,10 @@ Newest first. A release is a tagged commit.
 - The page's Browse button opens the browser's file picker and sends the file to the bench (`/api/upload`), so a bench in WSL or on
   another machine gets a file from the one the browser is on.
 
+### Fixes
+
+- A DJS-1000 on the link has its beat strip follow the beat of its bar. It sends 0 for the beat in the track, which the page kept as a place, so the strip stood on one beat.
+
 ## v0.2.0
 
 Tested on Ubuntu and Windows, with Python 3.8 and 3.12. The GitHub Action passes on all four.
