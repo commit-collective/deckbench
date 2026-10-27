@@ -147,6 +147,26 @@ class Heard(unittest.TestCase):
         self.sent(self.ports.beat)
         self.assertEqual(self.device()["phase"][1], 4.0, "the phase did not follow the track beat")
 
+    def test_03b_a_player_that_does_not_count_the_track_follows_its_bar(self):
+        """A DJS-1000 plays patterns, not a track: its statuses say 0 for the beat in the track and the beat in the bar goes round. The place then
+        is the beat of the bar the beats give, and not a count that never moves (the strip used to stand on one beat)."""
+        link = self.other.decks[5]
+        deck = self.other_world.decks[5]
+        deck.playing, deck.master, deck.base_bpm = True, True, 120.0
+        for bar in (1, 2, 3, 4, 1, 2):
+            time.sleep(0.04)                                     # the monitor drops a packet it has just had again (Windows hears a broadcast twice)
+            status = bytearray(link.status())
+            status[0xA0:0xA4] = bytes(4)                         # the beat in the track: none
+            status[0xA6] = bar
+            self.player.send(bytes(status), self.ports.update)
+            beat = bytearray(link.beat(float(bar - 1)))
+            beat[0x5C] = bar
+            self.player.send(bytes(beat), self.ports.beat)
+            self.sent(self.ports.update, self.ports.beat)
+            found = self.device()
+            self.assertIsNone(found["status"]["track_beat"])
+            self.assertEqual(found["phase"][1], bar - 1.0, "the place did not follow the bar of the beat")
+
     def test_04_a_player_that_stops_has_a_place_and_no_phase(self):
         deck = self.other_world.decks[5]
         deck.playing, deck.master = False, False

@@ -244,7 +244,7 @@ class Monitor:
               "state": STATE_NAMES.get(state, "state %d" % state), "loop": state == 4,
               "bpm": round(track_bpm * pitch / PITCH_NORMAL, 2), "track_bpm": track_bpm,
               "pitch": round((pitch / PITCH_NORMAL - 1) * 100, 2), "bar": data[0xA6] or None,
-              "track_beat": beat_in_track if beat_in_track != 0xFFFFFFFF else None,
+              "track_beat": beat_in_track if beat_in_track not in (0, 0xFFFFFFFF) else None,     # counted from 1: 0 is a player with no track (a sampler)
               "source": data[0x28], "slot": data[0x29], "track_type": data[0x2A], "rbid": struct.unpack(">I", data[0x2C:0x30])[0],
               "sync_counter": struct.unpack(">I", data[0x84:0x88])[0], "seen": now}
         d["status"] = st
