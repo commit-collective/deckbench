@@ -2,6 +2,7 @@
 
 - Nothing from Pioneer DJ or AlphaTheta goes in this repo: no firmware, no captures taken from a unit's firmware.
 - Always commit completed changes locally on `main`. Ask before pushing, tagging or deploying, and never amend a commit that is on `origin`.
+  Amending the latest commit is fine while it is not pushed and the change iterates on it.
 - Commit subjects: an action verb, under 50 characters. Body optional, otherwise
   a blank line and body lines under 72 characters. No semicolons in prose,
   emojis or attribution. Omit routine check boilerplate, but mention tests or
