@@ -2,7 +2,9 @@
 
 Newest first. A release is a tagged commit.
 
-## Unreleased
+## v0.3.0
+
+191 tests pass on Windows with Python 3.10. The GitHub Action passes on Ubuntu and Windows with Python 3.8 and 3.12.
 
 ### Packaging and reliability
 
@@ -71,6 +73,15 @@ Newest first. A release is a tagged commit.
 - The page's Sound button plays a deck's file when it has one (it played the drums of every deck). It is fetched from `/api/deck/N/audio.wav`.
 - The page's Browse button opens the browser's file picker and sends the file to the bench (`/api/upload`), so a bench in WSL or on
   another machine gets a file from the one the browser is on.
+
+### Testing from code
+
+- The bench says when every socket it listens on is bound, and `start()` and the command line wait for that, so a bench is
+  listening when `start()` returns. The monitor counts the packets it reads, so a test sends a marker on each port and waits
+  for it instead of sleeping.
+- A test that is beaten to a port (the system hands the range's ports to client sockets) takes the next range and starts again.
+- A player is heard once its keep-alive has come as well as its status. The keep-alive says who it is, comes on another port and
+  can come later.
 
 ### Fixes
 
