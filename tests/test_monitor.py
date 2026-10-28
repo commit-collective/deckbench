@@ -67,6 +67,25 @@ class Classify(unittest.TestCase):
         self.assertEqual(classify(50000, b""), "other")
 
 
+class PhaseParsing(unittest.TestCase):
+    def test_sampler_phase_follows_the_bar_without_a_track_count(self):
+        world = world_of(5)
+        net = Prolink(world)
+        monitor = net.monitor
+        link = net.decks[5]
+        world.decks[5].playing = True
+        device = monitor.device("127.0.0.9", 100.0, False)
+        for tick, bar in enumerate((1, 2, 3, 4, 1, 2)):
+            now = 100.0 + tick
+            status = bytearray(link.status())
+            status[0xA0:0xA4] = bytes(4)
+            status[0xA6] = bar
+            monitor.status(device, status, now)
+            monitor.beat(device, link.beat(float(bar - 1)), now)
+            self.assertIsNone(device["status"]["track_beat"])
+            self.assertEqual(device["phase"][1], bar - 1.0)
+
+
 class Heard(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -159,10 +178,12 @@ class Heard(unittest.TestCase):
             status[0xA0:0xA4] = bytes(4)                         # the beat in the track: none
             status[0xA6] = bar
             self.player.send(bytes(status), self.ports.update)
+            # UDP ordering is per socket, not across status and beat ports.
+            self.sent(self.ports.update)
             beat = bytearray(link.beat(float(bar - 1)))
             beat[0x5C] = bar
             self.player.send(bytes(beat), self.ports.beat)
-            self.sent(self.ports.update, self.ports.beat)
+            self.sent(self.ports.beat)
             found = self.device()
             self.assertIsNone(found["status"]["track_beat"])
             self.assertEqual(found["phase"][1], bar - 1.0, "the place did not follow the bar of the beat")

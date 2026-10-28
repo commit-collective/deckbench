@@ -34,15 +34,16 @@ class Documented(unittest.TestCase):
     def docs(self):
         return read("README.md") + "\n".join(open(p, encoding="utf-8").read() for p in sorted(glob.glob(os.path.join(ROOT, "docs", "*.md"))))
 
-    def test_every_api_route_is_in_the_readme(self):
+    def test_every_api_route_is_in_the_reference(self):
         source = read("deckbench", "web.py")
         names = set(re.findall(r'"/api/([a-z_]+)', source)) | set(re.findall(r'\["api", "([a-z_]+)"', source)) | \
             set(re.findall(r'== \["api", "([a-z_]+)"', source))
         names |= set(re.findall(r'parts\[:\d\] == \["api", "([a-z_]+)"', source))
         self.assertTrue(names >= {"state", "deck", "events", "scenario", "stream"}, names)
-        readme = read("README.md")
-        missing = sorted(n for n in names if "/api/" + n not in readme)
-        self.assertEqual(missing, [], "routes of web.py that the README's API section does not mention: %s" % missing)
+        reference = read("docs", "reference.md")
+        missing = sorted(n for n in names if "/api/" + n not in reference)
+        self.assertEqual(missing, [], "routes missing from docs/reference.md: %s" % missing)
+        self.assertIn("docs/reference.md", read("README.md"))
 
     def test_every_command_line_option_is_documented(self):
         source = read("deckbench", "cli.py")

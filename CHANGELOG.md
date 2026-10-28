@@ -4,6 +4,14 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+### Packaging and reliability
+
+- Installed packages include adapters, with an isolated CLI and asset check.
+- The sampler phase check establishes status-before-beat ordering across UDP
+  ports instead of depending on thread scheduling.
+- CI keeps full verbose logs and uses fixed OS images without automatic retries.
+- The README is shorter, with CLI and API detail in `docs/reference.md`.
+
 ### The page
 
 - Play is play and pause: a deck that pauses stays where it is and plays on from there (it used to start again from its first beat). A deck is at its

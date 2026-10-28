@@ -21,8 +21,8 @@ deckbench = "deckbench.cli:main"
 [tool.setuptools.dynamic]
 version = { attr = "deckbench.__version__" }   # the one place the version is written
 
-[tool.setuptools]
-packages = ["deckbench", "deckbench.protocols"]
+[tool.setuptools.packages.find]
+include = ["deckbench", "deckbench.*"]
 
 [tool.setuptools.package-data]
 deckbench = ["ui/*", "examples/*.json", "examples/unit/*.json"]
