@@ -1,15 +1,49 @@
 # Using deckbench from a phone
 
-Two different things, and only the first has been thought through to the end. Neither has been tried on a phone.
+Phone access and a phone-only bench are different approaches. Neither has been validated on a physical phone yet.
 
 ## 1. The phone is the screen, a small computer is the bench (recommended)
 
-The bench needs to be on the Pro DJ Link network with an address of its own for each deck (see
-[real-network.md](real-network.md)). A phone cannot give itself several addresses, a computer can. So put the bench on a
-small machine cabled to the players' switch (a laptop, a Raspberry Pi, a mini PC) and open its page on the phone over Wi-Fi.
+The bench needs an address of its own for each deck on the Pro DJ Link network. Put it on a computer cabled to the
+players' switch and open its page on the phone over Wi-Fi. See [real-network.md](real-network.md) for the separate
+DJ network configuration, which is still manual.
 
-On the machine, with `--http-host 0.0.0.0` so that the phone can reach the page, and a token, so that nothing else on the Wi-Fi can
-drive the decks:
+Install the optional QR encoder once, from a checkout or extracted release:
+
+    python -m pip install ".[phone]"
+
+Start with `python -m deckbench --network-info` to find the DJ adapter's name and IPv4 address. With one deck, its
+existing address can be used without adding aliases. On Windows and Linux, for example:
+
+    python -m deckbench --phone --numbers 2 --on --dj-interface "Ethernet 2"
+
+Replace the name with the DJ adapter's actual name and choose an unused player number. This selects already configured
+addresses and their mask. It does not change the adapter. For more than one deck, the adapter needs a distinct address
+for each deck. If it has too few addresses or multiple subnets, the command stops with an explanation.
+
+Alternatively, start the bench with `--phone` and explicit DJ network addresses:
+
+    python -m deckbench --phone --numbers 2,3 --on --bind 169.254.100.1,169.254.100.2 --netmask 255.255.0.0
+
+This example assumes those addresses have already been added to the DJ adapter and are unused. It does not configure
+the adapter. Choose addresses for the DJ adapter as described in the real-network guide.
+
+Scan the terminal QR with the phone to open the hosted page with its connection details. `--phone` binds the page on all
+interfaces, creates a token if none was provided and permits the hosted site. It guesses the phone-facing address from
+the default route, which may be wrong on a machine with multiple networks. If the phone cannot reach it, use
+`--phone-address <PC address on the phone's network>`. The QR package is optional. Without it the pairing link is printed
+with an installation hint.
+
+The phone and PC need a reachable path, such as the phone on the home Wi-Fi and the PC's normal Ethernet on that same
+home network. Keep the DJ adapter on its own subnet. Guest Wi-Fi isolation or a firewall may prevent the connection.
+The site may ask for local-network permission. If the hosted page cannot connect, open the PC-served page directly using
+the address and token printed by the bench.
+
+The QR and pairing link contain the token. Anyone who can read them and reach the server can control the bench. Do not
+share screenshots or logs containing them. HTTP traffic on the local network is not encrypted. Use a trusted network.
+Close the bench when finished.
+
+The equivalent manual setup still works:
 
     python -m deckbench --numbers 2,3 --on \
         --bind 192.168.1.201,192.168.1.202 --netmask 255.255.255.0 \

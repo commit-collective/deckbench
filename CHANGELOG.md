@@ -2,6 +2,13 @@
 
 Newest first. A release is a tagged commit.
 
+## Unreleased
+
+- Add phone pairing links and optional local QR codes with `--phone`.
+- Show interface information with `--network-info` and warn when a remotely accessible bench still uses loopback for the decks.
+- Select existing IPv4 addresses by interface name with `--dj-interface` on Windows and Linux.
+- Keep DJ network addresses and adapter configuration explicit. Real-device and phone testing remain open.
+
 ## v0.3.0
 
 191 tests pass on Windows with Python 3.10. The GitHub Action passes on Ubuntu and Windows with Python 3.8 and 3.12.

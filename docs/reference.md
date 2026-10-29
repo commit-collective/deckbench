@@ -14,6 +14,8 @@ Options (`python -m deckbench --help`):
   default is track 100 + the deck's number, from itself, "Track of deck N"
 - `--bind ADDRESS,...`, `--netmask`, `--broadcast`: decks on a real network, with an
   address each (see [real-network.md](real-network.md)). The default is loopback
+- `--dj-interface NAME`: on Windows or Linux, use existing IPv4 addresses and their mask from a named interface.
+  Requires enough addresses on one subnet and cannot be combined with `--bind` or `--netmask`
 - `--strict`: the decks behave as a CDJ-2000NXS2 or an XDJ-1000MK2 does: they serve the players 1 to 4 that announced
   themselves, a fifth device gets no answer and a unit that is not a player (a DJS-1000 in drum machine mode) has its
   requests turned down
@@ -39,6 +41,9 @@ Options (`python -m deckbench --help`):
   statuses and a byte of them, see [docs/prolink.md](prolink.md))
 - `--model NAME`: the device name the decks announce (default `CDJ-FAKEn`)
 - `--http-port PORT` (default 8750, -1 for none), `--http-host ADDRESS`
+- `--phone`: enable token-protected access for the hosted page and print a pairing link and, with the optional `phone`
+  extra installed, a terminal QR. `--phone-address IPv4` selects the address reachable from the phone
+- `--network-info`: list interface information without starting the bench or changing the network
 - `--allow-origin ORIGIN`: a page of that origin (the hosted page, `https://commitcollective.cc`) may use the API, with CORS. Every other
   site is refused, since any web page can reach a bench on localhost otherwise. Repeat for more
 - `--token TOKEN` (or `auto`): the API wants it, as `?token=...` or `Authorization: Bearer ...`. The page takes it from the address:

@@ -14,6 +14,11 @@ go to that network's broadcast address.
 one (192.168.1.255 here), or give it with `--broadcast`. The decks announce
 themselves with those addresses, play, and answer the database there.
 
+Phone access and DJ link are separate. `--phone`, `--http-host` and `--allow-origin` do not put decks on the DJ
+network. Without `--bind`, decks remain on loopback. The monitor listens on wildcard sockets, so it may still hear
+broadcasts on the computer's network interfaces, subject to firewall and OS behavior. Hearing a device is not proof
+that a simulated deck can reach it.
+
 ## 1. Choose the addresses
 
 They must be on the same subnet as the unit and not in use. The unit's own
@@ -26,6 +31,12 @@ address is shown in the page once it has been heard ("Unit under test: player
   link-local address (169.254.x.y, mask 255.255.0.0) when there is no DHCP.
   The computer's is shown by `ipconfig` / `ip addr`; the unit's, in the page
   once it has been heard. Use 169.254.100.1-3 and `--netmask 255.255.0.0`.
+
+Use `python -m deckbench --network-info` to list the computer's interfaces and identify the USB Ethernet adapter.
+Keep the normal adapter connected to the phone's Wi-Fi network, with its existing default gateway. The DJ adapter
+should use a different subnet. Do not add a default gateway to an isolated DJ network. If you need only one simulated
+deck, its `--bind` address can be the DJ adapter's existing IPv4 address. Additional decks need additional addresses.
+Check addresses and player numbers for conflicts. These commands do not detect every device or prevent a collision.
 
 Player numbers: not the unit's (it is player 1 by default, `PLAYER No.` on
 its home screen), and for a real CDJ network, not one in use.

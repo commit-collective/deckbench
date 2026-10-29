@@ -18,6 +18,9 @@ classifiers = [
 [project.scripts]
 deckbench = "deckbench.cli:main"
 
+[project.optional-dependencies]
+phone = ["qrcode>=7,<9"]
+
 [tool.setuptools.dynamic]
 version = { attr = "deckbench.__version__" }   # the one place the version is written
 

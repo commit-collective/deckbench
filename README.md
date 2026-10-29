@@ -39,7 +39,7 @@ bench or see the [real-network setup](docs/real-network.md).
 | Explore the interface without a network | [Browser demo](https://commitcollective.cc/deckbench/app/?demo), simulated in the browser |
 | Test an app or emulator locally | The command above, then [scenarios](docs/scenarios.md) |
 | Put simulated decks beside real hardware | [Network aliases, broadcast and ports](docs/real-network.md) |
-| Use a phone as the screen of a running bench | [Phone and hosted page](docs/phone.md), physical-phone validation is still pending |
+| Use a phone as the screen of a running bench | [Phone pairing and interface selection](docs/phone.md), physical-phone validation is still pending |
 
 The bench provides discovery, statuses, beats, sync/master handover, track
 metadata and a simulated DJM. Model profiles vary packet shape and advertised

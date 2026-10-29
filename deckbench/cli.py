@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -18,6 +19,7 @@ from .profiles import PROFILES
 from .protocols.prolink import Ports, PortError, Prolink
 from .scenario import Scenario, ScenarioError
 from .web import serve
+from . import phone
 
 
 def broadcast_of(address, netmask):
@@ -104,7 +106,9 @@ def main(argv=None):
                     help="a real network: the address of each deck, in the order of the "
                          "decks (aliases of a network card; see docs/real-network.md); "
                          "default the loopback, 127.0.0.<number>")
-    ap.add_argument("--netmask", default="255.255.255.0", metavar="MASK",
+    ap.add_argument("--dj-interface", metavar="NAME",
+                    help="use this Windows or Linux interface's existing IPv4 addresses for the decks")
+    ap.add_argument("--netmask", metavar="MASK",
                     help="the network's mask, to find its broadcast address from --bind "
                          "(default 255.255.255.0)")
     ap.add_argument("--broadcast", metavar="ADDRESS",
@@ -138,13 +142,49 @@ def main(argv=None):
                     help="the API wants this token (?token=... or Authorization: Bearer ...). `auto` makes one and says it")
     ap.add_argument("--http-host", default="127.0.0.1", metavar="ADDRESS",
                     help="the address the page listens on (default 127.0.0.1)")
+    ap.add_argument("--phone", action="store_true",
+                    help="enable token-protected phone access and show a pairing link and QR when available")
+    ap.add_argument("--phone-address", metavar="IPv4",
+                    help="the PC address reachable from the phone (default: the OS default route address)")
+    ap.add_argument("--network-info", action="store_true",
+                    help="show local interfaces and addresses without starting the bench or changing the network")
     ap.add_argument("--tracks-dir", metavar="DIR",
                     help="where the page keeps the sound files it sends (Browse...), kept between runs (default ~/.deckbench/tracks or "
                          "$DECKBENCH_TRACKS). Files unused for a month are removed at the start, and the oldest if it holds over 2 GB")
     ap.add_argument("--clear-uploads", action="store_true", help="empty that folder at the start")
     a = ap.parse_args(argv)
 
+    if a.network_info:
+        return phone.network_info(sys.stdout)
+
+    if a.phone_address and not a.phone:
+        ap.error("--phone-address requires --phone")
+    if a.phone:
+        if a.http_port < 0:
+            ap.error("--phone needs the HTTP server")
+        if a.http_host == "127.0.0.1":
+            a.http_host = "0.0.0.0"
+        if a.http_host != "0.0.0.0":
+            ap.error("--phone needs --http-host 0.0.0.0")
+        if not a.token:
+            a.token = "auto"
+        if phone.SITE not in a.allow_origin:
+            a.allow_origin.append(phone.SITE)
+
     numbers = [int(x) for x in a.numbers.split(",")] if a.numbers else list(range(1, a.decks + 1))
+    if a.dj_interface:
+        if a.bind or a.netmask:
+            ap.error("--dj-interface cannot be combined with --bind or --netmask")
+        try:
+            selected = phone.dj_interface(a.dj_interface, len(numbers))
+        except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as e:
+            ap.error("--dj-interface: %s" % e)
+        a.bind = ",".join(str(ip.ip) for ip in selected)
+        a.netmask = str(selected[0].netmask)
+        if phone.route_address() in {str(ip.ip) for ip in selected}:
+            log("DJ link: this interface also has the default route. Check that it is the intended DJ network")
+    if not a.netmask:
+        a.netmask = "255.255.255.0"
     adapters = []
     for spec in a.adapter:
         try:
@@ -196,6 +236,8 @@ def main(argv=None):
         log("sound on tcp://127.0.0.1:%d (raw stereo 16-bit 44.1 kHz)" % server.port)
         world.info["audio"] = "tcp://127.0.0.1:%d" % server.port
     log("broadcasting to %s" % broadcast)
+    if not a.bind and a.http_host == "0.0.0.0":
+        log("DJ link: loopback only, real players cannot see these decks. See docs/real-network.md")
     for n, deck in world.decks.items():
         wanted = [item.partition("=")[2] for item in a.init if int(item.partition("=")[0]) == n]
         if a.on or wanted:
@@ -243,6 +285,17 @@ def main(argv=None):
     server = serve(world, a.http_host, a.http_port, a.allow_origin, token, a.tracks_dir) if a.http_port >= 0 else None
     if server:
         world.info["http"] = "http://%s:%d/" % (a.http_host, server.server_address[1])
+    if server and a.phone:
+        address = a.phone_address or phone.route_address()
+        try:
+            url = phone.pairing_url(address, server.server_address[1], token)
+        except (ValueError, TypeError):
+            log("phone: no usable default-route IPv4 address, specify --phone-address")
+        else:
+            log("phone pairing link: %s" % url)
+            log("phone: use Wi-Fi that can reach %s, or specify --phone-address" % address)
+            if not phone.print_qr(url, sys.stdout):
+                log("phone: QR unavailable. Install qrcode and use a Unicode-capable terminal")
     if a.ready_file:
         tmp = a.ready_file + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
