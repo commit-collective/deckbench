@@ -37,6 +37,8 @@ Keep the normal adapter connected to the phone's Wi-Fi network, with its existin
 should use a different subnet. Do not add a default gateway to an isolated DJ network. If you need only one simulated
 deck, its `--bind` address can be the DJ adapter's existing IPv4 address. Additional decks need additional addresses.
 Check addresses and player numbers for conflicts. These commands do not detect every device or prevent a collision.
+The simulated decks currently announce synthetic MAC addresses, not the adapter's actual MAC. The effect on real
+hardware needs investigation. Do not assume an observed announcement proves full compatibility.
 
 Player numbers: not the unit's (it is player 1 by default, `PLAYER No.` on
 its home screen), and for a real CDJ network, not one in use.
@@ -95,5 +97,7 @@ The firewall may ask to let Python through on private networks: allow it (UDP
 The addresses, the broadcast and the unit's side of it, with the DJS-1000
 emulator on a Linux host (decks on aliases of the host's network card, the
 emulated unit on that network): the unit sees the decks, follows a master, hands
-the master role over and back. Windows and macOS aliases, and a real unit on a
-real cable, have not been tried.
+the master role over and back. On Windows with physical players, a CDJ reacted
+to a simulated deck but reported an older-firmware warning and a link access
+error. The bench did not show the real devices. Physical compatibility and
+the receive path are not yet established. macOS aliases have not been tried.

@@ -246,6 +246,7 @@ class LinkDeck:
         p[0xA0:0xA4] = struct.pack(">I", int(deck.position(time.time())) + 1)   # the beat in the track
         p[0xA4:0xA6] = bytes((0x01, 0xFF))               # no cue point ahead
         p[0xA6] = deck.beat_in_bar
+        p[0xB6] = 1                                     # compatibility flag, see prolink-go issue 11
         self.counter += 1
         p[0xC8:0xCC] = struct.pack(">I", self.counter)
         p[0xCC] = self.net.nexus                         # 0x0f for a nexus, 0x1f for a CDJ-3000 or an XDJ-XZ

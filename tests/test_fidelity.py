@@ -293,7 +293,12 @@ class Profiles(unittest.TestCase):
             p = self.status_of(net)
             self.assertEqual((len(p), p[0x0B:0x0B + len(name)], p[0xCC]), (length, name, nexus), profile)
             self.assertEqual(int.from_bytes(p[0x22:0x24], "big"), length - 0x24)
+            self.assertEqual(p[0xB6], 1, profile)
             self.assertEqual(net.decks[2].keepalive()[0x0C:0x0C + len(name)], name)
+
+    def test_default_status_sets_compatibility_flag(self):
+        net = Prolink(world_of(2), ports=fresh())
+        self.assertEqual(self.status_of(net)[0xB6], 1)
 
     def test_the_cdj_3000_does_not_count_its_syncs(self):
         world = world_of(2)

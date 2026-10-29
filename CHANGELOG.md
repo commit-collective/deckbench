@@ -4,6 +4,7 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Set the player status compatibility flag associated with older-firmware warnings. Real-player validation is pending.
 - Add phone pairing links and optional local QR codes with `--phone`.
 - Show interface information with `--network-info` and warn when a remotely accessible bench still uses loopback for the decks.
 - Select existing IPv4 addresses by interface name with `--dj-interface` on Windows and Linux.

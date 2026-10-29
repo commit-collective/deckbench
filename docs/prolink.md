@@ -35,6 +35,10 @@ play mode; 0x9e master meaningful; 0x9f the hand-off target (0xff for none);
 0xa0 the beat in the track; 0xa4 no cue point ahead; 0xa6 the beat in the bar;
 0xc8 a packet counter; 0xcc 0x0f (a nexus player).
 
+The status compatibility byte at 0xb6 is set to 1. An earlier Pro DJ Link implementation reported that this prevents
+an older-firmware warning on CDJs. See [the upstream fix](https://github.com/evanpurkhiser/prolink-go/commit/479767994f750884fcb78508a8bdeb16867eb94a).
+This change has not yet been validated with physical players.
+
 The flags (0x89): bit 6 plays, bit 5 master, bit 4 sync, bit 3 on air; bits 7
 and 2 are always set, as on a real player.
 
