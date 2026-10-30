@@ -2,27 +2,34 @@
 
 Newest first. A release is a tagged commit.
 
-## Unreleased
+## v0.4.0
 
-- Hold the visible network log with Follow off so live updates cannot move text or interrupt copying.
-- Label the mixer controls as a simulation rather than controls for a discovered physical DJM.
-- Retain inferred player loop boundaries across the scrolling window and correct late wrap status without delaying a beat.
-- Treat a physical DJS-1000 as a normal player unless an explicit emulator test adapter is configured.
-- Show compact master beat references above each deck's own beat indicators.
-- Keep passive grids visible when new beats arrive after a cached paused status.
-- Keep reported beat-in-bar separate from track counts for grid accents, sync and browser audition.
-- Audition broadcast-only player beats without requiring full status, and explain silent or suspended browser audio.
-- Follow physical player masters and negotiate master handoffs with CDJs as well as the DJS-1000.
-- Reply to handoff requests on UDP 50001 and cancel unanswered takeovers without forcing a second master.
-- Use actual adapter MAC addresses and unicast status to discovered peers on Windows and Linux DJ networks.
-- Show broadcast tempo and bar position without enabling a virtual deck, and reject already observed player numbers.
-- Advertise no mountable USB or SD media, since the bench does not serve NFS.
-- Add scoped Windows firewall installation, inspection and removal with `tools/windows-firewall.ps1`.
-- Set the player status compatibility flag associated with older-firmware warnings. Real-player validation is pending.
-- Add phone pairing links and optional local QR codes with `--phone`.
-- Show interface information with `--network-info` and warn when a remotely accessible bench still uses loopback for the decks.
-- Select existing IPv4 addresses by interface name with `--dj-interface` on Windows and Linux.
-- Keep DJ network addresses and adapter configuration explicit. Combined physical master and sync testing remains open.
+### Phone access and setup
+
+- Add phone pairing links and optional QR codes with `--phone`.
+- Select the wired DJ adapter with `--dj-interface` and inspect available interfaces with `--network-info`.
+- Add a Windows firewall helper with scoped installation, inspection and removal.
+- Clarify browser connectivity, DJ network addressing and optional second-adapter setups.
+
+### Real-device interoperability
+
+- Support MASTER and SYNC handoffs between simulated decks and physical players.
+- Use actual adapter MAC addresses and send player status directly to discovered peers.
+- Fix compatibility fields associated with older-firmware warnings and advertise no shared USB or SD media.
+- Show broadcast tempo and beat position without enabling a simulated deck.
+- Treat physical DJS-1000 units as normal players unless an emulator test adapter is configured.
+
+### Beat display and browser audio
+
+- Align physical-player beat grids and retain loop shading across loop wraps.
+- Show a compact master beat reference above each deck's beat indicators.
+- Support browser audition of broadcast-only beats and explain unavailable or suspended audio.
+
+### Network tools
+
+- Keep the visible log stable with Follow off while packets continue collecting.
+- Preserve text selection and export held rows when the view is frozen.
+- Clearly distinguish simulated mixer controls from discovered physical mixers.
 
 ## v0.3.0
 
