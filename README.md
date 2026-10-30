@@ -30,7 +30,7 @@ Local decks use `127.0.0.N`. Run the device under test in the same network
 namespace. If an emulator runs in WSL, run deckbench there too.
 Linux and Windows are covered by CI. Native macOS loopback does not provide
 the broadcast behaviour this mode needs. Use a Linux VM for the loopback
-bench or see the [real-network setup](docs/real-network.md).
+bench. Real-network interface support is currently Windows and Linux.
 
 ## Choose a workflow
 
@@ -39,7 +39,7 @@ bench or see the [real-network setup](docs/real-network.md).
 | Explore the interface without a network | [Browser demo](https://commitcollective.cc/deckbench/app/?demo), simulated in the browser |
 | Test an app or emulator locally | The command above, then [scenarios](docs/scenarios.md) |
 | Put simulated decks beside real hardware | [Network aliases, broadcast and ports](docs/real-network.md) |
-| Use a phone as the screen of a running bench | [Phone pairing and interface selection](docs/phone.md), physical-phone validation is still pending |
+| Use a phone as the screen of a running bench | [Phone pairing and connection choices](docs/phone.md) |
 
 The bench provides discovery, statuses, beats, sync/master handover, track
 metadata and a simulated DJM. Model profiles vary packet shape and advertised

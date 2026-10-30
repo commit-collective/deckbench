@@ -8,6 +8,10 @@ The bench needs an address of its own for each deck on the Pro DJ Link network. 
 players' switch and open its page on the phone over Wi-Fi. See [real-network.md](real-network.md) for the separate
 DJ network configuration, which is still manual.
 
+The computer can use built-in Ethernet, a dock or a USB adapter for the players. For phone access, it also needs a
+connection the phone can reach, such as Wi-Fi on the same home network. A second Ethernet adapter is only one option.
+See [connection choices](real-network.md#connect-the-computer) before configuring addresses.
+
 On Windows, follow the [firewall setup](real-network.md#windows-firewall) on the DJ-connected PC. An isolated Public
 network needs an explicit inbound rule even when Python is already allowed on Private networks.
 
@@ -16,9 +20,13 @@ Install the optional QR encoder once, from a checkout or extracted release:
     python -m pip install ".[phone]"
 
 Start with `python -m deckbench --network-info` to find the DJ adapter's name and IPv4 address. With one deck, its
-existing address can be used without adding aliases. On Windows and Linux, for example:
+existing address can be used without adding aliases. For example, on Windows:
 
-    python -m deckbench --phone --numbers 2 --on --dj-interface "Ethernet 2"
+    python -m deckbench --phone --numbers 2 --on --dj-interface "Ethernet"
+
+Or on Linux:
+
+    python -m deckbench --phone --numbers 2 --on --dj-interface enp3s0
 
 Replace the name with the DJ adapter's actual name and choose an unused player number. This selects already configured
 addresses and their mask. It does not change the adapter. For more than one deck, the adapter needs a distinct address
@@ -37,8 +45,9 @@ the default route, which may be wrong on a machine with multiple networks. If th
 `--phone-address <PC address on the phone's network>`. The QR package is optional. Without it the pairing link is printed
 with an installation hint.
 
-The phone and PC need a reachable path, such as the phone on the home Wi-Fi and the PC's normal Ethernet on that same
-home network. Keep the DJ adapter on its own subnet. Guest Wi-Fi isolation or a firewall may prevent the connection.
+The phone and computer need a reachable path, such as both using the home Wi-Fi, or the phone on Wi-Fi and the computer
+on Ethernet connected to the same router. If the DJ network is isolated, give it a different subnet from the home network.
+Guest Wi-Fi isolation or a firewall may prevent the connection.
 The site may ask for local-network permission. If the hosted page cannot connect, open the PC-served page directly using
 the address and token printed by the bench.
 
@@ -52,11 +61,11 @@ The equivalent manual setup still works:
         --bind 192.168.1.201,192.168.1.202 --netmask 255.255.255.0 \
         --http-host 0.0.0.0 --token auto
 
-It prints the token and the address of the page. On the phone open `http://<the machine's Wi-Fi address>:8750/#token=<the token>`.
+It prints the token and the address of the page. On the phone open `http://<computer address reachable from the phone>:8750/#token=<the token>`.
 The page is laid out for narrow screens (checked at 500 px in a desktop browser, not on a phone) and has the decks, the loops, the cable, the mixer and the events.
 
-The machine has two networks, the one with the players (Ethernet) and the one of the phone (Wi-Fi). They must be different
-networks, or the players' broadcasts and the phone's browsing share one, which they should not.
+Separate DJ and home networks are optional. If the players, computer and phone already share one LAN, the phone can
+use the computer's address on that LAN. Pro DJ Link still needs the computer's wired connection to the players.
 
 ## 2. The hosted page, as the screen
 
