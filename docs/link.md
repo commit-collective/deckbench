@@ -55,7 +55,10 @@ until the bench leaves. Requests for `journal`, `upload`, `packets`, `events` an
 
 The Network tab has a real-time log of the packets. Keep-alives, claims, on air, fader start and the like are shown by default.
 Statuses and beats are many, so they are an option ("status and beats"). The bench's own packets are an option too ("ours"). The
-log can be paused, cleared, followed and exported.
+log can be paused, cleared, followed and exported. Turn Follow off to hold the visible log for reading or copying
+while packets continue collecting in the bounded buffer. Turn it back on to show the latest packets. Pause stops
+fetching updates from the server, not network traffic or server-side capture. Export saves the held rows when
+Follow is off or the log is paused. Changing a filter explicitly refreshes the view.
 
     GET  /api/packets?since=<n>&noisy=<0|1>&limit=<n>   the lines after n, and the counts by kind
     POST /api/packets/clear                              forget them

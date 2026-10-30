@@ -29,6 +29,10 @@ class Demo(unittest.TestCase):
         out = subprocess.run(["node", os.path.join(ROOT, "tests", "viz_check.js")], capture_output=True, text=True, timeout=60)
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
 
+    def test_packet_log_holds_the_reading_view(self):
+        out = subprocess.run(["node", os.path.join(ROOT, "tests", "packets_check.js")], capture_output=True, text=True, encoding="utf-8", timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

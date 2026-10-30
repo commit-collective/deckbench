@@ -85,8 +85,8 @@
     <!-- Mixer -->
     <div class="panel" id="p-mixer" role="tabpanel" aria-labelledby="tab-mixer" hidden>
       <div class="setting">
-        <div class="what"><b id="mixname">Mixer</b><span>A DJM on the link. It tells the players which channels are on the air, and a channel with fader start starts and stops its player with its fader.</span></div>
-        <button class="switch" role="switch" id="mixon" aria-checked="false" aria-label="Mixer on"></button>
+        <div class="what"><b id="mixname">Simulated mixer</b><span>Simulates a DJM's on-air and fader-start commands. These controls do not operate your physical mixer. Leave the simulation off when using a real DJM.</span></div>
+        <button class="switch" role="switch" id="mixon" aria-checked="false" aria-label="Simulated mixer on"></button>
       </div>
       <div class="setting">
         <div class="what"><b>Master level</b><span>Up, the channels whose faders are open are on the air. Down, none is.</span></div>
@@ -116,7 +116,7 @@
         <span class="grow"></span>
         <button class="btn small" id="pktnoisy" aria-pressed="false" title="Show the statuses and beats too: many a second">Statuses and beats</button>
         <button class="btn small" id="pktours" aria-pressed="false" title="Show the packets of the bench's own decks and mixer too">The bench's own</button>
-        <button class="btn small" id="pktfollow" aria-pressed="true" title="Keep the newest line in view">Follow</button>
+        <button class="btn small" id="pktfollow" aria-pressed="true" title="Follow incoming packets. Turn off to hold the visible log for reading or copying while packets continue collecting.">Follow</button>
       </div>
       <div class="filters" id="pktfilters" aria-label="Filter by kind"></div>
       <div class="pktlog" id="pktlog" role="log" aria-live="off"></div>

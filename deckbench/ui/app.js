@@ -127,7 +127,7 @@ function renderChips() {
   if (set.strict) box.append(chip("strict decks"));
   if (set.refuse_db) box.append(chip("database refused"));
   const mixer = mixerOf(s);
-  if (mixer && mixer.on) box.append(chip(mixer.name, "ok", "mixer "));
+  if (mixer && mixer.on) box.append(chip(mixer.name, "ok", "simulated mixer "));
   if (set.claim) box.append(chip("claims its number"));
   if (info.ports && info.ports.announce !== 50000) box.append(chip("ports +" + (info.ports.announce - 50000)));
   if (info.audio) box.append(chip(info.audio + (info.audio_source ? " · deck " + info.audio_source : ""), null, "unit input ",
@@ -808,7 +808,16 @@ const NOISY = ["status", "beat", "position"];
 function pktLine(p) {
   const who = (p.number != null ? "#" + p.number + " " : "") + p.src;
   const line = h("div", {class: "pkt" + (p.ours ? " ours" : ""), title: p.src + " to " + p.to + ", port " + p.port + ", " + p.len + " bytes. Click for the bytes",
-    onclick: () => { P.open.has(p.n) ? P.open.delete(p.n) : P.open.add(p.n); drawPackets(); }},
+    onclick: () => {
+      if (!window.getSelection().isCollapsed) return;
+      if (P.open.has(p.n)) {
+        P.open.delete(p.n);
+        line.nextSibling.remove();
+      } else {
+        P.open.add(p.n);
+        line.after(h("div", {class: "hex"}, p.hex));
+      }
+    }},
     h("span", {class: "t"}, p.t.toFixed(2)), h("span", {class: "dir"}, p.to !== "*" && p.to !== "" && p.ours ? "\u2192" : "\u2190"),
     h("span", {class: "src"}, who), h("span", {class: "kind"}, p.kind), h("span", {class: "what"}, p.text));
   return P.open.has(p.n) ? [line, h("div", {class: "hex"}, p.hex)] : [line];
@@ -819,16 +828,24 @@ function shownPackets() {
 }
 
 let pktTimer = null;
-function drawPackets() {
+let pktRefresh = false, pktRendered = [];
+function drawPackets(refresh = false) {
+  pktRefresh = pktRefresh || refresh;
   if (pktTimer) return;
   pktTimer = setTimeout(() => {
     pktTimer = null;
+    const refresh = pktRefresh;
+    pktRefresh = false;
+    if (!refresh && (!P.follow || P.paused)) return;
     const box = $("pktlog"), atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 24;
+    const scrollTop = box.scrollTop;
     box.textContent = "";
     const list = shownPackets().slice(-400);
+    pktRendered = list;
     if (!list.length) box.append(h("div", {class: "pkt"}, h("span", {class: "what"}, "Nothing heard yet. Packets of the other devices on the link appear here as they come.")));
     for (const p of list) box.append(...pktLine(p));
     if (P.follow && (atEnd || P.fresh)) box.scrollTop = box.scrollHeight;
+    else box.scrollTop = scrollTop;
     P.fresh = false;
     $("pktcount").textContent = "(" + list.length + " of " + P.items.length + " kept)";
     const filters = $("pktfilters");
@@ -836,7 +853,7 @@ function drawPackets() {
     for (const [kind, count] of Object.entries(P.counts).sort()) {
       if (!P.noisy && NOISY.includes(kind)) continue;
       filters.append(h("button", {"aria-pressed": String(!P.hidden.has(kind)), title: "Show or hide " + kind,
-        onclick: () => { P.hidden.has(kind) ? P.hidden.delete(kind) : P.hidden.add(kind); drawPackets(); }}, kind + " " + count));
+        onclick: () => { P.hidden.has(kind) ? P.hidden.delete(kind) : P.hidden.add(kind); drawPackets(true); }}, kind + " " + count));
     }
   }, 150);
 }
@@ -861,21 +878,23 @@ async function pollPackets() {
   setTimeout(pollPackets, 500);
 }
 
-function resetPackets() { P.items = []; P.next = 0; P.open.clear(); drawPackets(); }
+function resetPackets() { P.items = []; P.next = 0; P.open.clear(); drawPackets(true); }
 
 $("pktpause").addEventListener("click", () => {
   P.paused = !P.paused;
+  if (P.paused) pktRefresh = false;
   $("pktpause").textContent = P.paused ? "Resume" : "Pause";
 });
 $("pktclear").addEventListener("click", async () => { await act("api/packets/clear"); resetPackets(); P.counts = {}; });
-$("pktexport").addEventListener("click", () => download("deckbench-link-" + stamp() + ".json", JSON.stringify(shownPackets(), null, 1)));
+$("pktexport").addEventListener("click", () => download("deckbench-link-" + stamp() + ".json", JSON.stringify(P.follow && !P.paused ? shownPackets() : pktRendered, null, 1)));
 for (const [id, key] of [["pktnoisy", "noisy"], ["pktours", "ours"], ["pktfollow", "follow"]]) {
   $(id).addEventListener("click", () => {
     P[key] = !P[key];
+    if (key === "follow" && !P.follow) pktRefresh = false;
     $(id).setAttribute("aria-pressed", String(P[key]));
     if (key === "noisy" && P.noisy) resetPackets();                 /* the statuses and beats were not asked for: fetch all again */
     P.fresh = true;
-    drawPackets();
+    if (key !== "follow" || P.follow) drawPackets(true);
   });
 }
 
@@ -948,7 +967,7 @@ function renderMixer() {
   const mixer = mixerOf(S.state);
   if (!mixer) return;
   buildStrips(mixer);
-  $("mixname").textContent = "Mixer " + mixer.name + " (player " + mixer.number + ")";
+  $("mixname").textContent = "Simulated mixer " + mixer.name + " (player " + mixer.number + ")";
   $("mixon").setAttribute("aria-checked", String(!!mixer.on));
   $("mixmaster").setAttribute("aria-checked", String(!!mixer.master));
   const active = document.activeElement;
@@ -960,7 +979,7 @@ function renderMixer() {
     for (const b of strip.querySelectorAll(".btn")) b.disabled = !mixer.on;
   }
   $("mixhint").textContent = mixer.on ? "Channel N is player N. The decks' on-air flag follows what the mixer says, and a unit that picks the deck to sync to looks at it."
-    : "Off. The decks say they are on air while they play, as with no mixer.";
+    : "Simulation off. A discovered physical mixer can still report which channels are on air.";
 }
 
 $("mixon").addEventListener("click", () => act("api/mixer/on/" + ($("mixon").getAttribute("aria-checked") === "true" ? 0 : 1)));

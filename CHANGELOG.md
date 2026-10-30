@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Hold the visible network log with Follow off so live updates cannot move text or interrupt copying.
+- Label the mixer controls as a simulation rather than controls for a discovered physical DJM.
 - Retain inferred player loop boundaries across the scrolling window and correct late wrap status without delaying a beat.
 - Treat a physical DJS-1000 as a normal player unless an explicit emulator test adapter is configured.
 - Show compact master beat references above each deck's own beat indicators.
