@@ -42,7 +42,7 @@ def classify(port, data, announce=50000, beat=50001, update=50002):
         return {0x0A: "hello", 0x00: "claim 1", 0x01: "will assign", 0x02: "claim 2", 0x04: "claim 3", 0x06: "keep-alive",
                 0x08: "number in use"}.get(t, "other")
     if port == beat:
-        return {0x28: "beat", 0x03: "on air", 0x02: "fader start", 0x26: "takeover request", 0x2A: "sync command",
+        return {0x28: "beat", 0x03: "on air", 0x02: "fader start", 0x26: "takeover request", 0x27: "takeover reply", 0x2A: "sync command",
                 0x0B: "position"}.get(t, "other")
     if port == update:
         return {0x0A: "status", 0x27: "takeover reply"}.get(t, "other")
@@ -112,6 +112,8 @@ class Monitor:
             device = self.device(source, now, ours, name, number, declared)
         else:
             ours = source in self.own_addresses()
+        if device is not None:
+            device["packet_source"] = source
         summary = self.read(kind, data, device, now) if device is not None else ""
         with self.lock:
             self.n += 1
@@ -247,7 +249,17 @@ class Monitor:
               "track_beat": beat_in_track if beat_in_track not in (0, 0xFFFFFFFF) else None,     # counted from 1: 0 is a player with no track (a sampler)
               "source": data[0x28], "slot": data[0x29], "track_type": data[0x2A], "rbid": struct.unpack(">I", data[0x2C:0x30])[0],
               "sync_counter": struct.unpack(">I", data[0x84:0x88])[0], "seen": now}
-        d["status"] = st
+        if d["ours"]:
+            d["status"] = st
+        else:
+            with self.net.world.lock:
+                # Preserve position through a tempo update without aligning
+                # local followers to their master on an unrelated status.
+                at = time.time()
+                for deck in self.net.world.decks.values():
+                    deck.reanchor(at)
+                d["status"] = st
+        self.net.peer_status(d, data)
         if not playing and st["track_beat"] is not None:
             d["at"] = st["track_beat"] - 1
         return "%s #%d: %s%s%s%s, %.1f BPM, beat %s%s" % (
@@ -290,7 +302,8 @@ class Monitor:
             item = {"ip": d["ip"], "name": d["name"], "model": model, "number": d["number"], "kind": d["kind"] or "device", "unit": d["unit"],
                     "online": now - d["seen"] < 8, "mac": d["mac"], "peers": d["peers"], "firmware": d["firmware"],
                     "status": {k: v for k, v in st.items() if k != "seen"} if st else None,
-                    "phase": d["phase"] if d["phase"] and now - d["phase_seen"] < 2.0 and st and st["play"] else None,
+                    "phase": d["phase"] if d["phase"] and now - d["phase_seen"] < 2.0
+                    and (st is None or st["play"]) else None,
                     "at": d["at"] if not (st and st["play"]) else None,
                     "air": d["air"] if d["air"] and now - d["air_seen"] < 8 else None,
                     "fader": d["fader"]["commands"] if d["fader"] and now - d["fader"]["t"] < 8 else None}

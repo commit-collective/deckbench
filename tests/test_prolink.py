@@ -238,7 +238,7 @@ class Bench(unittest.TestCase):
         # The answer goes to the asker's own address: its socket is the one to read it from (another one bound to
         # every address would not get it on Windows, where the most specific socket wins).
         s = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
-        s.bind(("127.0.0.9", self.ports.update))
+        s.bind(("127.0.0.9", self.ports.beat))
         s.settimeout(0.3)
         request = prolink.header(0x26, b"TEST") + bytes([0x01, 0x00, 9, 0x00, 0x04, 0, 0, 0, 9])
         s.sendto(bytes(request), ("127.0.0.2", self.ports.beat))
@@ -249,7 +249,7 @@ class Bench(unittest.TestCase):
         self.assertEqual(self.status_of(2)[0x9F], 9)                            # Mh: to player 9
         time.sleep(4.5)                                                         # the time is up
         self.assertEqual(self.status_of(2)[0x9F], 0xFF)
-        self.assertFalse(self.api("api/state")["decks"]["2"]["master"])
+        self.assertTrue(self.api("api/state")["decks"]["2"]["master"])
 
     def test_sync_commands(self):
         for n in (2, 3):

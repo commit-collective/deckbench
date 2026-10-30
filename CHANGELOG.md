@@ -4,11 +4,17 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Follow physical player masters and negotiate master handoffs with CDJs as well as the DJS-1000.
+- Reply to handoff requests on UDP 50001 and cancel unanswered takeovers without forcing a second master.
+- Use actual adapter MAC addresses and unicast status to discovered peers on Windows and Linux DJ networks.
+- Show broadcast tempo and bar position without enabling a virtual deck, and reject already observed player numbers.
+- Advertise no mountable USB or SD media, since the bench does not serve NFS.
+- Add scoped Windows firewall installation, inspection and removal with `tools/windows-firewall.ps1`.
 - Set the player status compatibility flag associated with older-firmware warnings. Real-player validation is pending.
 - Add phone pairing links and optional local QR codes with `--phone`.
 - Show interface information with `--network-info` and warn when a remotely accessible bench still uses loopback for the decks.
 - Select existing IPv4 addresses by interface name with `--dj-interface` on Windows and Linux.
-- Keep DJ network addresses and adapter configuration explicit. Real-device and phone testing remain open.
+- Keep DJ network addresses and adapter configuration explicit. Combined physical master and sync testing remains open.
 
 ## v0.3.0
 

@@ -401,7 +401,8 @@ function renderDevices() {
       if (!d.air) airs.append(h("span", {class: "hint"}, "no on-air report heard"));
       if (d.fader) facts.append(h("span", {}, "fader start: " + Object.entries(d.fader).map(([p, c]) => "player " + p + " " + c).join(", ")));
     } else {
-      q("lcd").firstChild.textContent = st && d.online ? st.bpm.toFixed(1) : "--";
+      const bpm = st ? st.bpm : d.phase ? d.phase[2] : null;
+      q("lcd").firstChild.textContent = bpm != null && d.online ? bpm.toFixed(1) : "--";
       if (st && st.pitch) facts.append(h("span", {}, "pitch " + (st.pitch > 0 ? "+" : "") + st.pitch + " %"));
       if (d.firmware) facts.append(h("span", {}, "firmware " + d.firmware));
     }

@@ -1,12 +1,15 @@
 # Using deckbench from a phone
 
-Phone access and a phone-only bench are different approaches. Neither has been validated on a physical phone yet.
+Phone pairing has worked with a Windows bench on a real DJ network. Running the bench itself on a phone remains untested.
 
 ## 1. The phone is the screen, a small computer is the bench (recommended)
 
 The bench needs an address of its own for each deck on the Pro DJ Link network. Put it on a computer cabled to the
 players' switch and open its page on the phone over Wi-Fi. See [real-network.md](real-network.md) for the separate
 DJ network configuration, which is still manual.
+
+On Windows, follow the [firewall setup](real-network.md#windows-firewall) on the DJ-connected PC. An isolated Public
+network needs an explicit inbound rule even when Python is already allowed on Private networks.
 
 Install the optional QR encoder once, from a checkout or extracted release:
 

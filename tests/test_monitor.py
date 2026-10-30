@@ -384,6 +384,8 @@ class Aligned(unittest.TestCase):
 
     def test_not_while_a_deck_of_the_bench_is_the_master(self):
         deck2, deck3 = self.world.decks[2], self.world.decks[3]
+        self.other_world.decks[5].master = False
+        self.tell(2)
         deck3.base_bpm = 120.0
         self.world.set_play(deck3, True)
         self.world.set_master(deck3, True)

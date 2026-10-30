@@ -40,11 +40,12 @@ import socket
 import struct
 import threading
 import time
+import ipaddress
 
 from ..core import Protocol, log
 
 from .. import profiles
-from ..net import share
+from ..net import share, interface_macs
 from . import startup
 from .mixer import LinkMixer, parse_on_air
 from .monitor import Monitor
@@ -166,6 +167,8 @@ class LinkDeck:
         self.name = (model or "CDJ-FAKE%d" % deck.number).encode()
         self.handing_to = 0xFF              # while it hands the role over: to whom
         self.pending = False                # has asked the unit for the master role
+        self.pending_peer = None
+        self.pending_since = 0.0
         self.sync_number = 0
         self.counter = 0
         self.online = False                 # it has come onto the network (and claimed its number, if that is asked)
@@ -228,6 +231,7 @@ class LinkDeck:
         p[0x27] = 1 if deck.playing else 0               # activity
         p[0x28], p[0x29], p[0x2A] = self.source, self.slot, 1
         p[0x2C:0x30] = struct.pack(">I", self.rbid)
+        p[0x6F] = p[0x73] = 4                           # no USB or SD media to mount over NFS
         # playing (looping) / playing while CUE is held / paused on the cue point / paused elsewhere
         p[0x7B] = (7 if deck.cueing else 4 if deck.loop else 3) if deck.playing else 6 if deck.at_cue() else 5
         p[0x7C:0x80] = b"1.00"
@@ -312,7 +316,8 @@ class LinkDeck:
             if now - last_status >= 0.2:
                 with self.net.world.lock:
                     packet = self.status()
-                self.send(s, packet, (self.broadcast, self.ports.update))
+                for destination in self.net.status_destinations(self):
+                    self.send(s, packet, (destination, self.ports.update))
                 last_status = now
             time.sleep(0.05)
 
@@ -368,8 +373,8 @@ class LinkDeck:
                 reply = header(0x27, self.name) + bytes([
                     0x01, 0x00, self.number, 0x00, 0x08, 0x00, 0x00, 0x00, self.number,
                     0x00, 0x00, 0x00, 0x01])
-                self.send(out, bytes(reply), (addr[0], self.ports.update))
-                threading.Timer(4.0, self.finish_handoff, args=(sender,)).start()
+                self.send(out, bytes(reply), (addr[0], self.ports.beat))
+                threading.Timer(4.0, self.cancel_handoff, args=(sender,)).start()
                 world.changed()
             elif kind == 0x2A:                                   # a sync command
                 command = data[0x2B] if len(data) > 0x2B else 0
@@ -383,41 +388,55 @@ class LinkDeck:
                     world.set_master(deck, True)
 
     # -- the master role --
+    def cancel_handoff(self, target):
+        """Keep the role if the requester never confirms becoming master."""
+        with self.net.world.lock:
+            if self.handing_to != target:
+                return
+            self.handing_to = 0xFF
+        self.net.world.changed()
+
     def finish_handoff(self, to=None):
-        """The deck stops being the master (the new one has said it is, or
-        the time is up)."""
+        """The new master has confirmed taking the role."""
         deck = self.deck
 
         def change():
             if deck.master and self.handing_to != 0xFF and (to is None or to == self.handing_to):
                 deck.master = False
                 self.handing_to = 0xFF
+                self.sync_number = self.net.next_sync_number()
                 log("%s is no longer the master" % deck.name)
         self.net.world.settle(change)
         self.net.world.changed()
 
-    def take_after_handoff(self):
+    def take_after_handoff(self, sync_number=None):
         """The unit's status names this deck as the next master: it is."""
         if not self.pending:
             return
         deck = self.deck
 
         def change():
+            tempo = deck.tempo()
             self.pending = False
+            self.pending_peer = None
+            deck.base_bpm = tempo
             deck.master = True
-            self.sync_number = max(self.sync_number, self.net.unit.get("syncn", 0)) + 1
+            self.sync_number = max(self.sync_number, sync_number if sync_number is not None
+                                   else self.net.unit.get("syncn", 0)) + 1
         self.net.world.settle(change)
-        log("%s is now the master (the unit handed it over)" % deck.name)
+        log("%s is now the master (handoff confirmed)" % deck.name)
         self.net.world.changed()
 
     def give_up(self):
-        """The unit did not hand the role over in time (it plays no part, or
-        is not syncing a playing deck): the deck takes it anyway, so the
-        master of the decks can always be changed."""
-        if self.pending:
-            log("%s: the unit under test did not hand over the master role; taking it"
-                % self.deck.name)
-            self.take_after_handoff()
+        """Cancel an unanswered request without creating a second master."""
+        with self.net.world.lock:
+            if not self.pending or time.time() - self.pending_since < 3.0:
+                return
+            self.pending = False
+            self.pending_peer = None
+            self.net.world.events.add("handoff_timeout", deck=self.number)
+        log("%s: master handoff timed out" % self.deck.name)
+        self.net.world.changed()
 
     # -- TCP --
     def serve_port(self):
@@ -574,7 +593,25 @@ class Prolink(Protocol):
             self.decks[n] = LinkDeck(self, deck, loaded.get(n, (n, 3, 100 + n)),
                                      known.get(n, {}), model or (profiles.get(profile)["model"] if profile else None),
                                      (addresses or {}).get(n, "127.0.0.%d" % n), broadcast, refuse_db, strict, ports)
+        physical = [link for link in self.decks.values()
+                    if not ipaddress.ip_address(link.address).is_loopback]
+        if physical:
+            try:
+                macs = interface_macs()
+            except (OSError, ValueError, TimeoutError) as error:
+                raise ValueError("could not read DJ adapter MAC addresses: %s" % error) from error
+            for link in physical:
+                if link.address not in macs:
+                    raise ValueError("cannot find the adapter MAC for %s, use a configured Windows or Linux IPv4 address"
+                                     % link.address)
+                link.mac = macs[link.address]
         world.protocols.append(self)
+
+    def status_destinations(self, link):
+        """Keep loopback broadcast tests, unicast statuses to real peers."""
+        if ipaddress.ip_address(link.address).is_loopback:
+            return [link.broadcast]
+        return sorted({device["ip"] for device in self.monitor.snapshot() if device["online"]})
 
     def check_ports(self):
         """Binds every port the decks need once, to say so at once if one cannot be had (the threads that serve
@@ -647,7 +684,7 @@ class Prolink(Protocol):
         it is on, and the unit under test if it was heard in the last ten seconds."""
         count = sum(1 for link in self.decks.values() if link is not exclude and link.deck.enabled and not link.deck.unplugged)
         count += 1 if self.mixer.on and not exclude_mixer else 0
-        count += 1 if time.time() - self.unit["announced"] < 10 else 0
+        count += sum(1 for device in self.monitor.snapshot() if device["online"])
         return count
 
     def align_synced(self, device, now):
@@ -656,7 +693,8 @@ class Prolink(Protocol):
         a jump of no more than two beats, and only when it is more than 20 ms out. Not while a deck of the bench is the master, and not
         a deck that loops (its place is its own)."""
         st, phase = device["status"], device["phase"]
-        if not (st and st["master"] and st["play"] and phase and not device["ours"]):
+        if not (st and now - st["seen"] < 2.0 and st["master"] and st["play"]
+                and phase and not device["ours"]):
             return
         world = self.world
         with world.lock:
@@ -735,9 +773,38 @@ class Prolink(Protocol):
 
     # -- what the World asks --
     def external_master_bpm(self):
-        if self.unit["master"] and self.unit["bpm"]:
-            return self.unit["bpm"]
+        peer = self.external_master()
+        if peer and 0 < peer["status"]["bpm"] < 655.35:
+            return peer["status"]["bpm"]
         return None
+
+    def external_master(self):
+        """The freshest external player with a live master status."""
+        now = time.time()
+        with self.monitor.lock:
+            peers = [dict(d) for d in self.monitor.devices.values()
+                     if not d["ours"] and d["status"] and d["status"]["master"]
+                     and now - d["status"]["seen"] < 2.0]
+        return max(peers, key=lambda d: d["status"]["seen"]) if peers else None
+
+    def next_sync_number(self):
+        with self.monitor.lock:
+            counters = [d["status"]["sync_counter"] for d in self.monitor.devices.values() if d["status"]]
+        return (max(counters + [link.sync_number for link in self.decks.values()] + [0]) + 1) & 0xFFFFFFFF
+
+    def peer_status(self, device, data):
+        """Complete handoffs with any external player."""
+        if device["ours"]:
+            return
+        with self.world.lock:
+            for link in self.decks.values():
+                if not link.deck.enabled or link.deck.unplugged:
+                    continue
+                if device["status"]["master"] and link.handing_to == device["number"]:
+                    link.finish_handoff()
+                if (link.pending and link.pending_peer == (device.get("packet_source", device["ip"]), device["number"])
+                        and data[0x9F] == link.number):
+                    link.take_after_handoff(device["status"]["sync_counter"])
 
     def describe(self, deck):
         link = self.decks.get(deck.number)
@@ -819,6 +886,11 @@ class Prolink(Protocol):
         return state
 
     def allow_enable(self, deck):
+        for device in self.monitor.snapshot():
+            if device["online"] and device["number"] == deck.number:
+                log("%s: player number already used by %s at %s" %
+                    (deck.name, device["name"], device["ip"]))
+                return False
         # A deck with the unit's own number is a clash: the unit then links to no deck at all.
         if self.unit["number"] == deck.number:
             log("%s has the number of the unit under test: left off (a clash makes the unit "
@@ -831,11 +903,14 @@ class Prolink(Protocol):
         if link and not on:
             link.handing_to = 0xFF
             link.pending = False
+            link.pending_peer = None
 
     def master_released(self, deck):
         link = self.decks.get(deck.number)
         if link:
             link.handing_to = 0xFF
+            link.pending = False
+            link.pending_peer = None
 
     def track_loaded(self, deck, rbid, title, source=None, slot=None):
         link = self.decks.get(deck.number)
@@ -900,18 +975,27 @@ class Prolink(Protocol):
             # Only when none has it, the unit might.
             deck_master = any(o is not deck and o.enabled and o.master
                               for o in world.decks.values())
-            if self.unit["master"] and self.unit["ip"] and not deck_master:
+            peer = self.external_master()
+            if peer and not deck_master:
                 # The unit has the role: ask it (to port 50001), and take the
                 # role when its status names this deck as the one to get it
                 # (Mh): see LinkDeck.take_after_handoff().
                 request = header(0x26, link.name) + bytes([
                     0x01, 0x00, link.number, 0x00, 0x04, 0x00, 0x00, 0x00, link.number])
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.bind((link.address, 0))
-                s.sendto(bytes(request), (self.unit["ip"], self.ports.beat))
-                s.close()
+                if link.pending:
+                    return
                 link.pending = True
-                log("%s asks the unit under test to yield the master role" % deck.name)
+                link.pending_peer = (peer["ip"], peer["number"])
+                link.pending_since = time.time()
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                        s.bind((link.address, 0))
+                        link.send(s, bytes(request), (peer["ip"], self.ports.beat))
+                except OSError:
+                    link.pending = False
+                    link.pending_peer = None
+                    raise
+                log("%s asks player %s to yield the master role" % (deck.name, peer["number"]))
                 threading.Timer(3.0, link.give_up).start()
                 return
             for other in world.decks.values():
@@ -977,7 +1061,7 @@ class Prolink(Protocol):
                             world.events.add("unit_seen", number=data[0x24])
                         unit["ip"] = ".".join(str(b) for b in data[0x2C:0x30])
                         unit["announced"] = time.time()
-                    elif port == self.ports.update and data[0x0A] == 0x0A and len(data) > 0x93:
+                    elif port == self.ports.update and data[0x0A] == 0x0A and len(data) >= 0xA7:
                         master = bool(data[0x89] & 0x20)
                         unit["syncn"] = struct.unpack(">I", data[0x84:0x88])[0]
                         seen = (data[0x89], data[0x9E], data[0x9F], unit["syncn"])
@@ -1011,7 +1095,4 @@ class Prolink(Protocol):
                             for link in self.decks.values():
                                 if link.deck.master and link.handing_to == data[0x21]:
                                     link.finish_handoff()
-                        for link in self.decks.values():
-                            if link.pending and data[0x9F] == link.number:
-                                threading.Thread(target=link.take_after_handoff).start()
                 world.changed()

@@ -21,6 +21,10 @@ broadcast address: [real-network.md](real-network.md)).
 
 A deck that is off sends nothing and closes what is opened to it.
 
+On a physical Windows or Linux interface, announcements use the adapter's actual MAC. Status packets go directly to
+discovered peers. Loopback keeps broadcast status for local test clients. USB and SD media flags say no media is
+mounted, because the database simulation does not serve NFS files.
+
 ### The status packet
 
 Fields set (offsets in the packet): after the name, byte 0x1f is 01, 0x20 the
@@ -50,9 +54,14 @@ gives the role, for a second, then lets go.
 
 A deck that asks a player for the role sends a takeover request (type 0x26,
 0x28 bytes) to port 50001 of the master. A deck that is the master answers
-with a response (0x27) to port 50002 of the sender and names it in 0x9f in its
+with a response (0x27) to port 50001 of the sender and names it in 0x9f in its
 statuses. Sync commands (0x2a, command byte at 0x2b: 0x10 sync on, 0x20 sync
 off, 0x01 become master) are obeyed.
+
+External CDJ masters use the same handoff path as the DJS-1000. A virtual requester waits for its number in the outgoing
+master's status and cancels after three seconds if no grant arrives. An outgoing virtual master retains its role if the
+requester never confirms taking it. Live external status drives synced tempo, and beat broadcasts align the bar.
+See [the public handoff analysis](https://djl-analysis.deepsymmetry.org/djl-analysis/sync.html).
 
 ## Found with a unit under test (Pioneer DJS-1000, firmware 1.22)
 
@@ -73,7 +82,7 @@ must look like. Each of these was found by the unit not reacting:
   hand-off field (0x9f) only if the deck's status says it is synced (flag 0x10),
   so while it waits a deck's status says so (its switch is not touched). When
   the unit does not hand over within 3 seconds (it is not a unit that does),
-  the deck takes the role anyway.
+  the request is cancelled and a `handoff_timeout` event is recorded.
 - **The unit sends its status to a deck's own address** (UDP 50002), not to
   the broadcast, so a listener has to be bound to the deck's address: a socket
   bound to any address loses the datagrams to others bound to it too.
