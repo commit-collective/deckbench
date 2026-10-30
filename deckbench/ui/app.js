@@ -149,6 +149,12 @@ function buildDecks() {
   for (const n of numbers) root.append(buildDeck(n, numbers));
 }
 
+function beatIndicators() {
+  return h("div", {class: "beat-stack"},
+    h("div", {class: "master-beats", role: "img", "aria-label": "No master beat available"}, h("i"), h("i"), h("i"), h("i")),
+    h("div", {class: "beats", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")));
+}
+
 function buildDeck(n, numbers) {
   const q = (cls) => card.querySelector("." + cls);
   const card = h("article", {class: "deck off", id: "deck" + n, "aria-label": "Deck " + n},
@@ -158,7 +164,7 @@ function buildDeck(n, numbers) {
       h("div", {class: "deck-id"}, h("div", {class: "model"}), h("div", {class: "track"})),
       h("div", {class: "tags"})),
     h("div", {class: "live"},
-      h("div", {class: "beats", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")),
+      beatIndicators(),
       h("div", {class: "lcd", "aria-label": "Tempo"}, h("b", {}, "--"), h("span", {}, "BPM"))),
     h("canvas", {class: "strip", "aria-hidden": "true"}),
     h("div", {class: "switches", role: "group", "aria-label": "Deck " + n + " switches"},
@@ -266,20 +272,22 @@ function loadTrack(n, card) {
 }
 
 function beatOf(d) {
-  if (!d.phase) return 0;
-  const [t, pos, bpm] = d.phase;
-  const now = Date.now() / 1000 + S.offset;
-  let at = pos + (now - t) * bpm / 60;
-  if (d.loop && at >= d.loop_from + d.loop) at = d.loop_from + (at - d.loop_from) % d.loop;
-  return Math.floor(at) % 4 + 1;
+  return Strip.beatOf(d, Date.now() / 1000, S.offset);
 }
 
 function lamps() {
   if (!S.state) return;
+  const master = Strip.master(S.state), masterBeat = master ? beatOf(master) : 0;
+  for (const row of document.querySelectorAll(".master-beats")) {
+    const label = master ? "Master player " + master.number + ", beat " + masterBeat : "No master beat available";
+    row.title = label;
+    row.setAttribute("aria-label", label);
+    row.querySelectorAll("i").forEach((square, k) => square.classList.toggle("lit", masterBeat === k + 1));
+  }
   for (const d of devicesOf(S.state)) {
     const card = $(devId(d.ip));
     if (!card || d.kind === "mixer") continue;
-    const now = d.online && d.phase ? beatOf({phase: d.phase}) : 0;
+    const now = d.online && d.phase ? beatOf(d) : 0;
     card.querySelectorAll(".beats i").forEach((square, k) => {
       square.classList.toggle("lit", now === k + 1);
       square.classList.toggle("first", k === 0);
@@ -345,7 +353,7 @@ function buildDevice(d) {
       h("div", {class: "deck-id"}, h("div", {class: "model"}), h("div", {class: "track"})),
       h("div", {class: "tags"}, h("div", {class: "unit-slot"}), h("div", {class: "flags", "aria-label": "State"}))),
     mixer ? h("div", {class: "airs", "aria-label": "Channels on air"}) : h("div", {class: "live"},
-      h("div", {class: "beats", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")),
+      beatIndicators(),
       h("div", {class: "lcd", "aria-label": "Tempo"}, h("b", {}, "--"), h("span", {}, "BPM"))),
     mixer ? null : h("canvas", {class: "strip", "aria-hidden": "true"}),
     h("div", {class: "facts"}));
@@ -356,7 +364,7 @@ function renderDevices() {
   $("others").hidden = !list.length;
   const keep = new Set();
   for (const d of list) {
-    Strip.observe(d.ip, d.phase, S.offset);
+    Strip.observe(d.ip, d.phase, S.offset, d.bar_phase);
     keep.add(devId(d.ip));
     let card = $(devId(d.ip));
     if (!card || card.dataset.kind !== d.kind) {
@@ -782,6 +790,9 @@ $("sound").addEventListener("click", async () => {
     const on = await Sound.toggle();
     $("sound").setAttribute("aria-pressed", String(on));
     $("sound").textContent = on ? "Listening" : "Listen";
+    if (on && S.state && !Sound.sources(S.state, Sound.options).length) {
+      toast("No audible decks yet. Check playback, Sound settings and mixer on-air state.", "warn");
+    }
   } catch (e) {
     toast(e.message || "The browser would not start the sound.");
   }

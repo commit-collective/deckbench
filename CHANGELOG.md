@@ -4,6 +4,10 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Show compact master beat references above each deck's own beat indicators.
+- Keep passive grids visible when new beats arrive after a cached paused status.
+- Keep reported beat-in-bar separate from track counts for grid accents, sync and browser audition.
+- Audition broadcast-only player beats without requiring full status, and explain silent or suspended browser audio.
 - Follow physical player masters and negotiate master handoffs with CDJs as well as the DJS-1000.
 - Reply to handoff requests on UDP 50001 and cancel unanswered takeovers without forcing a second master.
 - Use actual adapter MAC addresses and unicast status to discovered peers on Windows and Linux DJ networks.

@@ -73,6 +73,10 @@ state.protocols.prolink.devices.push({ip: "10.0.0.8", number: 33, kind: "mixer",
 check("a mixer on the link: only what is on air", keys({own: true, other: true}) === "1,ext:10.0.0.5", keys({own: true, other: true}));
 state.protocols.prolink.devices[0].status.on_air = false;
 check("and a device off the air is silent", keys({own: true, other: true}) === "1", keys({own: true, other: true}));
+state.protocols.prolink.devices[0].status = null;
+state.protocols.prolink.devices[0].bar_phase = [0, 0, 124];
+check("broadcast-only devices can be auditioned before a virtual deck is enabled", keys({own: false, other: true}) === "ext:10.0.0.5");
+check("external audition follows the reported bar", Sound.sources(state, {other: true})[0].deck.phase[1] === 0);
 beats = Sound.beats({phase: [1000, 10.0, 120], loop: 0, loop_from: 0}, 0, 0.6, 1000);
 check("a beat knows its place in the track", beats[0].at === 10 && beats[1].at === 11, beats.map((b) => b.at));
 beats = Sound.beats(looped, 0, 4.2, 1000);
@@ -107,7 +111,21 @@ const made = Sound.voices.map((voice) => {
 check("the voices are not the same", new Set(made).size === 4, made.map((m) => m.length));
 
 // a browser with no Web Audio says so
-Sound.toggle().then(() => check("no Web Audio", false), (e) => check("no Web Audio says why", /Web Audio/.test(e.message), e.message)).then(() => {
+Sound.toggle().then(() => check("no Web Audio", false), (e) => check("no Web Audio says why", /Web Audio/.test(e.message), e.message)).then(async () => {
+  sandbox.window.AudioContext = class {
+    constructor() { this.state = "suspended"; this.destination = {}; }
+    createGain() { return {gain: {value: 0}, connect() {}}; }
+    resume() { return Promise.resolve(); }
+  };
+  try {
+    await Sound.toggle();
+    check("suspended context must not appear to be listening", false);
+  } catch (e) {
+    check("suspended context gives a useful error", /suspended/.test(e.message) && !Sound.on);
+  }
+  Sound.ctx.state = "running";
+  check("a later gesture can enable audio", await Sound.toggle());
+  check("audio can be stopped again", !(await Sound.toggle()));
   console.log(failures ? failures + " failed" : "ok");
   process.exit(failures ? 1 : 0);
 });

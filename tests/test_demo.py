@@ -25,6 +25,10 @@ class Demo(unittest.TestCase):
             out = subprocess.run(["node", "--check", os.path.join(ROOT, "deckbench", "ui", name)], capture_output=True, text=True)
             self.assertEqual(out.returncode, 0, name + out.stderr)
 
+    def test_grid_and_master_reference(self):
+        out = subprocess.run(["node", os.path.join(ROOT, "tests", "viz_check.js")], capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

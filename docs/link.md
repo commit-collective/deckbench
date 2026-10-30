@@ -13,6 +13,13 @@ that sends its keep-alives from its network address and its statuses from the lo
 `GET /api/state` has them in `protocols.prolink.devices`. Each has `name`, `model`, `number`, `ip`, `kind`, `unit` (it is the device
 under test), `online`, `status`, `phase` (only while it plays), `at` (only while it does not), `air` and `fader`.
 
+Fresh broadcast beats provide `phase` even before a virtual deck is enabled and full status is available. `bar_phase`
+separately tracks the reported beat within the bar, which need not match the absolute track count. The four slim amber
+segments above each deck's beat squares repeat the current master's beat, so comparison does not require scrolling.
+They stay dark when the master or its live phase is unknown. Identifying a physical master requires full status.
+New beat packets can also revive the grid after an older paused status. A newer pause status stops that extrapolation.
+Without status, the grid shows bar beats rather than absolute track numbers or loop details.
+
 ## Strips
 
 Each deck, and each device with beats, has a strip: a grid that scrolls past a fixed playhead, one line for every beat and a heavier

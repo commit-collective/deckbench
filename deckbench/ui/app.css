@@ -160,6 +160,10 @@ button.num:disabled { cursor: default; opacity: .5; }
 .tag.off-air, .tag.offline { --c: var(--muted); --tag-bg: 0%; --tag-bd: 40%; background: var(--unlit); }
 
 .live { display: flex; align-items: center; gap: 14px; }
+.beat-stack { display: flex; flex-direction: column; gap: 4px; }
+.master-beats { display: flex; gap: 6px; }
+.master-beats i { width: 28px; height: 5px; background: var(--unlit); border: 1px solid var(--line); border-radius: var(--r); }
+.master-beats i.lit { background: var(--master); border-color: var(--master); }
 .beats { display: flex; gap: 6px; }
 .beats i { width: 28px; height: 28px; background: var(--unlit); border: 1px solid var(--line); border-radius: calc(var(--r) * .8);
   transition: background .06s, border-color .06s; }

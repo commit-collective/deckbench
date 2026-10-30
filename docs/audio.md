@@ -59,11 +59,19 @@ A file that will not do is answered with 400 and `{"error": ...}`, and nothing c
 
 ## In the page
 
-The **Sound** button of the page plays something like it in the browser, with no stream and no port: for each deck that plays, a kick
+The **Listen** button of the page plays something like it in the browser, with no stream and no port: for each deck that plays, a kick
 on the beats 1 and 3, a snare on 2 and 4 and a hat between, made with Web Audio from the deck's tempo and place in its bar (the
 page counts the beats on from the bench's `phase`, as it does for the beat squares). Each deck has its place in the stereo field. With a
 mixer on only the decks that are on the air are heard. A browser starts sound only after a click, so it is off when the page opens.
 It is for hearing the decks. The stream above is what a device under test is fed.
+
+For physical CDJs this is a synthesized beat reference, not the audio playing on their USB sticks. Fresh broadcast beats
+can be auditioned without an enabled virtual deck or full player status. When status and a mixer are available, on-air
+flags still control which players are heard. Check the Sound settings, mixer faders and phone media volume if silent.
+A suspended browser audio context is reported rather than shown as listening successfully.
+
+The hosted app updates separately from a local Python checkout. To test new frontend changes before publishing them,
+open the PC-served page with the token printed at startup. Updating Python alone does not update the hosted page.
 
 The deck's strip shows the file's waveform, faintly, behind its beat grid (from `/api/deck/N/waveform`, 100 values a second): the file is laid
 out beat by beat from the tempo you gave and the first beat you said, so a BPM or a start that is wrong can be seen at once, as beats that

@@ -692,7 +692,7 @@ class Prolink(Protocol):
         grid, as a player does that syncs to it, and not only to its tempo. A deck is moved to the nearest place on the master's bar, by
         a jump of no more than two beats, and only when it is more than 20 ms out. Not while a deck of the bench is the master, and not
         a deck that loops (its place is its own)."""
-        st, phase = device["status"], device["phase"]
+        st, phase = device["status"], device.get("bar_phase") or device["phase"]
         if not (st and now - st["seen"] < 2.0 and st["master"] and st["play"]
                 and phase and not device["ours"]):
             return

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 """External player tempo and coordinated master handoff."""
 import time
+import struct
 import unittest
 import json
 import subprocess
@@ -98,10 +99,43 @@ class ExternalPlayers(unittest.TestCase):
         self.assertEqual((status[0x6F], status[0x73]), (4, 4))
 
     def test_broadcast_beats_are_visible_without_player_status(self):
+        self.deck.enabled = False
         self.net.monitor.feed(self.player.beat(2.0), '127.0.0.9', self.net.ports.beat)
         device = self.net.monitor.snapshot()[0]
         self.assertIsNone(device['status'])
         self.assertEqual(device['phase'][1:], [2.0, 124.0])
+        self.assertEqual(device['bar_phase'][1:], [2.0, 124.0])
+
+    def test_reported_bar_is_independent_of_track_count(self):
+        status = bytearray(self.player.status())
+        status[0xA0:0xA4] = struct.pack('>I', 10)
+        status[0xA6] = 1
+        self.net.monitor.feed(status, '127.0.0.9', self.net.ports.update)
+        self.net.monitor.feed(self.player.beat(0.0), '127.0.0.9', self.net.ports.beat)
+        device = self.net.monitor.snapshot()[0]
+        self.assertEqual(device['phase'][1], 9.0)
+        self.assertEqual(device['bar_phase'][1], 0.0)
+
+    def test_new_beats_override_a_cached_paused_status(self):
+        self.deck.enabled = False
+        self.player.deck.playing = False
+        self.feed()
+        self.assertIsNone(self.net.monitor.snapshot()[0]['phase'])
+        self.net.monitor.feed(self.player.beat(0.0), '127.0.0.9', self.net.ports.beat)
+        self.assertIsNotNone(self.net.monitor.snapshot()[0]['phase'])
+        self.player.deck.anchor_pos = 1
+        self.feed()
+        self.assertIsNone(self.net.monitor.snapshot()[0]['phase'])
+
+    def test_status_ahead_of_beat_does_not_jump_forward_a_bar(self):
+        status = bytearray(self.player.status())
+        status[0xA0:0xA4] = struct.pack('>I', 10)
+        status[0xA6] = 2
+        self.net.monitor.feed(status, '127.0.0.9', self.net.ports.update)
+        self.net.monitor.feed(self.player.beat(0.0), '127.0.0.9', self.net.ports.beat)
+        device = self.net.monitor.snapshot()[0]
+        self.assertEqual(device['phase'][1], 8.0)
+        self.assertEqual(device['bar_phase'][1], 0.0)
 
     def test_physical_status_is_unicast_to_live_peers(self):
         self.feed()

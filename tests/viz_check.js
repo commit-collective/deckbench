@@ -16,6 +16,24 @@ function check(what, ok, detail) {
 }
 const near = (a, b, tol = 1e-6) => Math.abs(a - b) <= tol;
 
+// The device's reported bar, not its absolute track count, drives comparison lamps and grid accents.
+const shifted = {phase: [100, 9, 120], bar_phase: [100, 0, 120]};
+check("reported downbeat overrides a track count one beat ahead", Strip.beatOf(shifted, 100, 0) === 1);
+check("reported bar advances on the browser clock", Strip.beatOf(shifted, 100.5, 0) === 2);
+check("negative positions still have a valid beat", Strip.beatOf({phase: [100, -1, 120]}, 100, 0) === 4);
+Strip.observe("shifted", shifted.phase, 0, shifted.bar_phase);
+const shiftedGrid = Strip.layoutDevice("shifted", {status: null}, 100);
+check("passive grid uses the reported downbeat", shiftedGrid.ticks[0].beat === 1 && shiftedGrid.ticks[0].at === 9);
+check("future grid follows the reported bar", shiftedGrid.ticks[1].beat === 2);
+const physicalMaster = {...shifted, number: 1, online: true, status: {master: true}};
+const mixed = {decks: {}, protocols: {prolink: {devices: [physicalMaster]}}};
+check("master reference can come from a physical player", Strip.master(mixed).number === 1);
+mixed.decks[3] = {on: true, master: true, phase: [100, 0, 120]};
+check("virtual master takes over the reference", String(Strip.master(mixed).number) === "3");
+mixed.decks[3].on = false;
+physicalMaster.online = false;
+check("offline masters leave the reference dark", Strip.master(mixed) === null);
+
 // a bench deck: 120 BPM, at beat 6 at the bench's time 1000 (the page is 1000 s behind the bench: offset 1000), now = 0.25 s later
 const now = 0.25, offset = 1000;
 let plan = Strip.layout({phase: [1000, 6.0, 120], loop: 0, loop_from: 0}, now, offset);

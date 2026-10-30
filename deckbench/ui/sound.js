@@ -62,9 +62,9 @@ const Sound = (() => {
     if (options.other) {
       for (const d of devices) {
         const st = d.status;
-        if (d.kind === "mixer" || !d.online || !st || !st.play || !d.phase) continue;
-        const deck = {on: true, play: true, phase: d.phase, loop: 0, loop_from: 0, on_air: st.on_air};
-        if (s.audible(deck, mixerOn)) out.push({key: "ext:" + d.ip, number: d.number || 1, deck});
+        if (d.kind === "mixer" || !d.online || !d.phase) continue;
+        const deck = {on: true, play: true, phase: d.bar_phase || d.phase, loop: 0, loop_from: 0, on_air: st && st.on_air};
+        if (s.audible(deck, !!st && mixerOn)) out.push({key: "ext:" + d.ip, number: d.number || 1, deck});
       }
     }
     return out;
@@ -274,6 +274,7 @@ const Sound = (() => {
       s.master.connect(s.ctx.destination);
     }
     await s.ctx.resume();
+    if (s.ctx.state !== "running") throw new Error("Audio is suspended. Tap Listen again to enable browser sound.");
     s.on = true;
     s.last = {};
     s.timer = setInterval(tick, 25);

@@ -231,6 +231,7 @@ class Monitor:
         return "type %#04x, %d bytes" % (data[0x0A], n)
 
     def status(self, d, data, now):
+        d["beat_since_status"] = False
         flags = data[0x89]
         pitch = struct.unpack(">I", data[0x8C:0x90])[0]
         track_bpm = struct.unpack(">H", data[0x92:0x94])[0] / 100.0
@@ -278,7 +279,11 @@ class Monitor:
         if 1 <= bar <= 4:
             pos = bar - 1.0
             if st and now - st["seen"] < 1.0 and st["track_beat"] is not None and st["bar"]:
-                pos = st["track_beat"] - 1.0 + ((bar - st["bar"]) % 4)      # the track's own count, which a loop sends back
+                delta = (bar - st["bar"] + 2) % 4 - 2
+                pos = st["track_beat"] - 1.0 + delta
+            # The reported bar need not match the absolute track count.
+            d["bar_phase"] = [now, bar - 1.0, bpm]
+            d["beat_since_status"] = True
             d["phase"], d["phase_seen"] = [now, pos, bpm], now
             self.net.align_synced(d, now)
         return "%s #%d: beat %d of 4, %.1f BPM" % (d["name"] or "?", d["number"] if d["number"] is not None else 0, bar, bpm)
@@ -299,11 +304,13 @@ class Monitor:
                 if profile["model"].upper() == d["name"].upper():
                     model = profile["title"]
             st = d["status"] if d["status"] and now - d["status"]["seen"] < 8 else None
+            live_phase = (d["phase"] and now - d["phase_seen"] < 2.0
+                          and (st is None or st["play"] or d.get("beat_since_status", False)))
             item = {"ip": d["ip"], "name": d["name"], "model": model, "number": d["number"], "kind": d["kind"] or "device", "unit": d["unit"],
                     "online": now - d["seen"] < 8, "mac": d["mac"], "peers": d["peers"], "firmware": d["firmware"],
                     "status": {k: v for k, v in st.items() if k != "seen"} if st else None,
-                    "phase": d["phase"] if d["phase"] and now - d["phase_seen"] < 2.0
-                    and (st is None or st["play"]) else None,
+                    "phase": d["phase"] if live_phase else None,
+                    "bar_phase": d.get("bar_phase") if live_phase else None,
                     "at": d["at"] if not (st and st["play"]) else None,
                     "air": d["air"] if d["air"] and now - d["air_seen"] < 8 else None,
                     "fader": d["fader"]["commands"] if d["fader"] and now - d["fader"]["t"] < 8 else None}

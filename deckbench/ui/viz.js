@@ -10,6 +10,25 @@ const Strip = (() => {
   const BEHIND = 2.0, AHEAD = 6.0;              /* seconds before and after the playhead: it stands a quarter of the way in */
   const v = {BEHIND, AHEAD, history: {}};
 
+  v.beatOf = (deck, now, offset) => {
+    const phase = deck.bar_phase || deck.phase;
+    if (!phase) return 0;
+    const [t, pos, bpm] = phase;
+    let at = pos + (now + offset - t) * bpm / 60;
+    if (!deck.bar_phase && deck.loop && at >= deck.loop_from + deck.loop) {
+      at = deck.loop_from + (at - deck.loop_from) % deck.loop;
+    }
+    return ((Math.floor(at) % 4) + 4) % 4 + 1;
+  };
+
+  v.master = (state) => {
+    for (const [number, deck] of Object.entries(state.decks || {})) {
+      if (deck.on && deck.master && deck.phase) return {...deck, number};
+    }
+    const link = state.protocols && state.protocols.prolink;
+    return ((link && link.devices) || []).find((d) => d.online && d.status && d.status.master && d.phase) || null;
+  };
+
   /* The ticks of a deck to draw, as {dt (seconds from now), at (the beat of the track), beat (1 to 4), inLoop, wrap}, and what is known
    * of it: {ticks, stopped, loop (its length in beats, or 0), looping (a device says it loops)}. `deck` is a bench deck of the state,
    * or {phase, status...} of a device with its `observed` beats. now and offset are as Sound.beats takes them. */
@@ -37,12 +56,13 @@ const Strip = (() => {
   };
 
   /* remember the beats a device is told of: each change of its phase is a beat, [bench time, place, tempo] */
-  v.observe = (key, phase, offset) => {
+  v.observe = (key, phase, offset, barPhase = null) => {
     const list = v.history[key] = v.history[key] || [];
     if (!phase) return;
     const last = list[list.length - 1];
     if (last && last.sig === phase.join(",")) return;
-    list.push({t: phase[0] - offset, pos: phase[1], bpm: phase[2], sig: phase.join(",")});
+    list.push({t: phase[0] - offset, pos: phase[1], bpm: phase[2], sig: phase.join(","),
+               bar: barPhase ? barPhase[1] + 1 : ((Math.round(phase[1]) % 4) + 4) % 4 + 1});
     while (list.length > 60) list.shift();
   };
 
@@ -59,7 +79,7 @@ const Strip = (() => {
       const prev = list[i - 1];
       const wrap = !!prev && e.pos < prev.pos + 0.5 && looping;
       if (wrap) { from = e.pos; length = Math.round(prev.pos + 1 - e.pos); inLoop = true; }
-      ticks.push({dt: e.t - now, at: e.pos, beat: ((Math.round(e.pos) % 4) + 4) % 4 + 1, inLoop: inLoop && looping, wrap});
+      ticks.push({dt: e.t - now, at: e.pos, beat: e.bar, inLoop: inLoop && looping, wrap});
     });
     const last = list[list.length - 1], rate = last.bpm / 60;
     for (let n = 1; last.t + n / rate < now + AHEAD + 1; n++) {
@@ -69,7 +89,7 @@ const Strip = (() => {
         wrap = (at - from) % length === 0;
         at = wrapped;
       }
-      ticks.push({dt: last.t + n / rate - now, at, beat: ((Math.round(at) % 4) + 4) % 4 + 1, inLoop: looping && from != null, wrap});
+      ticks.push({dt: last.t + n / rate - now, at, beat: (last.bar - 1 + n) % 4 + 1, inLoop: looping && from != null, wrap});
     }
     return {ticks, stopped: false, loop: looping ? length : 0, looping};
   };
