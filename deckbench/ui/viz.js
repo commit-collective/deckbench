@@ -8,7 +8,7 @@
 
 const Strip = (() => {
   const BEHIND = 2.0, AHEAD = 6.0;              /* seconds before and after the playhead: it stands a quarter of the way in */
-  const v = {BEHIND, AHEAD, history: {}};
+  const v = {BEHIND, AHEAD, history: {}, deviceLoops: {}};
 
   v.beatOf = (deck, now, offset) => {
     const phase = deck.bar_phase || deck.phase;
@@ -61,7 +61,12 @@ const Strip = (() => {
     if (!phase) return;
     const last = list[list.length - 1];
     if (last && last.sig === phase.join(",")) return;
-    list.push({t: phase[0] - offset, pos: phase[1], bpm: phase[2], sig: phase.join(","),
+    if (last && last.stamp === phase[0]) {
+      // A later status can correct the track count of the same beat.
+      list.pop();
+      if (v.deviceLoops[key]) v.deviceLoops[key].checked = list.length ? list[list.length - 1].t : -Infinity;
+    }
+    list.push({t: phase[0] - offset, stamp: phase[0], pos: phase[1], bpm: phase[2], sig: phase.join(","),
                bar: barPhase ? barPhase[1] + 1 : ((Math.round(phase[1]) % 4) + 4) % 4 + 1});
     while (list.length > 60) list.shift();
   };
@@ -70,16 +75,40 @@ const Strip = (() => {
    * loops, and has gone back before, the future goes back the same way. `bars` is for one that gives no beat of the track: it is
    * labelled with its beat of the bar. */
   v.layoutDevice = (key, device, now) => {
-    const list = (v.history[key] || []).filter((e) => e.t > now - BEHIND - 1.5 && e.t <= now + 0.5);
-    const looping = !!(device.status && device.status.loop);
+    const history = v.history[key] || [], status = device.status;
+    const list = history.filter((e) => e.t > now - BEHIND - 1.5 && e.t <= now + 0.5);
+    const looping = !!(status && status.loop && device.online !== false);
+    const track = status ? [status.source, status.slot, status.rbid].join(":") : "";
+    let bounds = v.deviceLoops[key];
+    if (!bounds || bounds.looping !== looping || bounds.track !== track) {
+      // A new loop or track must not inherit the previous loop's bounds.
+      const since = bounds && history.length ? history[history.length - 1].t : -Infinity;
+      bounds = v.deviceLoops[key] = {looping, track, since, checked: -Infinity, from: null, length: 0};
+    }
+    if (looping) {
+      for (let i = 1; i < history.length; i++) {
+        const e = history[i], prev = history[i - 1];
+        if (e.t <= bounds.checked || prev.t <= bounds.since) continue;
+        // Repeated positions are not wraps. Missing samples can span beats.
+        if (e.pos < prev.pos - 0.5) {
+          const elapsed = Math.max(1, Math.round((e.t - prev.t) * prev.bpm / 60));
+          bounds.from = e.pos;
+          bounds.length = Math.round(prev.pos + elapsed - e.pos);
+        }
+      }
+      if (history.length) bounds.checked = history[history.length - 1].t;
+    }
     if (!list.length) return {ticks: [], stopped: true, loop: 0, looping};
     const ticks = [];
-    let from = null, length = 0, inLoop = false;
-    list.forEach((e, i) => {
-      const prev = list[i - 1];
-      const wrap = !!prev && e.pos < prev.pos + 0.5 && looping;
-      if (wrap) { from = e.pos; length = Math.round(prev.pos + 1 - e.pos); inLoop = true; }
-      ticks.push({dt: e.t - now, at: e.pos, beat: e.bar, inLoop: inLoop && looping, wrap});
+    const {from, length} = bounds;
+    const loopPlace = (pos) => looping && from != null && length > 0 && pos >= from + length
+      ? from + ((pos - from) % length) : pos;
+    list.forEach((e) => {
+      const prev = history[history.indexOf(e) - 1];
+      const at = loopPlace(e.pos);
+      const inLoop = looping && from != null && at >= from && at < from + length;
+      const wrap = inLoop && !!prev && at === from && at < loopPlace(prev.pos) - 0.5;
+      ticks.push({dt: e.t - now, at, beat: e.bar, inLoop, wrap});
     });
     const last = list[list.length - 1], rate = last.bpm / 60;
     for (let n = 1; last.t + n / rate < now + AHEAD + 1; n++) {

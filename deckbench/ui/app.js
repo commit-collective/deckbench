@@ -119,7 +119,7 @@ function renderChips() {
   box.append(S.connected ? chip("connected", "ok") : chip(S.state ? "reconnecting…" : "connecting…", "bad"));
   if (!s) return;
   const unit = unitOf(s);
-  box.append(unit
+  if ((s.adapters || []).some((a) => a.name === "djs1000-emu")) box.append(unit
     ? chip(" " + (unit.master ? "tempo master" : "") + (unit.bpm ? (unit.master ? ", " : "") + unit.bpm.toFixed(1) + " BPM" : ""),
            "ok", "Unit: player " + unit.number)
     : chip("no unit heard yet", "warn"));
@@ -391,7 +391,9 @@ function renderDevices() {
        a row under when there are too many for the width) at the bottom. The column is always there: a flag that comes or goes does not change the card's height */
     const slot = q("unit-slot"), flags = q("flags");
     slot.textContent = "";
-    if (d.unit) slot.append(h("span", {class: "tag unit"}, "UNIT UNDER TEST"));
+    if (d.unit && (S.state.adapters || []).some((a) => a.name === "djs1000-emu")) {
+      slot.append(h("span", {class: "tag unit"}, "UNIT UNDER TEST"));
+    }
     flags.textContent = "";
     if (!d.online) flags.append(h("span", {class: "tag offline"}, "OFFLINE"));
     if (st && d.online) {

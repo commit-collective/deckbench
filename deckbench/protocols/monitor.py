@@ -261,6 +261,16 @@ class Monitor:
                     deck.reanchor(at)
                 d["status"] = st
         self.net.peer_status(d, data)
+        phase, bar_phase = d["phase"], d.get("bar_phase")
+        if (playing and st["loop"] and phase and bar_phase and phase[2] > 0
+                and now - phase[0] < min(1.0, 60.0 / phase[2])
+                and st["track_beat"] is not None and st["bar"]):
+            # A wrap status can arrive after its beat. Correct that beat's
+            # track position now, keeping its original time and bar phase.
+            delta = (int(bar_phase[1]) + 1 - st["bar"] + 2) % 4 - 2
+            corrected = st["track_beat"] - 1.0 + delta
+            if 0 <= corrected < phase[1] - 1.5:
+                d["phase"] = [phase[0], corrected, phase[2]]
         if not playing and st["track_beat"] is not None:
             d["at"] = st["track_beat"] - 1
         return "%s #%d: %s%s%s%s, %.1f BPM, beat %s%s" % (

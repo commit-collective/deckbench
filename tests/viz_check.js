@@ -77,6 +77,55 @@ const future = plan.ticks.filter((t) => t.dt > 0.01).map((t) => t.at);
 check("and it goes on going back, as it has", future.slice(0, 6).join() === "18,19,16,17,18,19", future.slice(0, 6));
 check("the future is on its tempo", near(plan.ticks.filter((t) => t.dt > 0.01)[0].dt, 102.5 + 0.5 - nowDev + 0 - 0, 0.6));
 
+// An eight-beat loop outlasts the visible history. Its tint must survive at every beat, including the wrap.
+const longLoop = {status: {loop: true, source: 1, slot: 3, rbid: 10}};
+for (let k = 0; k <= 24; k++) {
+  const t = 300 + k * 0.5;
+  Strip.observe("eight", [t, 16 + k % 8, 120], 0);
+  const p = Strip.layoutDevice("eight", longLoop, t + 0.1);
+  if (k >= 8) {
+    check("eight-beat loop keeps its length at sample " + k, p.loop === 8, p.loop);
+    check("eight-beat loop stays tinted at sample " + k, p.ticks.every((tick) => tick.inLoop));
+    check("predicted wrap is at the loop's first beat at sample " + k,
+          p.ticks.filter((tick) => tick.wrap).every((tick) => tick.at === 16));
+  }
+}
+// Remembered bounds also survive eviction from the bounded observation buffer.
+Strip.history.eight = Strip.history.eight.slice(-3);
+plan = Strip.layoutDevice("eight", longLoop, 312.1);
+check("loop bounds survive loss of the original wrap observation", plan.loop === 8);
+longLoop.status.loop = false;
+plan = Strip.layoutDevice("eight", longLoop, 312.1);
+check("leaving a loop clears its tint and length", plan.loop === 0 && !plan.ticks.some((tick) => tick.inLoop));
+longLoop.status.loop = true;
+check("re-entering a loop does not reuse old bounds", Strip.layoutDevice("eight", longLoop, 312.1).loop === 0);
+Strip.observe("eight", [312.5, 17, 120], 0);
+Strip.layoutDevice("eight", longLoop, 312.6);
+Strip.observe("eight", [313, 16, 120], 0);
+check("a changed loop learns its new length", Strip.layoutDevice("eight", longLoop, 313.1).loop === 2);
+longLoop.status.rbid = 11;
+check("a new track clears inferred loop bounds", Strip.layoutDevice("eight", longLoop, 313.1).loop === 0);
+Strip.observe("repeat", [400, 16, 120], 0);
+Strip.observe("repeat", [400.5, 16, 120], 0);
+check("a repeated position is not a one-beat loop", Strip.layoutDevice("repeat", device, 400.6).loop === 0);
+
+// Status arrives after the wrap beat and corrects its old extrapolated track count.
+for (let k = 0; k < 8; k++) Strip.observe("late-status", [500 + k * 0.5, 16 + k, 120], 0);
+Strip.observe("late-status", [504, 24, 120], 0);
+Strip.layoutDevice("late-status", device, 504.05);
+Strip.observe("late-status", [504, 16, 120], 0);
+plan = Strip.layoutDevice("late-status", device, 504.15);
+check("a corrected beat replaces its provisional observation", Strip.history["late-status"].length === 9);
+check("late status learns eight beats rather than nine", plan.loop === 8, plan.loop);
+check("the wrap is shown at the original beat, not one beat later",
+      plan.ticks.some((t) => near(t.dt, -0.15) && t.at === 16 && t.wrap && t.inLoop));
+for (let k = 1; k < 8; k++) Strip.observe("late-status", [504 + k * 0.5, 16 + k, 120], 0);
+Strip.observe("late-status", [508, 24, 120], 0);
+plan = Strip.layoutDevice("late-status", device, 508.05);
+check("known bounds cover the wrap before its status arrives", plan.loop === 8 && plan.ticks.every((t) => t.inLoop));
+check("the provisional end beat is drawn at the known loop start",
+      plan.ticks.some((t) => near(t.dt, -0.05) && t.at === 16 && t.wrap));
+
 // a device that does not loop is not told to
 Strip.observe("b", [200 + offset, 4, 100], offset); Strip.observe("b", [200.6 + offset, 5, 100], offset);
 plan = Strip.layoutDevice("b", {status: {loop: false}}, 200.7);

@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Retain inferred player loop boundaries across the scrolling window and correct late wrap status without delaying a beat.
+- Treat a physical DJS-1000 as a normal player unless an explicit emulator test adapter is configured.
 - Show compact master beat references above each deck's own beat indicators.
 - Keep passive grids visible when new beats arrive after a cached paused status.
 - Keep reported beat-in-bar separate from track counts for grid accents, sync and browser audition.

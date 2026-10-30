@@ -137,6 +137,22 @@ class ExternalPlayers(unittest.TestCase):
         self.assertEqual(device['phase'][1], 8.0)
         self.assertEqual(device['bar_phase'][1], 0.0)
 
+    def test_loop_status_after_beat_corrects_that_same_beat(self):
+        status = bytearray(self.player.status())
+        status[0x7B] = 4
+        status[0xA0:0xA4] = struct.pack('>I', 24)
+        status[0xA6] = 4
+        self.net.monitor.feed(status, '127.0.0.9', self.net.ports.update)
+        self.net.monitor.feed(self.player.beat(0.0), '127.0.0.9', self.net.ports.beat)
+        before = self.net.monitor.snapshot()[0]
+        self.assertEqual(before['phase'][1], 24.0)
+        status[0xA0:0xA4] = struct.pack('>I', 17)
+        status[0xA6] = 1
+        self.net.monitor.feed(status, '127.0.0.9', self.net.ports.update)
+        after = self.net.monitor.snapshot()[0]
+        self.assertEqual(after['phase'], [before['phase'][0], 16.0, 124.0])
+        self.assertEqual(after['bar_phase'], before['bar_phase'])
+
     def test_physical_status_is_unicast_to_live_peers(self):
         self.feed()
         self.link.address = '169.254.100.1'

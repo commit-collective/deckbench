@@ -10,8 +10,11 @@ its place in the track and its loop. A device is known by its name and number, n
 that sends its keep-alives from its network address and its statuses from the loopback is one card. A device that has been silent for
 8 seconds is offline, and one that has been silent for 60 seconds is dropped.
 
-`GET /api/state` has them in `protocols.prolink.devices`. Each has `name`, `model`, `number`, `ip`, `kind`, `unit` (it is the device
-under test), `online`, `status`, `phase` (only while it plays), `at` (only while it does not), `air` and `fader`.
+`GET /api/state` has them in `protocols.prolink.devices`. Each has `name`, `model`, `number`, `ip`, `kind`, `unit` (a legacy
+DJS-1000 marker), `online`, `status`, `phase` (only while it plays), `at` (only while it does not), `air` and `fader`.
+
+A physical DJS-1000 appears as a regular player. The "UNIT UNDER TEST" badge and the dedicated header chip are shown
+only when the DJS emulator test adapter is explicitly configured. The existing `unit` API field remains compatible.
 
 Fresh broadcast beats provide `phase` even before a virtual deck is enabled and full status is available. `bar_phase`
 separately tracks the reported beat within the bar, which need not match the absolute track count. The four slim amber
@@ -26,6 +29,12 @@ Each deck, and each device with beats, has a strip: a grid that scrolls past a f
 line for every bar, with the beat of the track written on it. It has no waveform, except for a bench deck that plays a sound file of its own (see audio.md): its waveform is drawn faintly behind the grid, beat by beat, so that the beats can be seen to fall where they should and a loop's jump back shows in it. All the strips share one time scale, so decks that
 are synced line up and one that is not drifts. A loop is tinted and marked where it goes back. For a device the page draws the beats
 it was told of, and goes on at its tempo from the last.
+
+Player loop boundaries are inferred from backward jumps in track position, then retained while that loop is active.
+They do not disappear when the last wrap scrolls out of view. Leaving a loop or changing tracks clears the estimate.
+If wrap status arrives after its beat packet, the bench corrects that beat's track count without moving its timestamp.
+The page replaces the provisional observation instead of drawing an extra beat. Until the first wrap is observed,
+the page may know that a player is looping without knowing the loop's boundaries.
 
 ## Sync
 
