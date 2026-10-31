@@ -226,6 +226,10 @@ Use the PC-served page for unreleased controls. Leave the simulated mixer off, p
 On a discovered player's card, open **Player control** and check **Enable transport control**. No command is sent by
 enabling it. Then use **Start from cue** or **Stop / return to cue**. Stop is not pause-in-place.
 
+On tested hardware, Start is accepted only when stopped at the cue point, not while playing or
+paused elsewhere. Stop / return to cue is accepted while playing, but not while paused away from cue. These are
+conditional fader-start commands, not general PLAY and CUE buttons. An ignored command does not mean the API failed.
+
 These use Pro DJ Link fader-start commands sent only to the selected player's IP, with all other player commands
 set to leave unchanged. Players must have distinct numbers from 1 to 4. CDJ-3000 and XDJ-XZ are excluded because
 the documented fader-start feature is unsupported there. Other models still need hardware validation.

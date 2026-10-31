@@ -5,6 +5,7 @@ Newest first. A release is a tagged commit.
 ## Unreleased
 
 - Add opt-in fader-start transport controls for discovered players without enabling the simulated mixer.
+- Explain that hardware fader-start commands require a stopped player at cue to start and a playing player to return to cue.
 
 ## v0.4.0
 
