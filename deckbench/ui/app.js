@@ -362,8 +362,8 @@ function buildDevice(d) {
       h("label", {class: "hint"}, h("input", {type: "checkbox", class: "player-arm",
         onchange: (e) => act("api/player/" + d.ip + "/arm/" + (e.target.checked ? 1 : 0) + "?number=" + e.target.dataset.number)}),
         " Enable transport control"),
-      h("p", {class: "hint"}, "Start requires the player stopped at cue. Stop returns a playing track to cue, not a paused track. These are not general PLAY/CUE controls. Support varies by model."),
-      h("div", {class: "player-actions"}, ...[["start", "Start from cue"], ["stop", "Stop / return to cue"]].map(([command, label]) =>
+      h("p", {class: "hint"}, "Start only works at cue. Stop returns playback to cue and does nothing while paused."),
+      h("div", {class: "player-actions"}, ...[["start", "Start cued track"], ["stop", "Stop playing track"]].map(([command, label]) =>
         h("button", {class: "btn small", disabled: true, onclick: (e) => {
           api("api/player/" + d.ip + "/command/" + command + "?number=" + e.currentTarget.dataset.number)
             .then(() => toast("Command sent. Check the player's reported state.", "info")).catch(() => {});

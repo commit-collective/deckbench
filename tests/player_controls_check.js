@@ -18,11 +18,11 @@ const find = (node, predicate) => predicate(node) ? node : (node.children || [])
 const control = find(card, node => node.attrs && node.attrs.class === "player-control");
 assert.strictEqual(control.attrs.hidden, true, "Controls stay hidden until the backend reports eligibility");
 const arm = find(control, node => node.tag === "input");
-assert(find(control, node => node.tag === "p" && node.children[0].includes("not a paused track")), "Explain the observed fader-stop restriction");
+assert(find(control, node => node.tag === "p" && node.children[0] === "Start only works at cue. Stop returns playback to cue and does nothing while paused."), "Explain the observed transport restrictions");
 assert.strictEqual(calls.length, 0, "Building controls must never send a command");
 arm.attrs.onchange({target: {checked: true, dataset: {number: "2"}}});
 assert.strictEqual(calls.pop(), "api/player/127.0.0.9/arm/1?number=2");
-for (const [label, command] of [["Start from cue", "start"], ["Stop / return to cue", "stop"]]) {
+for (const [label, command] of [["Start cued track", "start"], ["Stop playing track", "stop"]]) {
   const button = find(control, node => node.tag === "button" && node.children[0] === label);
   assert.strictEqual(button.attrs.disabled, true, "Commands start disabled");
   button.attrs.onclick({currentTarget: {dataset: {number: "2"}}});

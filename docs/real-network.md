@@ -224,17 +224,17 @@ establish physical compatibility. A `handoff_timeout` means the requested transf
 
 Use the PC-served page for unreleased controls. Leave the simulated mixer off, particularly with a real DJM present.
 On a discovered player's card, open **Player control** and check **Enable transport control**. No command is sent by
-enabling it. Then use **Start from cue** or **Stop / return to cue**. Stop is not pause-in-place.
+enabling it. Then use **Start cued track** or **Stop playing track**. Stop is not pause-in-place.
 
 On tested hardware, Start is accepted only when stopped at the cue point, not while playing or
-paused elsewhere. Stop / return to cue is accepted while playing, but not while paused away from cue. These are
+paused elsewhere. Stop playing track returns to cue while playing, but does nothing while paused away from cue. These are
 conditional fader-start commands, not general PLAY and CUE buttons. An ignored command does not mean the API failed.
 
 These use Pro DJ Link fader-start commands sent only to the selected player's IP, with all other player commands
 set to leave unchanged. Players must have distinct numbers from 1 to 4. CDJ-3000 and XDJ-XZ are excluded because
 the documented fader-start feature is unsupported there. Other models still need hardware validation.
 
-For a quiet test, load a track on one player, set a cue, and try Start from cue, then Stop / return to cue. Watch the
+For a quiet test, load a track on one player, set a cue, and try Start cued track, then Stop playing track. Watch the
 reported player state and the physical unit. A sent command is not an acknowledgement. If ignored, announce an unused
 virtual player such as player 3 and retry. Do not use this first test during a performance.
 
