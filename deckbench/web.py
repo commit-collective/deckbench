@@ -297,13 +297,13 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 world.changed()
                 return self.send(200, json.dumps(got))
             journal.note(self.path)
-            if parts[:2] == ["api", "mixer"]:
+            if parts[:2] in (["api", "mixer"], ["api", "player"]):
                 for protocol in world.protocols:
                     result = protocol.handle_api(parts[1:], query)
                     if result is not None:
                         world.changed()
                         return self.send(result[0], json.dumps(result[1] if result[0] != 200 else world.snapshot()))
-                return self.send(404, '{"error": "no mixer here"}')
+                return self.send(404, '{"error": "no matching link protocol here"}')
             if parts == ["api", "upload"]:
                 try:
                     length = int(self.headers.get("Content-Length") or 0)

@@ -47,7 +47,7 @@ from ..core import Protocol, log
 from .. import profiles
 from ..net import share, interface_macs
 from . import startup
-from .mixer import LinkMixer, parse_on_air
+from .mixer import LinkMixer, parse_on_air, fader_start_packet
 from .monitor import Monitor
 from .startup import MAGIC
 BROADCAST = "127.255.255.255"
@@ -573,6 +573,7 @@ class Prolink(Protocol):
         self._expected = 0
         self._bound_lock = threading.Lock()
         self.monitor = Monitor(self)         # a log of the packets heard, and the devices on the link
+        self.player_controls = set()        # explicitly armed discovered identities, never persisted
         self.defended = {}                  # (claimer's address, number): when it was last told that the number is in use
         self.mixer = LinkMixer(self, mixer_name if isinstance(mixer_name, bytes) else mixer_name.encode(), 33,
                                mixer_address, broadcast, mixer_channels)
@@ -818,8 +819,69 @@ class Prolink(Protocol):
                 "model": link.name.decode(), "address": link.address}
 
     def info(self):
+        devices = self.control_devices()
         return {"unit": dict(self.unit) if self.unit["number"] else None, "settings": self.settings(),
-                "mixer": self.mixer.snapshot(), "devices": self.monitor.snapshot()}
+                "mixer": self.mixer.snapshot(), "devices": devices}
+
+    @staticmethod
+    def control_identity(device):
+        return (device["ip"], device["number"], device["name"], device["mac"])
+
+    def control_devices(self):
+        devices = self.monitor.snapshot()
+        eligible = set()
+        for device in devices:
+            number = device["number"]
+            available = (device["online"] and device["kind"] == "player" and number in (1, 2, 3, 4)
+                         and device["name"].upper() not in ("CDJ-3000", "XDJ-XZ")
+                         and sum(d["online"] and d["number"] == number for d in devices) == 1
+                         and sum(d["online"] and d["ip"] == device["ip"] for d in devices) == 1
+                         and not any(l.deck.enabled and l.number == number for l in self.decks.values()))
+            identity = self.control_identity(device)
+            if available:
+                eligible.add(identity)
+            device["transport_available"] = bool(available)
+            device["transport_armed"] = bool(available and identity in self.player_controls)
+        self.player_controls.intersection_update(eligible)
+        return devices
+
+    def player_api(self, parts, query):
+        """Arm a discovered player or send one unicast fader-start command."""
+        if len(parts) != 4 or parts[2] not in ("arm", "command"):
+            return 404, {"error": "no such player control"}
+        device = next((d for d in self.control_devices() if d["ip"] == parts[1]), None)
+        if not device or not device["transport_available"]:
+            return 400, {"error": "player is offline, conflicting or not eligible for fader start"}
+        if query.get("number", [None])[0] != str(device["number"]):
+            return 409, {"error": "player identity changed, refresh and enable control again"}
+        identity = self.control_identity(device)
+        if parts[2] == "arm":
+            if parts[3] not in ("0", "1"):
+                return 400, {"error": "arm must be 0 or 1"}
+            if parts[3] == "1":
+                self.player_controls.add(identity)
+            else:
+                self.player_controls.discard(identity)
+            return 200, {}
+        command = parts[3]
+        if command not in ("start", "stop"):
+            return 400, {"error": "a command is start or stop"}
+        if identity not in self.player_controls:
+            return 403, {"error": "enable transport control for this player first"}
+        occupied = {d["number"] for d in self.monitor.snapshot() if d["online"]}
+        sender = next((l for l in sorted(self.decks.values(), key=lambda link: not link.deck.enabled)
+                       if not l.deck.unplugged and l.number not in occupied), None)
+        if sender is None:
+            return 400, {"error": "no connected bench interface with an unused player number available"}
+        packet = fader_start_packet(sender.name, sender.number, {device["number"]: command})
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.bind((sender.address, 0))
+                sender.send(sock, packet, (device["ip"], self.ports.beat))
+        except OSError as error:
+            return 400, {"error": "could not send player command: %s" % error}
+        self.world.events.add("player_transport", deck=device["number"], ip=device["ip"], command=command)
+        return 200, {}
 
     @staticmethod
     def truthy(value):
@@ -860,6 +922,8 @@ class Prolink(Protocol):
 
     def handle_api(self, parts, query):
         """POST /api/mixer/on/1, /master/0, /channel/2/fader/70, /channel/2/fader_start/1, /channel/2/command/start."""
+        if parts[0] == "player":
+            return self.player_api(parts, query)
         if parts[0] != "mixer":
             return None
         rest = parts[1:]

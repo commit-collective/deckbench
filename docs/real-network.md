@@ -219,3 +219,21 @@ This uses a Windows example interface name. On Linux, substitute the name report
 
 If a step fails, keep the bench's event and packet logs and identify the failing step. Local simulated tests do not
 establish physical compatibility. A `handoff_timeout` means the requested transfer was not confirmed.
+
+## Trying player transport control
+
+Use the PC-served page for unreleased controls. Leave the simulated mixer off, particularly with a real DJM present.
+On a discovered player's card, open **Player control** and check **Enable transport control**. No command is sent by
+enabling it. Then use **Start from cue** or **Stop / return to cue**. Stop is not pause-in-place.
+
+These use Pro DJ Link fader-start commands sent only to the selected player's IP, with all other player commands
+set to leave unchanged. Players must have distinct numbers from 1 to 4. CDJ-3000 and XDJ-XZ are excluded because
+the documented fader-start feature is unsupported there. Other models still need hardware validation.
+
+For a quiet test, load a track on one player, set a cue, and try Start from cue, then Stop / return to cue. Watch the
+reported player state and the physical unit. A sent command is not an acknowledgement. If ignored, announce an unused
+virtual player such as player 3 and retry. Do not use this first test during a performance.
+
+Commands appear as `player_transport` events and as outgoing fader-start packets in Network with **The bench's own**
+enabled. Arming is shared by clients of that bench, not persisted across restarts, and cleared when the player is
+observed offline, its identity changes or its number conflicts. Uncheck the enable box when finished.

@@ -2,6 +2,10 @@
 
 Newest first. A release is a tagged commit.
 
+## Unreleased
+
+- Add opt-in fader-start transport controls for discovered players without enabling the simulated mixer.
+
 ## v0.4.0
 
 ### Phone access and setup

@@ -356,7 +356,18 @@ function buildDevice(d) {
       beatIndicators(),
       h("div", {class: "lcd", "aria-label": "Tempo"}, h("b", {}, "--"), h("span", {}, "BPM"))),
     mixer ? null : h("canvas", {class: "strip", "aria-hidden": "true"}),
-    h("div", {class: "facts"}));
+    h("div", {class: "facts"}),
+    mixer ? null : h("details", {class: "player-control", hidden: true},
+      h("summary", {}, "Player control"),
+      h("label", {class: "hint"}, h("input", {type: "checkbox", class: "player-arm",
+        onchange: (e) => act("api/player/" + d.ip + "/arm/" + (e.target.checked ? 1 : 0) + "?number=" + e.target.dataset.number)}),
+        " Enable transport control"),
+      h("p", {class: "hint"}, "Controls the real player. Stop returns to cue, not pause. Support varies by model. Watch the reported state above."),
+      h("div", {class: "player-actions"}, ...[["start", "Start from cue"], ["stop", "Stop / return to cue"]].map(([command, label]) =>
+        h("button", {class: "btn small", disabled: true, onclick: (e) => {
+          api("api/player/" + d.ip + "/command/" + command + "?number=" + e.currentTarget.dataset.number)
+            .then(() => toast("Command sent. Check the player's reported state.", "info")).catch(() => {});
+        }}, label)))));
 }
 
 function renderDevices() {
@@ -374,6 +385,17 @@ function renderDevices() {
       box.append(card);
     }
     const st = d.status, q = (cls) => card.querySelector("." + cls);
+    const control = q("player-control");
+    if (control) {
+      control.hidden = !d.transport_available;
+      const arm = q("player-arm");
+      arm.checked = !!d.transport_armed;
+      arm.dataset.number = d.number;
+      for (const button of control.querySelectorAll("button")) {
+        button.disabled = !d.transport_armed || !d.online || !S.connected;
+        button.dataset.number = d.number;
+      }
+    }
     card.classList.toggle("online", d.online);
     card.classList.toggle("offline", !d.online);
     card.classList.toggle("off", false);
