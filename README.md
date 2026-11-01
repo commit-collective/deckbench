@@ -85,6 +85,12 @@ compatibility with every physical player. See [protocol notes](docs/prolink.md).
 with the version, OS, command, expected result and log. Redact tokens and
 private addresses. Follow releases on GitHub or [Commit Collective](https://commitcollective.cc).
 
+## Contributing
+
+Bug reports, testing on different setups, documentation fixes and protocol
+contributions are welcome. See [the contribution guide](CONTRIBUTING.md)
+for checks and what to include. Open an issue before starting a larger change.
+
 ## Licence
 
 MIT OR Apache-2.0, at your option.
