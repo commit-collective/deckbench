@@ -4,6 +4,9 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Keep delayed simulated-mixer packets from restoring on-air state after the mixer is switched off.
+- Make the demo's observed synced player follow master tempo and bar phase, with matching packet-log values.
+- Decode acceptance in standard-length master takeover replies.
 - Add native macOS interface and MAC discovery, a dedicated CI job and Ethernet/VM bridge setup guidance.
 - Bound listener waits during shutdown and use a configured localhost address for the Mac mixer endpoint.
 - Add an announced observer mode without simulated playback decks or database servers.

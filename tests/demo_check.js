@@ -36,14 +36,27 @@ const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
   await post("api/deck/2/tempo/131");
   state = await get("api/state");
   check("a synced deck follows the master's tempo", state.decks[3].bpm === 131 && state.decks[2].master, [state.decks[3].bpm, state.decks[2].master]);
+  const external = state.protocols.prolink.devices[0];
+  check("the observed synced player follows master tempo", external.status.sync && external.status.bpm === 131 && external.phase[2] === 131, external);
+  check("its original track tempo stays independent", external.status.track_bpm === 124 && Math.abs(external.status.pitch - (131 / 124 - 1) * 100) < 0.001);
+  bench.sent["st-ext"] = 0;
+  bench.tickPackets();
+  check("its packet log reports the followed tempo", bench.packets.noisy.filter((p) => p.kind === "status" && !p.ours).slice(-1)[0].text.includes("131.0 BPM"));
+  const barDistance = () => {
+    const delta = bench.extPosition(bench.now()) - bench.position(bench.decks[2]);
+    return Math.abs(((delta + 2) % 4 + 4) % 4 - 2);
+  };
+  check("the observed synced player aligns its bar", barDistance() < 0.02);
   // synced, a deck is on the master's beat and not only at its tempo: both places match, and go on matching
   const placeOf = (n) => { const d = bench.decks[n]; return bench.position(d); };
   check("a synced deck is at the master's place", Math.abs(placeOf(3) - placeOf(2)) < 0.02, [placeOf(2), placeOf(3)]);
   await sleep(0.4);
   check("and stays there", Math.abs(placeOf(3) - placeOf(2)) < 0.02, [placeOf(2), placeOf(3)]);
+  check("the observed synced player stays aligned", barDistance() < 0.02);
   await post("api/deck/2/master/0");
   state = await get("api/state");
   check("it follows no more when there is no master", state.decks[3].bpm === 124, state.decks[3].bpm);   // its own tempo again
+  check("the observed player falls back to its own tempo", state.protocols.prolink.devices[0].status.bpm === 124);
 
   state = (await post("api/deck/2/loop/4")).data;
   check("a loop", state.decks[2].loop === 4);

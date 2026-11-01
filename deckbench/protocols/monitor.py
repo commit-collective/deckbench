@@ -247,7 +247,7 @@ class Monitor:
             return "%s tells a player: %s" % (text(data, 0x0B, 0x1F) or "?", what)
         if kind == "takeover request":
             return "%s asks for the master role" % (text(data, 0x0B, 0x1F) or "?")
-        if kind == "takeover reply" and n > 0x30:
+        if kind == "takeover reply" and n >= 0x2C:
             return "%s answers a request for the master role (%s)" % (text(data, 0x0B, 0x1F) or "?", "yes" if data[-1] == 1 else "no")
         return "type %#04x, %d bytes" % (data[0x0A], n)
 

@@ -80,7 +80,11 @@ class DemoBench {
     const phase = (now - this.began) % 18;
     return phase >= 10 ? [Math.floor(this.extRaw(now - (phase - 10))), 4] : null;
   }
-  extRaw(now) { return this.ext.anchorPos + (now - this.ext.anchorT) * this.ext.base / 60; }
+  extTempo() {
+    const master = Object.values(this.decks).find((d) => d.on && d.master && !d.unplugged);
+    return master ? master.base : this.ext.base;
+  }
+  extRaw(now) { return this.ext.anchorPos + (now - this.ext.anchorT) * this.extTempo() / 60; }
   extPosition(now) {
     let pos = this.extRaw(now);
     const loop = this.extLoop(now);
@@ -88,12 +92,12 @@ class DemoBench {
     return pos;
   }
   devices() {
-    const now = this.now(), e = this.ext, rate = e.base / 60, pos = this.extPosition(now), whole = Math.floor(pos), since = (pos - whole) / rate;
+    const now = this.now(), e = this.ext, bpm = this.extTempo(), rate = bpm / 60, pos = this.extPosition(now), whole = Math.floor(pos), since = (pos - whole) / rate;
     const loop = !!this.extLoop(now);
     return [{ip: e.ip, name: e.name, model: e.name, number: e.number, kind: "player", unit: false, online: true, mac: e.mac, peers: 4 + (this.mixer.on ? 1 : 0), firmware: e.firmware,
-      status: {play: true, master: false, sync: true, on_air: this.settings.mixer ? false : true, state: loop ? "looping" : "playing", loop, bpm: e.base, track_bpm: e.base,
-        pitch: 0, bar: whole % 4 + 1, track_beat: whole + 1, source: 5, slot: 3, track_type: 1, rbid: 805, sync_counter: 0},
-      phase: [now - since, whole, e.base], at: null, air: null, fader: null}];
+      status: {play: true, master: false, sync: true, on_air: this.settings.mixer ? false : true, state: loop ? "looping" : "playing", loop, bpm, track_bpm: e.base,
+        pitch: (bpm / e.base - 1) * 100, bar: whole % 4 + 1, track_beat: whole + 1, source: 5, slot: 3, track_type: 1, rbid: 805, sync_counter: 0},
+      phase: [now - since, whole, bpm], at: null, air: null, fader: null}];
   }
 
   /* -- the log -- */
@@ -118,11 +122,11 @@ class DemoBench {
         this.sent["pos" + d.number] = beat;
       } else delete this.sent["pos" + d.number];
     }
-    const e = this.ext;
+    const e = this.ext, extBpm = this.extTempo().toFixed(1);
     if (due("ka-ext", 2)) this.packet("keep-alive", e.ip, e.name, e.number, e.name + " #5 at " + e.ip + ", player, knows 5 devices", false, 50000);
-    if (due("st-ext", 0.2)) this.packet("status", e.ip, e.name, e.number, e.name + " #5: " + (this.extLoop(now) ? "looping" : "playing") + ", synced, 124.0 BPM, beat " + (Math.floor(this.extPosition(now)) % 4 + 1) + ", track 5:3:805", false, 50002);
+    if (due("st-ext", 0.2)) this.packet("status", e.ip, e.name, e.number, e.name + " #5: " + (this.extLoop(now) ? "looping" : "playing") + ", synced, " + extBpm + " BPM, beat " + (Math.floor(this.extPosition(now)) % 4 + 1) + ", track 5:3:805", false, 50002);
     const beat = Math.floor(this.extPosition(now)), lastBeat = this.sent["ext-beat"];
-    if (lastBeat !== undefined && beat !== lastBeat) this.packet("beat", e.ip, e.name, e.number, e.name + " #5: beat " + (beat % 4 + 1) + " of 4, 124.0 BPM", false, 50001);
+    if (lastBeat !== undefined && beat !== lastBeat) this.packet("beat", e.ip, e.name, e.number, e.name + " #5: beat " + (beat % 4 + 1) + " of 4, " + extBpm + " BPM", false, 50001);
     this.sent["ext-beat"] = beat;
     if (this.settings.mixer && this.mixer.on && due("air", 0.25)) {
       const on = Object.entries(this.mixer.channels).filter(([n, c]) => this.mixer.master && c.fader > 0).map(([n]) => n).join(" ") || "none";
@@ -150,9 +154,15 @@ class DemoBench {
   }
   settle(change) {                                   /* keep every deck's place through a change of who is the master */
     const now = this.now();
+    this.ext.anchorPos = this.extRaw(now);
+    this.ext.anchorT = now;
     for (const d of Object.values(this.decks)) { d.anchorPos = this.position(d, now); d.anchorT = now; }
     change();
     const master = Object.values(this.decks).find((o) => o.on && o.master);
+    if (master && master.play && !master.unplugged) {
+      const difference = this.position(master, now) - this.ext.anchorPos;
+      this.ext.anchorPos += ((difference + 2) % 4 + 4) % 4 - 2;
+    }
     for (const d of Object.values(this.decks)) {     /* and the synced decks on the master's beat: its place, not only its tempo */
       if (d.on && d.play && d.sync && master && master !== d && master.play) { d.anchorT = now; d.anchorPos = this.position(master, now); }
     }

@@ -3,11 +3,12 @@
 import socket
 import struct
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from deckbench.capture import replay_packets
 from deckbench.core import Deck, World
 from deckbench.protocols.prolink import Prolink, header
+from deckbench.protocols.mixer import on_air_packet
 
 
 def position_packet(position=12345):
@@ -25,6 +26,29 @@ class Extensions(unittest.TestCase):
         self.world.decks[3] = Deck(self.world, 3, 128, "follower")
         self.net = Prolink(self.world)
         self.addCleanup(self.net.stop)
+
+    def feed_one_air_packet(self, source, name, number):
+        packet = on_air_packet(name, number, {3: False})
+        receiver = Mock()
+        receiver.recvfrom.side_effect = [(packet, (source, self.net.ports.beat)), OSError("fixture finished")]
+        with patch.object(self.net.runtime, "socket", return_value=receiver):
+            with self.assertRaisesRegex(OSError, "fixture finished"):
+                self.net.faders()
+
+    def test_queued_own_mixer_packet_cannot_restore_state_after_switching_off(self):
+        self.world.decks[3].on_air = None
+        self.feed_one_air_packet(self.net.mixer.address, self.net.mixer.name, self.net.mixer.number)
+        self.assertIsNone(self.world.decks[3].on_air)
+
+    def test_physical_mixer_packets_still_apply_with_simulation_off(self):
+        self.feed_one_air_packet("127.0.0.9", b"DJM-PHYSICAL", 33)
+        self.assertFalse(self.world.decks[3].on_air)
+
+    def test_standard_length_takeover_reply_explains_acceptance(self):
+        for accepted in (0, 1):
+            packet = header(0x27, b"CDJ-TEST") + bytes((1, 0, 2, 0, 8, 0, 0, 0, 2, 0, 0, 0, accepted))
+            self.net.monitor.feed(packet, "127.0.0.9", self.net.ports.beat)
+            self.assertIn("yes" if accepted else "no", self.net.monitor.since(0)["packets"][-1]["text"])
 
     def test_precise_position_is_decoded_without_inventing_a_beat_grid(self):
         self.net.monitor.feed(position_packet(), "127.0.0.9", self.net.ports.beat)

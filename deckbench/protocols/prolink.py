@@ -828,6 +828,10 @@ class Prolink(Protocol):
             flags = parse_on_air(data)
             if flags is not None:
                 with self.world.lock:
+                    own_mixer = (addr[0] == self.mixer.address and data[0x21] == self.mixer.number
+                                 and data[0x0B:0x1F].rstrip(b"\0") == self.mixer.name)
+                    if own_mixer and not self.mixer.on:
+                        continue       # queued packets must not undo mixer_gone()
                     for channel, on in flags.items():
                         deck = self.world.decks.get(channel)
                         if deck and deck.on_air != on:
