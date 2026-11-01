@@ -15,6 +15,7 @@ analysis (mixer_integration.html) and of Beat Link's `VirtualCdj`.
 """
 import random
 import socket
+import sys
 import threading
 import time
 
@@ -83,7 +84,7 @@ class LinkMixer:
         self.net = net
         self.name = name
         self.number = number
-        self.address = address or "127.0.0.%d" % number
+        self.address = address or ("127.0.0.1" if sys.platform == "darwin" else "127.0.0.%d" % number)
         self.broadcast = broadcast
         self.six = channels == 6
         self.on = False

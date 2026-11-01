@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Add native macOS interface and MAC discovery, a dedicated CI job and Ethernet/VM bridge setup guidance.
+- Bound listener waits during shutdown and use a configured localhost address for the Mac mixer endpoint.
 - Add an announced observer mode without simulated playback decks or database servers.
 - Add opt-in SYNC and MASTER commands on discovered player cards.
 - Hand a stopped virtual master's role to an eligible playing, synced follower.

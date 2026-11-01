@@ -1,5 +1,7 @@
 # deckbench: working rules
 
+- Deckbench is a general-purpose public protocol test bench. Keep setup and platform guidance independent of any
+  particular emulator or private workflow. Device-specific adapters are optional integrations, not core requirements
 - Nothing from Pioneer DJ or AlphaTheta goes in this repo: no firmware, no captures taken from a unit's firmware.
 - Always commit completed changes locally on `main`. Ask before pushing, tagging or deploying, and never amend a commit that is on `origin`.
   Amending the latest commit is fine while it is not pushed and the change iterates on it.
@@ -7,8 +9,8 @@
   a blank line and body lines under 72 characters. No semicolons in prose,
   emojis or attribution. Omit routine check boilerplate, but mention tests or
   CI when that is the primary change.
-- The DJS-1000 emulator and mods use this bench for their link tests. A change to the API, the ports or the unit adapter can
-  break them: say so in the reply.
+- Downstream applications use this bench for integration tests. Changes to the API, ports or adapter contracts can
+  break consumers: say so in the reply.
 
 ## Entry points and checks
 

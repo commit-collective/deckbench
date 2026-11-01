@@ -366,12 +366,16 @@ class LinkDeck:
         """Master hand-off requests and sync commands, sent to this deck."""
         s = share(self.net.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM))
         s.bind((self.address, self.ports.beat))
+        s.settimeout(0.5)
         out = self.net.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM)
         out.bind((self.address, 0))
         self.net.listening()
         deck, world = self.deck, self.net.world
         while not self.net.runtime.stopping.is_set():
-            data, addr = s.recvfrom(2048)
+            try:
+                data, addr = s.recvfrom(2048)
+            except socket.timeout:
+                continue
             if self.net.runtime.stopping.is_set():
                 return
             self.net.monitor.feed(data, addr[0], self.ports.beat, to=self.address)
@@ -466,9 +470,13 @@ class LinkDeck:
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         srv.bind((self.address, self.ports.query))
         srv.listen(5)
+        srv.settimeout(0.5)
         self.net.listening()
         while not self.net.runtime.stopping.is_set():
-            conn, _ = srv.accept()
+            try:
+                conn, _ = srv.accept()
+            except socket.timeout:
+                continue
             self.net.runtime.own(conn)
             if not self.deck.enabled or self.deck.unplugged:
                 self.net.runtime.release(conn)
@@ -487,9 +495,13 @@ class LinkDeck:
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         srv.bind((self.address, self.ports.db))
         srv.listen(5)
+        srv.settimeout(0.5)
         self.net.listening()
         while not self.net.runtime.stopping.is_set():
-            conn, _ = srv.accept()
+            try:
+                conn, _ = srv.accept()
+            except socket.timeout:
+                continue
             self.net.runtime.own(conn)
             if not self.deck.enabled or self.deck.unplugged:
                 self.net.runtime.release(conn)
@@ -639,7 +651,7 @@ class Prolink(Protocol):
                 raise ValueError("could not read DJ adapter MAC addresses: %s" % error) from error
             for link in physical:
                 if link.address not in macs:
-                    raise ValueError("cannot find the adapter MAC for %s, use a configured Windows or Linux IPv4 address"
+                    raise ValueError("cannot find the adapter MAC for %s, use a configured Ethernet IPv4 address"
                                      % link.address)
                 link.mac = macs[link.address]
         world.protocols.append(self)
@@ -803,9 +815,13 @@ class Prolink(Protocol):
         of the players 1 to 4, 0 start, 1 stop, 2 leave it."""
         s = share(self.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM))
         s.bind(("", self.ports.beat))
+        s.settimeout(0.5)
         self.listening()
         while not self.runtime.stopping.is_set():
-            data, addr = s.recvfrom(2048)
+            try:
+                data, addr = s.recvfrom(2048)
+            except socket.timeout:
+                continue
             if self.runtime.stopping.is_set():
                 return
             self.monitor.feed(data, addr[0], self.ports.beat)

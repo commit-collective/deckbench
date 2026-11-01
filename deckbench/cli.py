@@ -110,7 +110,7 @@ def main(argv=None):
                          "decks (aliases of a network card; see docs/real-network.md); "
                          "default the loopback, 127.0.0.<number>")
     ap.add_argument("--dj-interface", metavar="NAME",
-                    help="use this Windows or Linux interface's existing IPv4 addresses for the decks")
+                    help="use this Windows, Linux or macOS interface's existing IPv4 addresses for the decks")
     ap.add_argument("--netmask", metavar="MASK",
                     help="the network's mask, to find its broadcast address from --bind "
                          "(default 255.255.255.0)")

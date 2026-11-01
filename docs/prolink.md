@@ -21,7 +21,7 @@ broadcast address: [real-network.md](real-network.md)).
 
 A deck that is off sends nothing and closes what is opened to it.
 
-On a physical Windows or Linux interface, announcements use the adapter's actual MAC. Status packets go directly to
+On a physical Windows, Linux or macOS interface, announcements use the adapter's actual MAC. Status packets go directly to
 discovered peers. Loopback keeps broadcast status for local test clients. USB and SD media flags say no media is
 mounted, because the database simulation does not serve NFS files.
 

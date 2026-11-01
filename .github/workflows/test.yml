@@ -1,7 +1,7 @@
 name: tests
 
-# Linux and Windows. macOS is not tested: its loopback carries no broadcasts, so the decks on 127.0.0.n are not heard there
-# A job that is allowed to fail only hides that behind a green badge.
+# Full broadcast integration runs on Linux and Windows. The Mac job checks
+# native unicast, adapter parsing, browser assets and packaging, not DJ hardware.
 
 on:
   push:
@@ -15,6 +15,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Native macOS checks
+        shell: bash
+        run: |
+          set -o pipefail
+          python -u -m unittest discover -s tests -p test_macos.py -v 2>&1 | tee test-output.txt
+          python -u -m unittest discover -s tests -p test_demo.py -v 2>&1 | tee -a test-output.txt
+      - name: Check installed package
+        run: |
+          python -m pip install --no-deps .
+          python -I tools/check_installed.py
+      - name: Say what failed
+        if: failure()
+        run: python tools/ci_report.py test-output.txt
+      - name: Keep test output
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: tests-macos-15-3.12
+          path: test-output.txt
+          if-no-files-found: ignore
   test:
     strategy:
       fail-fast: false

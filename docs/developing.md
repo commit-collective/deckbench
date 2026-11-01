@@ -22,6 +22,11 @@ Windows. A sandbox or firewall may prevent reception even when socket binding
 works. That is not a clean regression result. Native macOS loopback is not a
 supported integration-test environment.
 
+The dedicated `macos-15` CI job runs `test_macos.py`, browser checks and the installed-package check. It does not run
+the broadcast suite or claim physical DJ hardware validation. The native socket check uses only 127.0.0.1, with
+broadcast output mocked explicitly. Adapter fixtures cover Ethernet aliases, masks, inactive interfaces and missing
+MACs. Listener receive/accept waits are bounded so shutdown does not depend only on closing a socket from another thread.
+
 Tests use shifted ports instead of the real Pro DJ Link ports. Do not run two
 suites at once with the same DECKBENCH_PORT_SHIFT.
 

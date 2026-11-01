@@ -28,9 +28,11 @@ The optional browser sound is the bench's, not the device under test's.
 
 Local decks use `127.0.0.N`. Run the device under test in the same network
 namespace. If an emulator runs in WSL, run deckbench there too.
-Linux and Windows are covered by CI. Native macOS loopback does not provide
-the broadcast behaviour this mode needs. Use a Linux VM for the loopback
-bench. Real-network interface support is currently Windows and Linux.
+Linux and Windows have full broadcast integration checks. On macOS, use an
+Ethernet or VM bridge interface rather than the default loopback setup.
+Native adapter support is implemented, with a dedicated CI job configured
+for unicast and browser checks. Mac hardware validation is still pending.
+See [macOS setup and networking](docs/macos.md).
 
 ## Choose a workflow
 
@@ -75,8 +77,8 @@ Use JSON [scenarios](docs/scenarios.md) for timed actions and expectations,
 
 ## Verification and support
 
-The implementation follows public protocol analyses and is exercised against
-the DJS-1000 application in an emulator. Packet-layout checks do not establish
+The implementation follows public protocol analyses and is exercised through
+synthetic fixtures and integration tests. Packet-layout checks do not establish
 compatibility with every physical player. See [protocol notes](docs/prolink.md).
 
 [Report an issue](https://github.com/commit-collective/deckbench/issues)

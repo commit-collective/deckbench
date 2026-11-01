@@ -14,6 +14,9 @@ APP = SITE + "/deckbench/app/"
 
 def interfaces():
     """Return preferred IPv4 interfaces without changing the network."""
+    if sys.platform == "darwin":
+        from .net import macos_interfaces
+        return [(name, address) for name, address, _ in macos_interfaces()]
     if sys.platform == "win32":
         command = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
                    "Get-NetIPAddress -AddressFamily IPv4 | "
@@ -22,7 +25,7 @@ def interfaces():
     elif sys.platform.startswith("linux"):
         command = ["ip", "-j", "-4", "address", "show"]
     else:
-        raise ValueError("interface selection is supported on Windows and Linux")
+        raise ValueError("interface selection is supported on Windows, Linux and macOS")
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             text=True, errors="replace", timeout=10, check=False)
     if result.returncode:

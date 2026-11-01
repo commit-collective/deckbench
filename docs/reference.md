@@ -17,7 +17,7 @@ Options (`python -m deckbench --help`):
   default is track 100 + the deck's number, from itself, "Track of deck N"
 - `--bind ADDRESS,...`, `--netmask`, `--broadcast`: decks on a real network, with an
   address each (see [real-network.md](real-network.md)). The default is loopback
-- `--dj-interface NAME`: on Windows or Linux, use existing IPv4 addresses and their mask from a named interface.
+- `--dj-interface NAME`: on Windows, Linux or macOS, use existing IPv4 addresses and their mask from a named interface.
   Requires enough addresses on one subnet and cannot be combined with `--bind` or `--netmask`
 - `--strict`: the decks behave as a CDJ-2000NXS2 or an XDJ-1000MK2 does: they serve the players 1 to 4 that announced
   themselves, a fifth device gets no answer and a unit that is not a player (a DJS-1000 in drum machine mode) has its

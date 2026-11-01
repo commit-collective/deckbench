@@ -41,7 +41,7 @@ Implement protocol facts independently and check the license before reusing any 
 - Guarded remote track loading from an existing player library, with explicit source, slot and track ID
 - Browse and richer metadata, then real beat grids, cues and waveforms
 - Mixer-assigned player numbers and robust multi-address conflict recovery
-- Native macOS adapter discovery and hardware validation
+- macOS hardware and local-software interoperability validation
 - NFS audio serving only as a separate, explicitly reviewed project
 
 Remote loading must reject a playing target and report sent versus confirmed state separately.

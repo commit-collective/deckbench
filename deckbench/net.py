@@ -6,6 +6,41 @@ import json
 import subprocess
 import threading
 import time
+import ipaddress
+import re
+
+
+def parse_macos_interfaces(output):
+    """Decode ifconfig records without assuming Ethernet names or one IPv4 per adapter."""
+    records, current = [], None
+    for line in output.splitlines():
+        header = re.match(r"^(\S+): flags=[0-9a-fA-F]+<([^>]*)>", line)
+        if header:
+            current = {"name": header[1], "up": "UP" in header[2].split(","), "addresses": [], "mac": None}
+            records.append(current)
+        elif current is not None:
+            fields = line.split()
+            if fields[:1] == ["ether"] and len(fields) >= 2:
+                if re.fullmatch(r"(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}", fields[1]):
+                    current["mac"] = bytes.fromhex(fields[1].replace(":", ""))
+            elif fields[:1] == ["inet"] and "netmask" in fields:
+                mask = fields[fields.index("netmask") + 1]
+                if mask.startswith("0x"):
+                    mask = str(ipaddress.IPv4Address(int(mask, 16)))
+                current["addresses"].append(ipaddress.IPv4Interface("%s/%s" % (fields[1], mask)))
+            elif fields == ["status:", "inactive"]:
+                current["up"] = False
+    return [(record["name"], address, record["mac"]) for record in records if record["up"]
+            for address in record["addresses"]]
+
+
+def macos_interfaces():
+    """Read existing macOS interface addresses and link identities, without sudo or changes."""
+    result = subprocess.run(["/sbin/ifconfig", "-a"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, errors="replace", timeout=10, check=False)
+    if result.returncode:
+        raise ValueError(result.stderr.strip() or "interface listing failed")
+    return parse_macos_interfaces(result.stdout)
 
 
 class NetworkRuntime:
@@ -86,6 +121,8 @@ class NetworkRuntime:
 
 def interface_macs():
     """IPv4 address to physical adapter MAC, without changing adapters."""
+    if sys.platform == 'darwin':
+        return {str(address.ip): mac for _, address, mac in macos_interfaces() if mac is not None}
     if sys.platform == 'win32':
         command = ['powershell', '-NoProfile', '-NonInteractive', '-Command',
                    'Get-NetIPConfiguration | ForEach-Object { '

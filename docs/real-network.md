@@ -1,6 +1,6 @@
 # On a real network
 
-Run Deckbench on a Windows or Linux computer connected by Ethernet to the same switch as the players. Use the
+Run Deckbench on a Windows, Linux or macOS computer connected by Ethernet to the same switch as the players. Use the
 computer's built-in Ethernet port, a dock or a USB Ethernet adapter. A second Ethernet adapter is optional.
 
 ## Connect the computer
@@ -38,8 +38,8 @@ python -m deckbench --numbers 3 --dj-interface enp3s0
 Replace the interface name with the one shown on your computer and choose an unused player number. Add `--phone`
 to pair a phone, as described in [phone.md](phone.md). Neither command changes adapter settings.
 
-Real-network interface selection and MAC lookup currently support Windows and Linux. Native macOS real-network
-operation is not supported by the current MAC lookup. A Linux VM needs direct access to the DJ Ethernet interface,
+Real-network interface selection and MAC lookup support Windows, Linux and macOS. For Mac-specific instructions and
+validation limits, see [macos.md](macos.md). A Linux VM needs direct access to the DJ Ethernet interface,
 such as USB passthrough, rather than ordinary NAT networking. That VM setup has not been validated.
 
 ## Addresses and additional virtual players
@@ -80,7 +80,7 @@ address is shown in the page once it has been heard ("Unit under test: player
 If you need only one simulated deck, its `--bind` address can be the DJ interface's existing IPv4 address.
 Additional decks need additional addresses on that same interface, not additional Ethernet adapters.
 Check addresses and player numbers for conflicts. These commands do not detect every device or prevent a collision.
-On Windows and Linux, simulated decks use the selected adapter's actual MAC address. Loopback tests retain synthetic
+On Windows, Linux and macOS, simulated decks use the selected adapter's actual MAC address. Loopback tests retain synthetic
 MAC addresses. Do not assume an observed announcement proves full compatibility.
 
 Player numbers: not the unit's (it is player 1 by default, `PLAYER No.` on
@@ -180,7 +180,7 @@ to a simulated deck but reported an older-firmware warning and a link access
 error. A scoped Public-profile UDP firewall rule resolved reception, and the
 phone showed the real devices and their statuses. Master and sync changes,
 the compatibility flag and the absent-media flags still need a hardware check.
-Native macOS real-network operation and Linux VM Ethernet passthrough have not been validated.
+Native macOS adapter support is implemented but physical operation and Linux VM Ethernet passthrough remain unvalidated.
 
 ## Master and sync with physical players
 
