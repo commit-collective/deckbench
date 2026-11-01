@@ -4,6 +4,12 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Add an announced observer mode without simulated playback decks or database servers.
+- Add opt-in SYNC and MASTER commands on discovered player cards.
+- Hand a stopped virtual master's role to an eligible playing, synced follower.
+- Decode mixer tempo status and CDJ-3000 precise positions without inventing beat grids.
+- Query loaded-track metadata on demand and serve meaningful synthetic tempo and duration fields.
+- Export full packet payloads and replay captures offline with seeded loss, delay and jitter.
 - Add explicit network worker shutdown, socket cleanup and cancellable handoff timers.
 - Isolate CLI sleep mocking so checks cannot interrupt other network workers.
 - Add opt-in fader-start transport controls for discovered players without enabling the simulated mixer.

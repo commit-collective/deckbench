@@ -71,6 +71,7 @@ Use JSON [scenarios](docs/scenarios.md) for timed actions and expectations,
 - [Network monitor and journal](docs/link.md)
 - [Hosting the browser app](docs/hosting.md)
 - [Development and reliable checks](docs/developing.md)
+- [Protocol roadmap, including StagelinQ](docs/roadmap.md)
 
 ## Verification and support
 

@@ -45,14 +45,15 @@ def classify(port, data, announce=50000, beat=50001, update=50002):
         return {0x28: "beat", 0x03: "on air", 0x02: "fader start", 0x26: "takeover request", 0x27: "takeover reply", 0x2A: "sync command",
                 0x0B: "position"}.get(t, "other")
     if port == update:
-        return {0x0A: "status", 0x27: "takeover reply"}.get(t, "other")
+        return {0x0A: "status", 0x29: "mixer status", 0x27: "takeover reply"}.get(t, "other")
     return "other"
 
 
 class Monitor:
-    def __init__(self, net):
+    def __init__(self, net, clock=None):
         self.net = net
-        self.began = time.time()
+        self.clock = clock or (lambda: time.time())
+        self.began = self.clock()
         self.lock = threading.Lock()
         self.n = 0
         self.rings = {"noisy": collections.deque(maxlen=1500), "rest": collections.deque(maxlen=2500)}
@@ -96,11 +97,11 @@ class Monitor:
     def _feed(self, data, source, port, to):
         ports = self.net.ports
         kind = classify(port, data, ports.announce, ports.beat, ports.update)
-        now = time.time()
+        now = self.clock()
         # A broadcast reaches every socket of the bench that listens on the port (on Windows even those bound to one address): once is enough
         with self.lock:
             key = (source, port, data)
-            if now - self.recent.get(key, 0.0) < 0.03:
+            if key in self.recent and now - self.recent[key] < 0.03:
                 return
             self.recent[key] = now
             if len(self.recent) > 800:
@@ -121,7 +122,7 @@ class Monitor:
             item = {"n": self.n, "t": round(now - self.began, 3), "port": port, "kind": kind, "src": source, "to": to,
                     "ours": ours, "len": len(data), "text": summary,
                     "name": device["name"] if device else "", "number": device["number"] if device else None,
-                    "hex": data[:96].hex() + ("..." if len(data) > 96 else "")}
+                    "hex": data.hex()}
             self.rings["noisy" if kind in NOISY else "rest"].append(item)
 
     # -- the log --
@@ -152,7 +153,7 @@ class Monitor:
             return text(data, 0x0C, 0x20), data[0x2E], ".".join(str(b) for b in data[0x24:0x28])
         if kind == "claim 3" and n >= 0x26:
             return text(data, 0x0C, 0x20), data[0x24], None
-        if kind in ("status", "beat", "on air", "fader start", "sync command", "takeover request", "takeover reply") and n >= 0x22:
+        if kind in ("status", "mixer status", "position", "beat", "on air", "fader start", "sync command", "takeover request", "takeover reply") and n >= 0x22:
             return text(data, 0x0B, 0x1F), data[0x21], None
         return "", None, None
 
@@ -181,6 +182,26 @@ class Monitor:
     def read(self, kind, data, d, now):
         """Updates the device from a packet, and says in a line what it is."""
         n = len(data)
+        if kind == "position" and n >= 0x3C:
+            length, position, pitch = struct.unpack_from(">IIi", data, 0x24)
+            raw_bpm = struct.unpack_from(">I", data, 0x38)[0]
+            d["name"] = text(data, 0x0B, 0x1F) or d["name"]
+            d["number"], d["kind"] = data[0x21], "player"
+            d["precise"] = {"seen": now, "position_ms": position, "length_s": length,
+                            "pitch": pitch / 100.0, "bpm": None if raw_bpm == 0xFFFFFFFF else raw_bpm / 10.0}
+            return "%s #%d: position %.3f s" % (d["name"], d["number"], position / 1000.0)
+        if kind == "mixer status" and n >= 0x38:
+            flags = data[0x27]
+            pitch = struct.unpack_from(">I", data, 0x28)[0]
+            bpm = struct.unpack_from(">H", data, 0x2E)[0] / 100.0
+            d["name"], d["number"], d["kind"] = text(data, 0x0B, 0x1F), data[0x21], "mixer"
+            d["status"] = {"seen": now, "play": True, "master": bool(flags & 0x20), "sync": bool(flags & 0x10),
+                           "on_air": False, "state": "mixer", "loop": False, "bar": None,
+                           "bpm": bpm * pitch / PITCH_NORMAL, "pitch": (pitch / PITCH_NORMAL - 1) * 100,
+                           "track_bpm": bpm, "source": 0, "slot": 0, "rbid": 0, "track_beat": None,
+                           "sync_counter": 0, "handoff": data[0x36]}
+            self.net.peer_status(d, data)
+            return "%s: mixer %.1f BPM%s" % (d["name"], d["status"]["bpm"], " master" if flags & 0x20 else "")
         if kind == "keep-alive" and n >= 0x30:
             d["name"], d["number"] = text(data, 0x0C, 0x20), data[0x24]
             d["mac"] = ":".join("%02x" % b for b in data[0x26:0x2C])
@@ -249,7 +270,7 @@ class Monitor:
               "pitch": round((pitch / PITCH_NORMAL - 1) * 100, 2), "bar": data[0xA6] or None,
               "track_beat": beat_in_track if beat_in_track not in (0, 0xFFFFFFFF) else None,     # counted from 1: 0 is a player with no track (a sampler)
               "source": data[0x28], "slot": data[0x29], "track_type": data[0x2A], "rbid": struct.unpack(">I", data[0x2C:0x30])[0],
-              "sync_counter": struct.unpack(">I", data[0x84:0x88])[0], "seen": now}
+              "sync_counter": struct.unpack(">I", data[0x84:0x88])[0], "handoff": data[0x9F], "seen": now}
         if d["ours"]:
             d["status"] = st
         else:
@@ -302,7 +323,7 @@ class Monitor:
     def snapshot(self, now=None):
         """The devices that are not the bench's own, as the page shows them. Volatile things (a time since a packet) are left out:
         `online` says whether it was heard in the last eight seconds."""
-        now = now or time.time()
+        now = self.clock() if now is None else now
         out = []
         with self.lock:
             devices = list(self.devices.values())
@@ -322,6 +343,8 @@ class Monitor:
                     "phase": d["phase"] if live_phase else None,
                     "bar_phase": d.get("bar_phase") if live_phase else None,
                     "at": d["at"] if not (st and st["play"]) else None,
+                    "precise": {k: v for k, v in d["precise"].items() if k != "seen"}
+                               if d.get("precise") and now - d["precise"]["seen"] < 2 else None,
                     "air": d["air"] if d["air"] and now - d["air_seen"] < 8 else None,
                     "fader": d["fader"]["commands"] if d["fader"] and now - d["fader"]["t"] < 8 else None}
             out.append(item)

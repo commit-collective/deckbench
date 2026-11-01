@@ -111,6 +111,15 @@ must look like. Each of these was found by the unit not reacting:
   for tests of what looks titles up in a copy of the file. The layout was checked on a real
   file of 3198 tracks.
 
+## Additional reception and handoff behavior
+
+Receiving CDJ-3000 precise position packets is supported. Position is shown in seconds and expires when packets stop.
+It is not converted into an absolute beat count without a real beat grid. Mixer status packets can supply master tempo,
+but do not invent a bar position. These decoders have synthetic checks, not hardware validation on every model.
+
+A stopped virtual master offers the role to the lowest-numbered eligible playing, synced follower. It keeps its role
+until the successor confirms, and cancels an unanswered offer. SYNC must already be enabled on the follower.
+
 ## Not done
 
 - Claim packets are sent only with `--claim`, and the mixer's on air and fader start are in [mixer.md](mixer.md). The

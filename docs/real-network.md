@@ -223,14 +223,14 @@ establish physical compatibility. A `handoff_timeout` means the requested transf
 ## Trying player transport control
 
 Use the PC-served page for unreleased controls. Leave the simulated mixer off, particularly with a real DJM present.
-On a discovered player's card, open **Player control** and check **Enable transport control**. No command is sent by
+On a discovered player's card, open **Player control** and check **Enable player control**. No command is sent by
 enabling it. Then use **Start cued track** or **Stop playing track**. Stop is not pause-in-place.
 
 On tested hardware, Start is accepted only when stopped at the cue point, not while playing or
 paused elsewhere. Stop playing track returns to cue while playing, but does nothing while paused away from cue. These are
 conditional fader-start commands, not general PLAY and CUE buttons. An ignored command does not mean the API failed.
 
-These use Pro DJ Link fader-start commands sent only to the selected player's IP, with all other player commands
+Start and Stop use Pro DJ Link fader-start commands sent only to the selected player's IP, with all other player commands
 set to leave unchanged. Players must have distinct numbers from 1 to 4. CDJ-3000 and XDJ-XZ are excluded because
 the documented fader-start feature is unsupported there. Other models still need hardware validation.
 
@@ -241,3 +241,40 @@ virtual player such as player 3 and retry. Do not use this first test during a p
 Commands appear as `player_transport` events and as outgoing fader-start packets in Network with **The bench's own**
 enabled. Arming is shared by clients of that bench, not persisted across restarts, and cleared when the player is
 observed offline, its identity changes or its number conflicts. Uncheck the enable box when finished.
+
+The same opt-in also enables **Sync on**, **Sync off** and **Make master**. These send a unicast command and wait for
+normal status reports to show the result. They do not force a local display change or imply that hardware accepted it.
+CDJ-3000 players may use these commands while their fader-start buttons remain disabled. The new commands need hardware
+validation. Use them only when changing the setup's tempo ownership is safe.
+
+## Observe without a simulated deck
+
+```sh
+python -m deckbench --phone --observe --dj-interface "Ethernet 2"
+```
+
+Use your platform's actual interface name. This announces observer number 7 so players can send their full status,
+but creates no playback cards, simulated mixer, database servers or outgoing beat/status stream. It is not passive
+sniffing. Choose another unused identity with `--observer-number` if needed. A detected number conflict suppresses
+observer announcements and raises a network warning. Fix the conflict and restart the bench.
+
+**Read track info** queries the reported track's source player, not necessarily the player playing it. This is a
+bounded, read-only request, separate from arming controls. Older players require an announced unused number 1 to 4,
+so use `--observer-number 3` only when 3 is free, or use the normal bench with unused virtual player 3 enabled.
+The query requires an analyzed track with a reported ID and an unambiguous online source. Missing artist or duration
+fields remain unknown. Network audio, remote loading and waveform downloads are not provided by this query.
+Firewall TCP rules for serving metadata are not needed for this outgoing query, though local security policies can
+still restrict outbound TCP connections. The existing scoped inbound UDP rule remains necessary on Windows.
+
+## Offline capture replay
+
+New Network exports retain complete packet payloads. You can inspect them without sending anything to the DJ network:
+
+```sh
+python -m deckbench.capture capture.json --seed 42 --loss 5 --delay-ms 10 --jitter-ms 20
+```
+
+This feeds only the decoder, using a virtual clock. Seeded impairments make a run repeatable and can reorder arrivals.
+The JSON result contains device state, packet counts and dropped-packet totals. It does not replay commands onto live
+hardware or render a timed browser session. Older truncated exports are rejected. Keep real captures local, since they
+can contain device identities and track information. Do not commit them.

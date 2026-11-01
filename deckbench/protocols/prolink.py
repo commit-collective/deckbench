@@ -114,6 +114,8 @@ def message(txid, mtype, args):
 
 
 def read_exact(conn, n):
+    if not 0 <= n <= 1024 * 1024:
+        raise ValueError("protocol field is too large")
     data = b""
     while len(data) < n:
         chunk = conn.recv(n - len(data))
@@ -138,10 +140,13 @@ def read_field(conn):
 
 
 def read_message(conn):
-    assert read_field(conn) == ("n", 0x872349AE), "no magic"
+    if read_field(conn) != ("n", 0x872349AE):
+        raise ValueError("no protocol magic")
     txid = read_field(conn)[1]
     mtype = read_field(conn)[1]
     count = read_field(conn)[1]
+    if not isinstance(count, int) or not 0 <= count <= 12:
+        raise ValueError("invalid protocol argument count")
     read_field(conn)                        # the tags
     args = [read_field(conn) for _ in range(count)]
     return txid, mtype, args
@@ -299,6 +304,18 @@ class LinkDeck:
         last_keep = 0.0
         while not self.net.runtime.stopping.is_set():
             now = time.time()
+            if self.net.observer:
+                peers = self.net.monitor.snapshot()
+                conflict = any(d["online"] and d["number"] == self.number for d in peers)
+                if not conflict and now - last_keep >= 1.5:
+                    self.send(s, startup.keepalive(b"deckbench", self.number, self.address, self.mac,
+                                                  self.net.peer_count() + 1), (self.broadcast, self.ports.announce))
+                    last_keep = now
+                if conflict and "observer number conflict" not in self.net.runtime.errors:
+                    self.net.runtime.errors.append("observer number conflict")
+                    log("observer number %d is in use, announcements suspended" % self.number)
+                self.net.runtime.stopping.wait(0.1)
+                continue
             if not self.deck.enabled or self.deck.unplugged:
                 last_keep = last_status = 0.0
                 self.online = False
@@ -412,9 +429,11 @@ class LinkDeck:
         self.net.world.settle(change)
         self.net.world.changed()
 
-    def take_after_handoff(self, sync_number=None):
+    def take_after_handoff(self, sync_number=None, unsolicited=False):
         """The unit's status names this deck as the next master: it is."""
-        if not self.pending:
+        if not self.pending and not (unsolicited and self.deck.enabled and self.deck.sync and self.deck.playing):
+            return
+        if self.deck.master:
             return
         deck = self.deck
 
@@ -526,9 +545,14 @@ class LinkDeck:
                     out = message(txid, 0x4001, [("n", 1), ("n", 0)])
                     kinds = [0x04, 0x07, 0x02, 0x03, 0x0B, 0x0D, 0x0A, 0x23, 0x0F, 0x06, 0x01]
                     for kind in kinds:
-                        text = title if kind == 0x04 else "item %02x" % kind
+                        text = title if kind == 0x04 else ""
+                        value = rbid if kind == 0x04 else 0
+                        if kind == 0x0D and rbid == self.rbid:
+                            value = int(round(self.deck.base_bpm * 100))
+                        if kind == 0x0B and rbid == self.rbid and self.deck.audio:
+                            value = int(self.deck.audio.seconds)
                         out += message(txid, 0x4101, [
-                            ("n", 7), ("n", rbid), ("n", 2 * (len(text) + 1)), ("s", text),
+                            ("n", 0), ("n", value), ("n", 2 * (len(text) + 1)), ("s", text),
                             ("n", 2), ("s", " "), ("n", kind), ("n", 0), ("n", 0),
                             ("n", 0), ("n", 0), ("n", 0)])
                     out += message(txid, 0x4201, [])
@@ -553,7 +577,7 @@ class Prolink(Protocol):
 
     def __init__(self, world, loaded=None, titles=None, model=None, status_length=None,
                  addresses=None, broadcast=BROADCAST, refuse_db=False, strict=False, ports=DEFAULT_PORTS,
-                 claim=False, mixer_name=b"DJM-900NXS2", mixer_address=None, mixer_channels=4, profile=None):
+                 claim=False, mixer_name=b"DJM-900NXS2", mixer_address=None, mixer_channels=4, profile=None, observer=False):
         """world.decks must have the decks (core.Deck, by player number) already.
         loaded: {deck: (source player, slot, rekordbox id)}; titles: {source
         player: {(slot, id): title}}. A deck has by default the track 100 + its
@@ -571,6 +595,7 @@ class Prolink(Protocol):
         127.0.0.33) and its number of channels (4 or 6)."""
         self.world = world
         self.runtime = NetworkRuntime()
+        self.observer = bool(observer)
         self.ports = ports
         self.claim = claim
         # Set when every socket that listens is bound (see listening()): a packet sent before is not lost for want of a listener.
@@ -580,6 +605,8 @@ class Prolink(Protocol):
         self._bound_lock = threading.Lock()
         self.monitor = Monitor(self)         # a log of the packets heard, and the devices on the link
         self.player_controls = set()        # explicitly armed discovered identities, never persisted
+        self.track_metadata = {}
+        self._metadata_lock = threading.Lock()
         self.defended = {}                  # (claimer's address, number): when it was last told that the number is in use
         self.mixer = LinkMixer(self, mixer_name if isinstance(mixer_name, bytes) else mixer_name.encode(), 33,
                                mixer_address, broadcast, mixer_channels)
@@ -600,6 +627,9 @@ class Prolink(Protocol):
             self.decks[n] = LinkDeck(self, deck, loaded.get(n, (n, 3, 100 + n)),
                                      known.get(n, {}), model or (profiles.get(profile)["model"] if profile else None),
                                      (addresses or {}).get(n, "127.0.0.%d" % n), broadcast, refuse_db, strict, ports)
+        if self.observer:
+            for link in self.decks.values():
+                link.name = b"deckbench"
         physical = [link for link in self.decks.values()
                     if not ipaddress.ip_address(link.address).is_loopback]
         if physical:
@@ -629,8 +659,9 @@ class Prolink(Protocol):
         over a port, so there it binds without, and a program that holds the port (rekordbox does) is found."""
         share = os.name != "nt"
         wanted = [(socket.SOCK_DGRAM, link.address, self.ports.beat) for link in self.decks.values()]
-        wanted += [(socket.SOCK_STREAM, link.address, port) for link in self.decks.values()
-                   for port in (self.ports.query, self.ports.db)]
+        if not self.observer:
+            wanted += [(socket.SOCK_STREAM, link.address, port) for link in self.decks.values()
+                       for port in (self.ports.query, self.ports.db)]
         wanted += [(socket.SOCK_DGRAM, "0.0.0.0", self.ports.announce), (socket.SOCK_DGRAM, "0.0.0.0", self.ports.update)]
         for kind, address, port in wanted:
             s = socket.socket(socket.AF_INET, kind)
@@ -664,16 +695,21 @@ class Prolink(Protocol):
             self._bound = 0
         self.check_ports()
         # the listeners: each deck's UDP socket for what is sent to it and its two TCP servers, the sniffer and the fader listener
-        self._expected = 3 * len(self.decks) + 2
+        self._expected = 2 if self.observer else 3 * len(self.decks) + 2
         for n, link in self.decks.items():
             deck = link.deck
-            for target in (link.announce, link.beats, link.control, link.serve_port, link.serve_db):
+            targets = (link.announce,) if self.observer else (link.announce, link.beats, link.control, link.serve_port, link.serve_db)
+            for target in targets:
                 self.runtime.spawn(target)
-            log("%s on %s: track %d:%d:%d at %.0f BPM"
-                % ((deck.name, link.address, link.source, link.slot, link.rbid, deck.base_bpm)))
+            if self.observer:
+                log("observer %d on %s (no simulated playback)" % (link.number, link.address))
+            else:
+                log("%s on %s: track %d:%d:%d at %.0f BPM"
+                    % ((deck.name, link.address, link.source, link.slot, link.rbid, deck.base_bpm)))
         self.runtime.spawn(self.sniff)
         self.runtime.spawn(self.faders)
-        self.runtime.spawn(self.mixer.run)
+        if not self.observer:
+            self.runtime.spawn(self.mixer.run)
         if wait:
             bound = self.ready.wait(wait)
             if not bound or self.runtime.errors:
@@ -817,17 +853,35 @@ class Prolink(Protocol):
 
     def peer_status(self, device, data):
         """Complete handoffs with any external player."""
-        if device["ours"]:
-            return
         with self.world.lock:
             for link in self.decks.values():
                 if not link.deck.enabled or link.deck.unplugged:
                     continue
                 if device["status"]["master"] and link.handing_to == device["number"]:
                     link.finish_handoff()
-                if (link.pending and link.pending_peer == (device.get("packet_source", device["ip"]), device["number"])
-                        and data[0x9F] == link.number):
-                    link.take_after_handoff(device["status"]["sync_counter"])
+                status = device["status"]
+                named = status.get("handoff", 0xFF) == link.number and status["master"]
+                requested = link.pending and link.pending_peer == (device.get("packet_source", device["ip"]), device["number"])
+                if named and (requested or not link.pending and not status["play"]):
+                    link.take_after_handoff(status["sync_counter"], unsolicited=not requested)
+        if not device["ours"]:
+            self.play_changed(None, False)
+
+    def play_changed(self, deck, playing):
+        """A stopped master names a synced playing successor, without forcing its confirmation."""
+        peers = self.monitor.snapshot()
+        candidates = {link.number for link in self.decks.values()
+                      if link.deck.enabled and link.deck.playing and link.deck.sync and not link.deck.unplugged}
+        candidates.update(d["number"] for d in peers if d["online"] and d["kind"] == "player" and d["status"]
+                          and d["status"]["play"] and d["status"]["sync"] and d["number"] is not None)
+        for link in self.decks.values():
+            if not (link.deck.enabled and link.deck.master and not link.deck.playing and not link.deck.unplugged):
+                continue
+            targets = sorted(candidates - {link.number})
+            if targets and link.handing_to == 0xFF:
+                link.handing_to = targets[0]
+                self.runtime.later(4.0, link.cancel_handoff, targets[0])
+                self.world.events.add("automatic_handoff", deck=link.number, target=targets[0])
 
     def describe(self, deck):
         link = self.decks.get(deck.number)
@@ -842,6 +896,13 @@ class Prolink(Protocol):
 
     def info(self):
         devices = self.control_devices()
+        now = time.time()
+        with self._metadata_lock:
+            self.track_metadata = {key: value for key, value in self.track_metadata.items() if now - value[0] < 60}
+            metadata = dict(self.track_metadata)
+        for device in devices:
+            key = self.metadata_key(device)
+            device["metadata"] = metadata[key][1] if key in metadata else None
         return {"unit": dict(self.unit) if self.unit["number"] else None, "settings": self.settings(),
                 "mixer": self.mixer.snapshot(), "devices": devices, "errors": list(self.runtime.errors)}
 
@@ -849,13 +910,42 @@ class Prolink(Protocol):
     def control_identity(device):
         return (device["ip"], device["number"], device["name"], device["mac"])
 
+    def metadata_key(self, device):
+        status = device.get("status") or {}
+        return self.control_identity(device) + tuple(status.get(k) for k in ("source", "slot", "rbid"))
+
+    def refresh_metadata(self, device):
+        from ..metadata import read_track_metadata
+        status = device.get("status") or {}
+        if not status.get("rbid") or status.get("track_type") != 1:
+            return 400, {"error": "no loaded analyzed track reported by this player"}
+        peers = [d for d in self.monitor.snapshot() if d["online"] and d["number"] == status.get("source")]
+        if len(peers) != 1:
+            return 400, {"error": "track source is missing or ambiguous"}
+        occupied = {d["number"] for d in self.monitor.snapshot() if d["online"]}
+        sender = next((l for l in self.decks.values() if 1 <= l.number <= 4 and l.number not in occupied
+                       and (l.deck.enabled or self.observer) and not l.deck.unplugged), None)
+        if sender is None:
+            return 400, {"error": "metadata needs an announced unused player number 1 to 4"}
+        try:
+            metadata = read_track_metadata(peers[0]["ip"], sender.address, sender.number, status["slot"],
+                                           status["rbid"], self.ports.query)
+        except (OSError, EOFError, ValueError) as error:
+            return 400, {"error": "metadata query failed: %s" % error}
+        with self._metadata_lock:
+            if len(self.track_metadata) >= 128:
+                self.track_metadata.clear()
+            self.track_metadata[self.metadata_key(device)] = (time.time(), metadata)
+        self.world.events.add("metadata_read", deck=device["number"], title=metadata.get("title", ""))
+        return 200, {}
+
     def control_devices(self):
         devices = self.monitor.snapshot()
         eligible = set()
         for device in devices:
             number = device["number"]
-            available = (device["online"] and device["kind"] == "player" and number in (1, 2, 3, 4)
-                         and device["name"].upper() not in ("CDJ-3000", "XDJ-XZ")
+            available = (device["online"] and device["kind"] == "player"
+                         and (number in (1, 2, 3, 4) or device["name"].upper() == "CDJ-3000" and number in (5, 6))
                          and sum(d["online"] and d["number"] == number for d in devices) == 1
                          and sum(d["online"] and d["ip"] == device["ip"] for d in devices) == 1
                          and not any(l.deck.enabled and l.number == number for l in self.decks.values()))
@@ -863,13 +953,14 @@ class Prolink(Protocol):
             if available:
                 eligible.add(identity)
             device["transport_available"] = bool(available)
+            device["fader_start_supported"] = device["name"].upper() not in ("CDJ-3000", "XDJ-XZ")
             device["transport_armed"] = bool(available and identity in self.player_controls)
         self.player_controls.intersection_update(eligible)
         return devices
 
     def player_api(self, parts, query):
         """Arm a discovered player or send one unicast fader-start command."""
-        if len(parts) != 4 or parts[2] not in ("arm", "command"):
+        if len(parts) != 4 or parts[2] not in ("arm", "command", "metadata"):
             return 404, {"error": "no such player control"}
         device = next((d for d in self.control_devices() if d["ip"] == parts[1]), None)
         if not device or not device["transport_available"]:
@@ -877,6 +968,10 @@ class Prolink(Protocol):
         if query.get("number", [None])[0] != str(device["number"]):
             return 409, {"error": "player identity changed, refresh and enable control again"}
         identity = self.control_identity(device)
+        if parts[2] == "metadata":
+            if parts[3] != "refresh":
+                return 404, {"error": "unknown metadata action"}
+            return self.refresh_metadata(device)
         if parts[2] == "arm":
             if parts[3] not in ("0", "1"):
                 return 400, {"error": "arm must be 0 or 1"}
@@ -886,23 +981,30 @@ class Prolink(Protocol):
                 self.player_controls.discard(identity)
             return 200, {}
         command = parts[3]
-        if command not in ("start", "stop"):
-            return 400, {"error": "a command is start or stop"}
+        if command not in ("start", "stop", "sync-on", "sync-off", "master"):
+            return 400, {"error": "a command is start, stop, sync-on, sync-off or master"}
+        if command in ("start", "stop") and not device["fader_start_supported"]:
+            return 400, {"error": "this player does not support fader start"}
         if identity not in self.player_controls:
-            return 403, {"error": "enable transport control for this player first"}
+            return 403, {"error": "enable player control for this player first"}
         occupied = {d["number"] for d in self.monitor.snapshot() if d["online"]}
         sender = next((l for l in sorted(self.decks.values(), key=lambda link: not link.deck.enabled)
                        if not l.deck.unplugged and l.number not in occupied), None)
         if sender is None:
             return 400, {"error": "no connected bench interface with an unused player number available"}
-        packet = fader_start_packet(sender.name, sender.number, {device["number"]: command})
+        if command in ("start", "stop"):
+            packet = fader_start_packet(sender.name, sender.number, {device["number"]: command})
+        else:
+            value = {"sync-on": 0x10, "sync-off": 0x20, "master": 0x01}[command]
+            packet = header(0x2A, sender.name) + bytes((1, 0, sender.number, 0, 8, 0, 0, 0, sender.number, 0, 0, 0, value))
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
                 sock.bind((sender.address, 0))
                 sender.send(sock, packet, (device["ip"], self.ports.beat))
         except OSError as error:
             return 400, {"error": "could not send player command: %s" % error}
-        self.world.events.add("player_transport", deck=device["number"], ip=device["ip"], command=command)
+        event = "player_transport" if command in ("start", "stop") else "player_sync"
+        self.world.events.add(event, deck=device["number"], ip=device["ip"], command=command)
         return 200, {}
 
     @staticmethod
@@ -912,6 +1014,8 @@ class Prolink(Protocol):
     def mixer_do(self, params):
         """What a scenario step or a POST to /api/mixer does: (ok, message)."""
         m = self.mixer
+        if self.observer and self.truthy(params.get("on", False)):
+            return False, "mixer simulation is disabled in observer mode"
         if "on" in params and not m.set_on(self.truthy(params["on"])):
             return False, "the mixer cannot be on: its address (%s) is not this machine's" % m.address
         if "master" in params:
@@ -1015,7 +1119,7 @@ class Prolink(Protocol):
     def settings(self):
         links = list(self.decks.values())
         return {"strict": any(l.strict for l in links), "refuse_db": any(l.refuse_db for l in links),
-                "claim": self.claim, "mixer": self.mixer.on, "profile": self.profile,
+                "claim": self.claim, "mixer": self.mixer.on, "profile": self.profile, "observer": self.observer,
                 "model": links[0].name.decode() if len({l.name for l in links}) == 1 else ""}
 
     def set_option(self, name, value):

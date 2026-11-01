@@ -7,6 +7,9 @@ Run these commands from a checkout or an installed package.
 Options (`python -m deckbench --help`):
 
 - `--decks N` or `--numbers N,N,...`: the players (default 1 to 4)
+- `--observe`: announce an observer, with no simulated playback decks, beat packets or database servers.
+  `--observer-number N` selects its unused identity, default 7. Older players may require an unused number 1 to 4
+  for metadata queries. This is an announced observer, not a silent packet capture
 - `--on`: start them on (otherwise off, switch on from the page)
 - `--init DECK=play,sync,master,loopN`: start a deck on, playing, synced, the master, looping N beats
 - `--loaded DECK=SOURCE:SLOT:ID`, `--titles FILE`: the track a deck has loaded
@@ -80,7 +83,8 @@ Options (`python -m deckbench --help`):
     GET  /api/examples                the scenarios that come with the bench (deckbench/examples)
     GET  /api/stream                  the state, the events and the scenario as server-sent events (what the page follows)
     POST /api/player/<ip>/arm/<0|1>?number=<n>       opt in to transport control of a discovered online player
-    POST /api/player/<ip>/command/<start|stop>?number=<n>   send fader start or stop to the armed player
+    POST /api/player/<ip>/command/<command>?number=<n>   start, stop, sync-on, sync-off or master, requires arming
+    POST /api/player/<ip>/metadata/refresh?number=<n>    read the loaded analyzed track's metadata, no arming required
     POST /api/mixer/on/<0|1>          the mixer on or off. Also master/<0|1>, channel/<n>/fader/<0-100>, channel/<n>/fader_start/<0|1>,
                                       channel/<n>/command/<start|stop>
     POST /api/loss/<percent>          that share of the datagrams is lost (0 for none)

@@ -230,6 +230,8 @@ class World:
                 deck.anchor_pos = stop_at
         self.settle(change)
         log("%s %s" % (deck.name, "plays" if on else "pauses"))
+        for protocol in self.protocols:
+            protocol.play_changed(deck, on)
         self.changed()
 
     def seek(self, deck, beats, relative=False, at=None):
@@ -417,6 +419,10 @@ class World:
 class Protocol:
     """What a protocol gives the World to call. All do nothing here."""
     name = "protocol"
+
+    def play_changed(self, deck, playing):
+        """A local player's playback state changed."""
+        pass
 
     def external_master_bpm(self):
         """The tempo of a master that is not one of the decks, or None."""

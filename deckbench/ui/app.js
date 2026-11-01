@@ -124,6 +124,9 @@ function renderChips() {
            "ok", "Unit: player " + unit.number)
     : chip("no unit heard yet", "warn"));
   const set = settingsOf(s), info = s.bench || {};
+  if (set.observer) box.append(chip("observer", null));
+  const errors = s.protocols && s.protocols.prolink && s.protocols.prolink.errors || [];
+  if (errors.length) box.append(chip("network warning", "warn", null, errors.join("\n")));
   if (set.strict) box.append(chip("strict decks"));
   if (set.refuse_db) box.append(chip("database refused"));
   const mixer = mixerOf(s);
@@ -361,13 +364,21 @@ function buildDevice(d) {
       h("summary", {}, "Player control"),
       h("label", {class: "hint"}, h("input", {type: "checkbox", class: "player-arm",
         onchange: (e) => act("api/player/" + d.ip + "/arm/" + (e.target.checked ? 1 : 0) + "?number=" + e.target.dataset.number)}),
-        " Enable transport control"),
+        " Enable player control"),
       h("p", {class: "hint"}, "Start only works at cue. Stop returns playback to cue and does nothing while paused."),
-      h("div", {class: "player-actions"}, ...[["start", "Start cued track"], ["stop", "Stop playing track"]].map(([command, label]) =>
-        h("button", {class: "btn small", disabled: true, onclick: (e) => {
+      h("div", {class: "player-actions"}, ...[["start", "Start cued track"], ["stop", "Stop playing track"],
+        ["sync-on", "Sync on"], ["sync-off", "Sync off"], ["master", "Make master"]].map(([command, label]) =>
+        h("button", {class: "btn small", "data-command": command, disabled: true, onclick: (e) => {
           api("api/player/" + d.ip + "/command/" + command + "?number=" + e.currentTarget.dataset.number)
             .then(() => toast("Command sent. Check the player's reported state.", "info")).catch(() => {});
-        }}, label)))));
+        }}, label))),
+      h("button", {class: "btn small player-read", onclick: (e) => {
+        const button = e.currentTarget;
+        button.dataset.pending = "1";
+        button.disabled = true;
+        api("api/player/" + d.ip + "/metadata/refresh?number=" + button.dataset.number)
+          .then(() => toast("Track information read.", "ok")).catch(() => {}).finally(() => { delete button.dataset.pending; renderDevices(); });
+      }}, "Read track info")));
 }
 
 function renderDevices() {
@@ -392,7 +403,9 @@ function renderDevices() {
       arm.checked = !!d.transport_armed;
       arm.dataset.number = d.number;
       for (const button of control.querySelectorAll("button")) {
-        button.disabled = !d.transport_armed || !d.online || !S.connected;
+        button.disabled = button.classList.contains("player-read") ? !!button.dataset.pending || !d.online || !st || !st.rbid || !S.connected :
+          !d.transport_armed || !d.online || !S.connected ||
+            (["start", "stop"].includes(button.dataset.command) && d.fader_start_supported === false);
         button.dataset.number = d.number;
       }
     }
@@ -409,6 +422,10 @@ function renderDevices() {
     else if (st) {
       track.append(h("b", {}, st.state), st.rbid ? " \u00b7 player " + st.source + " \u00b7 " + (SLOTS[st.slot] || "slot " + st.slot) + " \u00b7 id " + st.rbid : "");
     } else track.textContent = d.online ? "no status yet" : "gone quiet";
+    if (d.metadata && d.metadata.title) {
+      track.textContent = "";
+      track.append(h("b", {}, d.metadata.title), d.metadata.artist ? " \u00b7 " + d.metadata.artist : "");
+    }
     /* the tags are a column at the right of the header, the height of the number's box: the unit tag at the top and the state (side by side, wrapping onto
        a row under when there are too many for the width) at the bottom. The column is always there: a flag that comes or goes does not change the card's height */
     const slot = q("unit-slot"), flags = q("flags");
@@ -437,6 +454,7 @@ function renderDevices() {
       q("lcd").firstChild.textContent = bpm != null && d.online ? bpm.toFixed(1) : "--";
       if (st && st.pitch) facts.append(h("span", {}, "pitch " + (st.pitch > 0 ? "+" : "") + st.pitch + " %"));
       if (d.firmware) facts.append(h("span", {}, "firmware " + d.firmware));
+      if (d.precise) facts.append(h("span", {}, "position " + (d.precise.position_ms / 1000).toFixed(3) + " s"));
     }
     if (d.peers != null) facts.append(h("span", {}, "knows " + d.peers + " device" + (d.peers === 1 ? "" : "s")));
     if (d.mac) facts.append(h("span", {}, d.mac));

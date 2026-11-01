@@ -40,6 +40,17 @@ class PlayerControl(unittest.TestCase):
         self.assertTrue(self.net.info()["devices"][0]["transport_armed"])
         self.assertFalse(self.net.mixer.on)
 
+    def test_metadata_is_read_only_and_tracks_the_loaded_identity(self):
+        self.world.decks[3].enabled = True
+        with patch("deckbench.metadata.read_track_metadata", return_value={"title": "Synthetic track"}) as read:
+            self.assertEqual(self.call("metadata", "refresh")[0], 200)
+        self.assertEqual(read.call_args.args[:5], (self.ip, "127.0.0.3", 3, 3, 102))
+        self.assertFalse(self.net.info()["devices"][0]["transport_armed"])
+        self.assertEqual(self.net.info()["devices"][0]["metadata"]["title"], "Synthetic track")
+        self.player.rbid = 103
+        self.feed()
+        self.assertIsNone(self.net.info()["devices"][0]["metadata"])
+
     def test_unicast_targets_only_the_chosen_player(self):
         self.call("arm", "1")
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
@@ -86,13 +97,29 @@ class PlayerControl(unittest.TestCase):
         self.assertEqual(self.call("command", "stop")[0], 400)
 
     def test_unsupported_model_and_numbers_are_rejected(self):
+        self.net.monitor.devices.clear()
         self.player.name = b"CDJ-3000"
         self.feed()
-        self.assertEqual(self.call("arm", "1")[0], 400)
+        self.assertEqual(self.call("arm", "1")[0], 200)
+        self.assertEqual(self.call("command", "start")[0], 400)
+        self.net.monitor.devices.clear()
         self.player.name = b"CDJ-2000NXS2"
         self.player.deck.number = 5
         self.feed()
         self.assertEqual(self.call("arm", "1", "5")[0], 400)
+
+    def test_sync_commands_use_the_documented_packet_and_stay_opt_in(self):
+        self.assertEqual(self.call("command", "master")[0], 403)
+        self.call("arm", "1")
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
+            receiver.bind((self.ip, self.net.ports.beat))
+            receiver.settimeout(1)
+            for command, value in (("sync-on", 0x10), ("sync-off", 0x20), ("master", 1)):
+                self.assertEqual(self.call("command", command)[0], 200)
+                packet, source = receiver.recvfrom(1024)
+                self.assertEqual((packet[0x0A], packet[0x21], packet[0x2B]), (0x2A, 3, value))
+                self.assertEqual(source[0], "127.0.0.3")
+        self.assertFalse(self.net.info()["devices"][0]["status"]["master"])
 
     def test_missing_target_never_sends(self):
         self.ip = "127.0.0.99"
