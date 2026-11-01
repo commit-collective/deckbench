@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+from time import sleep as idle_sleep
 
 from . import __version__
 from .core import Deck, World, log
@@ -327,6 +328,7 @@ def main(argv=None):
         if a.then_exit:
             done.wait()
             kinds = {o[1] for o in outcomes}
+            link.stop()
             return 1 if "failed" in kinds else 3 if "skipped" in kinds else 0
     if a.exit_on_eof:
         def watch():
@@ -341,7 +343,8 @@ def main(argv=None):
     log("running; Ctrl-C to stop")
     try:
         while True:
-            time.sleep(1)
+            idle_sleep(1)
     except KeyboardInterrupt:
         pass
+    link.stop()
     return 0

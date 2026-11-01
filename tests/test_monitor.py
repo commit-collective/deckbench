@@ -104,6 +104,7 @@ class Heard(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.player.close()
+        cls.net.stop()
         for deck in cls.world.decks.values():
             cls.world.set_enabled(deck, False)
 
@@ -324,6 +325,7 @@ class Aligned(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.player.close()
+        cls.net.stop()
         for deck in cls.world.decks.values():
             cls.world.set_enabled(deck, False)
 
@@ -433,6 +435,7 @@ class Api(unittest.TestCase):
     def tearDownClass(cls):
         cls.server.shutdown()
         cls.server.server_close()
+        cls.net.stop()
 
     def call(self, path, method="GET"):
         with urllib.request.urlopen(urllib.request.Request(self.url + path, method=method), timeout=5) as r:

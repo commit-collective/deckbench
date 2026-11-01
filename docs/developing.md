@@ -1,5 +1,9 @@
 # Development checks
 
+An in-process Pro DJ Link instance owns its network workers. Call `Prolink.stop()` in a cleanup or `finally` block.
+It closes sockets, cancels handoff timers and joins workers. Restarting that instance reuses its configured ports.
+Mock the CLI's `idle_sleep`, not `time.sleep` on the shared Python module, to avoid interrupting other workers.
+
 From the repository root:
 
 ```sh
@@ -27,9 +31,8 @@ instead of guessing a sleep. UDP ordering is per socket, not across ports.
 When a beat depends on a new status, confirm that status was processed before
 sending the beat. A final flush on both ports does not establish their order.
 
-Tests currently leave some protocol daemon threads alive until the process
-ends. Each fixture needs its own port range. A future lifecycle change should
-add explicit stop/join ownership before sharing ports between fixtures.
+Fixtures should register `Prolink.stop()` as cleanup, including when setup fails. Some older fixtures still depend on
+process exit, so keep separate port ranges until their cleanup has been migrated and verified.
 
 ## CI failures
 

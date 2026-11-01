@@ -33,6 +33,7 @@ class Page(unittest.TestCase):
     def tearDownClass(cls):
         cls.server.shutdown()
         cls.server.server_close()
+        cls.prolink.stop()
 
     def get(self, path):
         with urllib.request.urlopen(self.url + path, timeout=5) as r:

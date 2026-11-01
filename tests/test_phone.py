@@ -79,7 +79,7 @@ class Pairing(unittest.TestCase):
             self.assertIn("phone pairing link: " + phone.pairing_url("192.0.2.10", int(urlsplit(bench.url).port),
                                                                     "test-token"), output)
 
-    @mock.patch("deckbench.cli.time.sleep", side_effect=KeyboardInterrupt)
+    @mock.patch("deckbench.cli.idle_sleep", side_effect=KeyboardInterrupt)
     @mock.patch("deckbench.cli.Prolink")
     @mock.patch("deckbench.phone.dj_interface")
     def test_cli_uses_selected_address_and_mask(self, select, prolink, sleep):

@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Add explicit network worker shutdown, socket cleanup and cancellable handoff timers.
+- Isolate CLI sleep mocking so checks cannot interrupt other network workers.
 - Add opt-in fader-start transport controls for discovered players without enabling the simulated mixer.
 - Explain that hardware fader-start commands require a stopped player at cue to start and a playing player to return to cue.
 

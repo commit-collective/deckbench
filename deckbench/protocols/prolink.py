@@ -45,7 +45,7 @@ import ipaddress
 from ..core import Protocol, log
 
 from .. import profiles
-from ..net import share, interface_macs
+from ..net import share, interface_macs, NetworkRuntime
 from . import startup
 from .mixer import LinkMixer, parse_on_air, fader_start_packet
 from .monitor import Monitor
@@ -194,7 +194,8 @@ class LinkDeck:
             if not self.deck.enabled or self.deck.unplugged:
                 return False
             self.send(sock, packet, (self.broadcast, self.ports.announce))
-            time.sleep(0.3)
+            if self.net.runtime.stopping.wait(0.3):
+                return False
         return True
 
     def flags(self):
@@ -291,17 +292,17 @@ class LinkDeck:
             self.net.monitor.feed(packet, self.address, addr[1], to=addr[0])
 
     def announce(self):
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s = self.net.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         s.bind((self.address, 0))
         last_status = 0.0
         last_keep = 0.0
-        while True:
+        while not self.net.runtime.stopping.is_set():
             now = time.time()
             if not self.deck.enabled or self.deck.unplugged:
                 last_keep = last_status = 0.0
                 self.online = False
-                time.sleep(0.1)
+                self.net.runtime.stopping.wait(0.1)
                 continue
             if not self.online:
                 self.online = True
@@ -319,18 +320,18 @@ class LinkDeck:
                 for destination in self.net.status_destinations(self):
                     self.send(s, packet, (destination, self.ports.update))
                 last_status = now
-            time.sleep(0.05)
+            self.net.runtime.stopping.wait(0.05)
 
     def beats(self):
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s = self.net.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         s.bind((self.address, 0))
         deck = self.deck
         sent = None                         # the beat (counted from the anchor) last sent
-        while True:
+        while not self.net.runtime.stopping.is_set():
             if not (deck.enabled and deck.playing) or deck.unplugged:
                 sent = None
-                time.sleep(0.05)
+                self.net.runtime.stopping.wait(0.05)
                 continue
             with self.net.world.lock:
                 now = time.time()
@@ -342,18 +343,20 @@ class LinkDeck:
             if packet:
                 self.send(s, packet, (self.broadcast, self.ports.beat))
                 sent = beat
-            time.sleep(min(max(due, 0.002), 0.02))
+            self.net.runtime.stopping.wait(min(max(due, 0.002), 0.02))
 
     def control(self):
         """Master hand-off requests and sync commands, sent to this deck."""
-        s = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+        s = share(self.net.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM))
         s.bind((self.address, self.ports.beat))
-        out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        out = self.net.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM)
         out.bind((self.address, 0))
         self.net.listening()
         deck, world = self.deck, self.net.world
-        while True:
+        while not self.net.runtime.stopping.is_set():
             data, addr = s.recvfrom(2048)
+            if self.net.runtime.stopping.is_set():
+                return
             self.net.monitor.feed(data, addr[0], self.ports.beat, to=self.address)
             if not deck.enabled or deck.unplugged or len(data) < 0x25 or data[:10] != MAGIC:
                 continue
@@ -374,7 +377,7 @@ class LinkDeck:
                     0x01, 0x00, self.number, 0x00, 0x08, 0x00, 0x00, 0x00, self.number,
                     0x00, 0x00, 0x00, 0x01])
                 self.send(out, bytes(reply), (addr[0], self.ports.beat))
-                threading.Timer(4.0, self.cancel_handoff, args=(sender,)).start()
+                self.net.runtime.later(4.0, self.cancel_handoff, sender)
                 world.changed()
             elif kind == 0x2A:                                   # a sync command
                 command = data[0x2B] if len(data) > 0x2B else 0
@@ -440,15 +443,16 @@ class LinkDeck:
 
     # -- TCP --
     def serve_port(self):
-        srv = socket.socket()
+        srv = self.net.runtime.socket()
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         srv.bind((self.address, self.ports.query))
         srv.listen(5)
         self.net.listening()
-        while True:
+        while not self.net.runtime.stopping.is_set():
             conn, _ = srv.accept()
+            self.net.runtime.own(conn)
             if not self.deck.enabled or self.deck.unplugged:
-                conn.close()
+                self.net.runtime.release(conn)
                 continue
             try:
                 length = struct.unpack(">I", read_exact(conn, 4))[0]
@@ -457,20 +461,21 @@ class LinkDeck:
                     log("%s: told the database port" % self.deck.name)
             except (EOFError, OSError):
                 pass
-            conn.close()
+            self.net.runtime.release(conn)
 
     def serve_db(self):
-        srv = socket.socket()
+        srv = self.net.runtime.socket()
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         srv.bind((self.address, self.ports.db))
         srv.listen(5)
         self.net.listening()
-        while True:
+        while not self.net.runtime.stopping.is_set():
             conn, _ = srv.accept()
+            self.net.runtime.own(conn)
             if not self.deck.enabled or self.deck.unplugged:
-                conn.close()
+                self.net.runtime.release(conn)
                 continue
-            threading.Thread(target=self.session, args=(conn,), daemon=True).start()
+            self.net.runtime.spawn(self.session, conn)
 
     def unknown_player(self, requester):
         """Strict: a device is only a player this deck knows if it announced itself with that number (the unit under test
@@ -533,7 +538,7 @@ class LinkDeck:
                     conn.sendall(message(txid, 0x4003, []))
         except (EOFError, OSError, ValueError, AssertionError):
             pass
-        conn.close()
+        self.net.runtime.release(conn)
 
 
 def dmst_requester(args):
@@ -565,6 +570,7 @@ class Prolink(Protocol):
         being there at once. The mixer (off until it is switched on) is a DJM: its name, its address (default
         127.0.0.33) and its number of channels (4 or 6)."""
         self.world = world
+        self.runtime = NetworkRuntime()
         self.ports = ports
         self.claim = claim
         # Set when every socket that listens is bound (see listening()): a packet sent before is not lost for want of a listener.
@@ -652,20 +658,34 @@ class Prolink(Protocol):
     def start(self, wait=5.0):
         """Starts the threads, and waits (up to `wait` seconds) until every socket that listens is bound: what is sent from the moment
         this returns is heard."""
+        if self.runtime.stopping.is_set():
+            self.runtime = NetworkRuntime()
+            self.ready.clear()
+            self._bound = 0
         self.check_ports()
         # the listeners: each deck's UDP socket for what is sent to it and its two TCP servers, the sniffer and the fader listener
         self._expected = 3 * len(self.decks) + 2
         for n, link in self.decks.items():
             deck = link.deck
             for target in (link.announce, link.beats, link.control, link.serve_port, link.serve_db):
-                threading.Thread(target=target, daemon=True).start()
+                self.runtime.spawn(target)
             log("%s on %s: track %d:%d:%d at %.0f BPM"
                 % ((deck.name, link.address, link.source, link.slot, link.rbid, deck.base_bpm)))
-        threading.Thread(target=self.sniff, daemon=True).start()
-        threading.Thread(target=self.faders, daemon=True).start()
-        threading.Thread(target=self.mixer.run, daemon=True).start()
+        self.runtime.spawn(self.sniff)
+        self.runtime.spawn(self.faders)
+        self.runtime.spawn(self.mixer.run)
         if wait:
-            self.ready.wait(wait)
+            bound = self.ready.wait(wait)
+            if not bound or self.runtime.errors:
+                errors = ", ".join(self.runtime.errors) or "listeners did not become ready"
+                self.stop()
+                raise PortError(errors)
+
+    def stop(self):
+        """Stop this protocol's workers and release its sockets and timers."""
+        self.mixer.changed.set()
+        self.player_controls.clear()
+        return self.runtime.close()
 
     def apply_profile(self, name, rename=True, resize=True, **_):
         """Stands in for another model of player (profiles.py): its name, the length of its statuses, its nexus byte and
@@ -745,11 +765,13 @@ class Prolink(Protocol):
     def faders(self):
         """Fader start packets (type 0x02, broadcast on 50001, as a mixer sends them): a byte for each
         of the players 1 to 4, 0 start, 1 stop, 2 leave it."""
-        s = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+        s = share(self.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM))
         s.bind(("", self.ports.beat))
         self.listening()
-        while True:
+        while not self.runtime.stopping.is_set():
             data, addr = s.recvfrom(2048)
+            if self.runtime.stopping.is_set():
+                return
             self.monitor.feed(data, addr[0], self.ports.beat)
             flags = parse_on_air(data)
             if flags is not None:
@@ -821,7 +843,7 @@ class Prolink(Protocol):
     def info(self):
         devices = self.control_devices()
         return {"unit": dict(self.unit) if self.unit["number"] else None, "settings": self.settings(),
-                "mixer": self.mixer.snapshot(), "devices": devices}
+                "mixer": self.mixer.snapshot(), "devices": devices, "errors": list(self.runtime.errors)}
 
     @staticmethod
     def control_identity(device):
@@ -1060,14 +1082,14 @@ class Prolink(Protocol):
                     link.pending_peer = None
                     raise
                 log("%s asks player %s to yield the master role" % (deck.name, peer["number"]))
-                threading.Timer(3.0, link.give_up).start()
+                self.runtime.later(3.0, link.give_up)
                 return
             for other in world.decks.values():
                 if other is not deck and other.enabled and other.master:
                     olink = self.decks.get(other.number)
                     if olink:
                         olink.handing_to = deck.number
-                        threading.Timer(1.0, olink.finish_handoff, args=(deck.number,)).start()
+                        self.runtime.later(1.0, olink.finish_handoff, deck.number)
                     else:
                         other.master = False
             deck.master = True
@@ -1086,7 +1108,7 @@ class Prolink(Protocol):
         unit takes it from a deck that has agreed to yield it."""
         socks = []
         for port in (self.ports.announce, self.ports.update):
-            s = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+            s = share(self.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM))
             try:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
             except (AttributeError, OSError):
@@ -1098,13 +1120,13 @@ class Prolink(Protocol):
         # deck's address) goes to the socket bound to that address, not to the
         # ones bound to any address: a socket for each deck.
         for link in self.decks.values():
-            s = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+            s = share(self.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM))
             s.bind((link.address, self.ports.update))
             s.settimeout(0.5)
             socks.append((s, self.ports.update))
         self.listening()
         world, unit = self.world, self.unit
-        while True:
+        while not self.runtime.stopping.is_set():
             ready, _, _ = select.select([s for s, _ in socks], [], [], 0.5)
             for s in ready:
                 data, addr = s.recvfrom(2048)

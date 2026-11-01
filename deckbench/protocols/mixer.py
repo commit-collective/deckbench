@@ -178,11 +178,12 @@ class LinkMixer:
             if not self.on:
                 return False
             self.send(packet, self.net.ports.announce)
-            time.sleep(0.3)
+            if self.net.runtime.stopping.wait(0.3):
+                return False
         return True
 
     def run(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock = self.net.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         try:
             self.sock.bind((self.address, 0))
@@ -192,7 +193,7 @@ class LinkMixer:
             return
         last_keep = last_air = 0.0
         was_on = False
-        while True:
+        while not self.net.runtime.stopping.is_set():
             if not self.on:
                 was_on = False
                 self.changed.wait(0.2)
@@ -211,4 +212,4 @@ class LinkMixer:
                 self.changed.clear()
                 self.send(on_air_packet(self.name, self.number, self.flags(), self.six), self.net.ports.beat)
                 last_air = now
-            time.sleep(0.02)
+            self.net.runtime.stopping.wait(0.02)

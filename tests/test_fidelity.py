@@ -85,6 +85,7 @@ class Mixer(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.mixer.set_on(False)
+        cls.net.stop()
         for deck in cls.world.decks.values():
             cls.world.set_enabled(deck, False)
         for s in (cls.keepalives, cls.statuses, cls.beats):
@@ -363,6 +364,7 @@ class Api(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.net.mixer.set_on(False)
+        cls.net.stop()
         cls.server.shutdown()
         cls.server.server_close()
 

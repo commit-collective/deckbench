@@ -79,6 +79,7 @@ class Bench(unittest.TestCase):
     def tearDownClass(cls):
         cls.server.shutdown()
         cls.server.server_close()
+        cls.prolink.stop()
         for s in (cls.keepalives, cls.statuses, cls.beats):
             s.close()
 
