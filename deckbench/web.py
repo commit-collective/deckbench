@@ -203,6 +203,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
             try:
                 last = {"state": None, "scenario": None}
                 sent_events, beat, generation = 0, 0.0, world.events.generation
+                send_event("cleared", "{}")   # a reconnect replays the current server history
                 while True:
                     snap = world.snapshot()
                     now = snap.pop("now")
@@ -263,7 +264,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 if not found:
                     self.send(200, json.dumps({"packets": [], "next": 0, "counts": {}}))
                 else:
-                    self.send(200, json.dumps(found[0].monitor.since(since, query.get("noisy", ["1"])[0] != "0", max(1, min(limit, 2000)))))
+                    self.send(200, json.dumps(found[0].monitor.since(since, query.get("noisy", ["1"])[0] != "0", max(1, min(limit, 20000)))))
             elif path == "/api/unit":
                 self.send(200, json.dumps(world.unit_state()))
             elif path == "/api/examples":
@@ -297,6 +298,11 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 world.changed()
                 return self.send(200, json.dumps(got))
             journal.note(self.path)
+            if parts == ["api", "mark"]:
+                label = query.get("text", [""])[0].strip()
+                if not label or len(label) > 500:
+                    return self.send(400, json.dumps({"error": "marker text must contain 1 to 500 characters"}))
+                return self.send(200, json.dumps(world.events.add("marker", text=label)))
             if parts[:2] in (["api", "mixer"], ["api", "player"]):
                 for protocol in world.protocols:
                     result = protocol.handle_api(parts[1:], query)

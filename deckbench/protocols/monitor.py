@@ -14,6 +14,7 @@ The layouts are those of the other modules here (Deep Symmetry's analysis). It r
 odd is logged as it is and its device is not updated: it must not stop the bench.
 """
 import collections
+import json
 import struct
 import threading
 import time
@@ -53,10 +54,11 @@ class Monitor:
     def __init__(self, net, clock=None):
         self.net = net
         self.clock = clock or (lambda: time.time())
-        self.began = self.clock()
+        self.began = net.world.events.began if clock is None else self.clock()
         self.lock = threading.Lock()
         self.n = 0
-        self.rings = {"noisy": collections.deque(maxlen=1500), "rest": collections.deque(maxlen=2500)}
+        self.rings = {"noisy": collections.deque(maxlen=12000), "rest": collections.deque(maxlen=8000)}
+        self.recording = None
         self.devices = {}                       # by address
         self.counts = collections.Counter()
         self.recent = {}                        # (source, port, bytes): when it was last heard
@@ -123,7 +125,24 @@ class Monitor:
                     "ours": ours, "len": len(data), "text": summary,
                     "name": device["name"] if device else "", "number": device["number"] if device else None,
                     "hex": data.hex()}
+            item["session"] = self.net.world.events.session
             self.rings["noisy" if kind in NOISY else "rest"].append(item)
+            if self.recording:
+                self.recording.write(json.dumps(item) + "\n")
+                self.recording.flush()
+
+    def record(self, path):
+        """Keep all observed UDP packets as JSON Lines, independent of UI filters."""
+        with self.lock:
+            if self.recording:
+                raise ValueError("a capture is already open")
+            self.recording = open(path, "x", encoding="utf-8")
+
+    def close(self):
+        with self.lock:
+            if self.recording:
+                self.recording.close()
+                self.recording = None
 
     # -- the log --
     def since(self, n=0, noisy=True, limit=400):
@@ -132,7 +151,8 @@ class Monitor:
             items = [p for ring in ((self.rings["noisy"], self.rings["rest"]) if noisy else (self.rings["rest"],)) for p in ring if p["n"] > n]
             total = self.n
         items.sort(key=lambda p: p["n"])
-        return {"packets": items[-limit:], "next": total, "counts": dict(self.counts)}
+        return {"packets": items[-limit:], "next": total, "counts": dict(self.counts),
+                "session": self.net.world.events.session, "started": self.began}
 
     def clear(self):
         with self.lock:
@@ -207,7 +227,7 @@ class Monitor:
             d["mac"] = ":".join("%02x" % b for b in data[0x26:0x2C])
             d["kind"] = {1: "player", 2: "mixer"}.get(data[0x34] if n > 0x34 else 0, d["kind"] or "device")
             d["peers"] = data[0x30]
-            d["unit"] = d["name"].startswith("DJS-")
+            d["unit"] = self.net.matches_target(d["name"], d["number"], d["ip"])
             return "%s #%d at %s, %s, knows %d device%s" % (d["name"], d["number"], ".".join(str(b) for b in data[0x2C:0x30]),
                                                             d["kind"], d["peers"], "" if d["peers"] == 1 else "s")
         if kind == "hello" and n >= 0x25:
@@ -260,7 +280,7 @@ class Monitor:
         d["name"] = text(data, 0x0B, 0x1F) or d["name"]
         d["number"] = data[0x21]
         d["kind"] = d["kind"] or "player"
-        d["unit"] = d["name"].startswith("DJS-")
+        d["unit"] = self.net.matches_target(d["name"], d["number"], d["ip"])
         d["firmware"] = text(data, 0x7C, 0x80)
         state = data[0x7B]
         playing = bool(flags & 0x40)
@@ -271,6 +291,7 @@ class Monitor:
               "track_beat": beat_in_track if beat_in_track not in (0, 0xFFFFFFFF) else None,     # counted from 1: 0 is a player with no track (a sampler)
               "source": data[0x28], "slot": data[0x29], "track_type": data[0x2A], "rbid": struct.unpack(">I", data[0x2C:0x30])[0],
               "sync_counter": struct.unpack(">I", data[0x84:0x88])[0], "handoff": data[0x9F], "seen": now}
+        previous = d.get("status") or {}
         if d["ours"]:
             d["status"] = st
         else:
@@ -281,6 +302,11 @@ class Monitor:
                 for deck in self.net.world.decks.values():
                     deck.reanchor(at)
                 d["status"] = st
+        if not d["ours"]:
+            changed = {k: st[k] for k in ("play", "master", "sync", "on_air", "state", "source", "slot", "rbid", "handoff")
+                       if previous.get(k) != st[k]}
+            if changed:
+                self.net.world.events.add("player_state", number=d["number"], ip=d["ip"], name=d["name"], changes=changed)
         self.net.peer_status(d, data)
         phase, bar_phase = d["phase"], d.get("bar_phase")
         if (playing and st["loop"] and phase and bar_phase and phase[2] > 0

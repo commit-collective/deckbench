@@ -53,4 +53,14 @@ const paused = $("pktlog").children[0];
 run("drawPackets();");
 flush();
 assert.strictEqual($("pktlog").children[0], paused, "Pause must hold an in-flight poll too");
-console.log("ok");
+// Retained capture export is independent of held DOM, filters and Pause.
+const retained = [{n: 50, kind: "status", ours: true}];
+context.transport = {fetch: async url => {
+  assert.strictEqual(url, "api/packets?since=0&noisy=1&limit=20000");
+  return {ok: true, json: async () => ({packets: retained})};
+}};
+$("pktcapture").events.click().then(() => {
+  assert.strictEqual(exported[0].n, 50);
+  assert.strictEqual($("pktlog").children[0], paused, "Capture export must not disturb the held view");
+  console.log("ok");
+}).catch(error => { console.error(error); process.exitCode = 1; });

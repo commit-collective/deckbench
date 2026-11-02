@@ -15,8 +15,8 @@ from .protocols.prolink import Ports, Prolink
 
 def replay_packets(packets, shift=0, seed=0, loss=0, delay_ms=0, jitter_ms=0):
     """Replay bounded full-payload exports into an isolated decoder with a virtual clock."""
-    if not isinstance(packets, list) or len(packets) > 10000:
-        raise ValueError("capture must be a list of at most 10000 packets")
+    if not isinstance(packets, list) or len(packets) > 20000:
+        raise ValueError("capture must be a list of at most 20000 packets")
     if not 0 <= loss <= 100 or min(delay_ms, jitter_ms) < 0:
         raise ValueError("loss must be 0 to 100 and delays nonnegative")
     if not all(math.isfinite(x) for x in (loss, delay_ms, jitter_ms)):
@@ -71,7 +71,7 @@ def main():
             contents = stream.read(40 * 1024 * 1024 + 1)
             if len(contents) > 40 * 1024 * 1024:
                 raise ValueError("capture file exceeds 40 MiB")
-            packets = json.loads(contents)
+            packets = json.loads(contents) if contents.lstrip().startswith("[") else [json.loads(line) for line in contents.splitlines() if line.strip()]
         result = replay_packets(packets, args.port_shift, args.seed, args.loss, args.delay_ms, args.jitter_ms)
     except (OSError, ValueError, TypeError) as error:
         parser.error(str(error))

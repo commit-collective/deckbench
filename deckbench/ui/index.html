@@ -112,13 +112,16 @@
       <div class="toolbar">
         <button class="btn small" id="pktpause">Pause</button>
         <button class="btn small" id="pktclear">Clear</button>
-        <button class="btn small" id="pktexport" title="Save the lines shown as a JSON file">Export</button>
+        <button class="btn small" id="pktexport" title="Save filtered history, or the visible 400 rows when held">Export view</button>
+        <button class="btn small" id="pktcapture" title="Save all packets retained by the server, including statuses and outgoing traffic, regardless of view filters">Export capture</button>
+        <button class="btn small" id="pktmark" title="Add a timestamped note to Events, such as a button press or a visible freeze">Mark</button>
         <span class="grow"></span>
         <button class="btn small" id="pktnoisy" aria-pressed="false" title="Show the statuses and beats too: many a second">Statuses and beats</button>
         <button class="btn small" id="pktours" aria-pressed="false" title="Show the packets of the bench's own decks and mixer too">The bench's own</button>
         <button class="btn small" id="pktfollow" aria-pressed="true" title="Follow incoming packets. Turn off to hold the visible log for reading or copying while packets continue collecting.">Follow</button>
       </div>
       <div class="filters" id="pktfilters" aria-label="Filter by kind"></div>
+      <p class="hint">The view shows the latest 400 matching packets. Export capture saves up to 20,000 retained packets. For a full session, start with --capture FILE.jsonl.</p>
       <div class="pktlog" id="pktlog" role="log" aria-live="off"></div>
     </div>
 

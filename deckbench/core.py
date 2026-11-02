@@ -190,7 +190,9 @@ class World:
                 decks[str(n)] = entry
             info = {p.name: p.info() for p in self.protocols}
         return {"now": time.time(), "decks": decks, "protocols": info, "loss": round(self.loss * 100, 1),
-                "bench": dict(self.info), "unit_state": {k: v for k, v in self.unit_state().items() if k not in VOLATILE},
+                "bench": dict(self.info, session=self.events.session, event_generation=self.events.generation,
+                              started=self.events.began),
+                "unit_state": {k: v for k, v in self.unit_state().items() if k not in VOLATILE},
                 "adapters": [{"name": a.name, "connected": a.connected(), "controls": list(a.controls)}
                              for a in self.adapters]}
 

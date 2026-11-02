@@ -60,6 +60,8 @@ async function api(path, options) {
 const act = (path, options) => api(path, options).catch(() => {});
 
 function apply(state) {
+  const previous = S.state && S.state.bench, current = state.bench;
+  if (previous && current && (previous.session !== current.session || previous.event_generation !== current.event_generation)) clearEvents();
   S.state = state;
   S.offset = S.clock = Strip.followClock(S.clock, state.now - Date.now() / 1000);
   render();
@@ -82,6 +84,7 @@ async function poll() {
   const once = async () => {
     try {
       apply(await (await transport.fetch("api/state")).json());
+      seen = S.events.length ? S.events[S.events.length - 1].n + 1 : 0;
       S.scenario = await (await transport.fetch("api/scenario")).json();
       for (const e of await (await transport.fetch("api/events?since=" + seen)).json()) { addEvent(e); seen = e.n + 1; }
       S.connected = true;
@@ -546,7 +549,8 @@ function renderEvents() {
 }
 
 function describe(e) {
-  return Object.entries(e).filter(([k]) => !["n", "t", "kind"].includes(k)).map(([k, v]) => k + "=" + v).join(" ");
+  return Object.entries(e).filter(([k]) => !["n", "t", "kind", "session", "generation"].includes(k))
+    .map(([k, v]) => k + "=" + (v && typeof v === "object" ? JSON.stringify(v) : v)).join(" ");
 }
 
 function drawEvents() {
@@ -906,6 +910,8 @@ async function pollPackets() {
       const r = await transport.fetch("api/packets?since=" + P.next + "&noisy=" + (P.noisy ? 1 : 0) + "&limit=800");
       if (r.ok) {
         const data = await r.json();
+        if (P.session && data.session && P.session !== data.session) { resetPackets(); data.packets = []; data.next = 0; }
+        P.session = data.session;
         if (data.next < P.next) { P.items = []; P.open.clear(); }
         P.next = data.next;
         P.counts = data.counts;
@@ -927,6 +933,18 @@ $("pktpause").addEventListener("click", () => {
 });
 $("pktclear").addEventListener("click", async () => { await act("api/packets/clear"); resetPackets(); P.counts = {}; });
 $("pktexport").addEventListener("click", () => download("deckbench-link-" + stamp() + ".json", JSON.stringify(P.follow && !P.paused ? shownPackets() : pktRendered, null, 1)));
+$("pktcapture").addEventListener("click", async () => {
+  try {
+    const r = await transport.fetch("api/packets?since=0&noisy=1&limit=20000");
+    if (!r.ok) throw new Error("Capture export failed (HTTP " + r.status + ")");
+    const data = await r.json();
+    download("deckbench-link-" + stamp() + ".json", JSON.stringify(data.packets, null, 1));
+  } catch (e) { toast(e.message); }
+});
+$("pktmark").addEventListener("click", () => {
+  const label = window.prompt("Describe this moment for the Events log", "");
+  if (label && label.trim()) act("api/mark?text=" + encodeURIComponent(label.trim()));
+});
 for (const [id, key] of [["pktnoisy", "noisy"], ["pktours", "ours"], ["pktfollow", "follow"]]) {
   $(id).addEventListener("click", () => {
     P[key] = !P[key];

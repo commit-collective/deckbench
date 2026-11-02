@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 """The command line: python -m deckbench [options]."""
 import argparse
+import ipaddress
 import json
 import os
 import secrets
@@ -72,6 +73,8 @@ def main(argv=None):
                          "(default: 100 + its number, from itself, slot 3)")
     ap.add_argument("--titles", metavar="FILE",
                     help='lines "SOURCE:SLOT:ID=Title" (UTF-8): the titles the decks know')
+    ap.add_argument("--capture", metavar="FILE", help="record all observed link UDP packets as JSON Lines to a new file")
+    ap.add_argument("--target", metavar="PLAYER|IP", help="optional player number or IPv4 address for legacy unit events and scenarios")
     ap.add_argument("--refuse-db", action="store_true",
                     help="the decks' database servers turn metadata requests down, as real decks "
                          "do those of a device that is not a player they know")
@@ -157,6 +160,17 @@ def main(argv=None):
     ap.add_argument("--clear-uploads", action="store_true", help="empty that folder at the start")
     a = ap.parse_args(argv)
 
+    if a.target:
+        try:
+            if a.target.isdecimal():
+                if not 1 <= int(a.target) <= 127:
+                    raise ValueError()
+                a.target = str(int(a.target))
+            else:
+                a.target = str(ipaddress.IPv4Address(a.target))
+        except ValueError:
+            ap.error("--target must be a player number 1 to 127 or an IPv4 address")
+
     if a.network_info:
         return phone.network_info(sys.stdout)
 
@@ -233,7 +247,13 @@ def main(argv=None):
                    model=a.model, status_length=a.status_length,
                    addresses=addresses, broadcast=broadcast, refuse_db=a.refuse_db, strict=a.strict,
                    ports=Ports.shifted(a.port_shift), claim=a.claim, mixer_name=a.mixer or "DJM-900NXS2",
-                   mixer_address=a.mixer_address, mixer_channels=a.mixer_channels, profile=a.profile, observer=a.observe)
+                   mixer_address=a.mixer_address, mixer_channels=a.mixer_channels, profile=a.profile, observer=a.observe,
+                   target=a.target or ("DJS-" if any(spec.split(":")[0] == "djs1000-emu" for _, spec in adapters) else None))
+    if a.capture:
+        try:
+            link.monitor.record(a.capture)
+        except OSError as error:
+            ap.error("--capture: %s" % error)
     if a.observe:
         world.decks.clear()          # the protocol retains one interface endpoint, not a playback deck
         world.info["role"] = "observer"

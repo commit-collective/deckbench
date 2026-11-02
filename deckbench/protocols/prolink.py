@@ -23,9 +23,9 @@ network's broadcast address. A deck that is on
   request, UDP 50001), answering that it yields, and obeys the sync commands
   (sync on/off, become master) sent to it.
 
-And it listens for the unit under test: a device whose name begins "DJS-"
-(a Pioneer DJS-1000) is followed, to know when it is the tempo master and at
-what tempo, so that a deck can take the role from it by asking, as a CDJ does.
+It monitors every discovered player for tempo and master handoffs. An optional
+test target supplies the legacy unit API and scenario events. Existing Python
+integrations retain DJS-name matching unless they specify another target.
 
 A deck that is off sends nothing and closes the connections made to it.
 
@@ -474,10 +474,11 @@ class LinkDeck:
         self.net.listening()
         while not self.net.runtime.stopping.is_set():
             try:
-                conn, _ = srv.accept()
+                conn, peer = srv.accept()
             except socket.timeout:
                 continue
             self.net.runtime.own(conn)
+            self.net.world.events.add("db_port_query", deck=self.number, ip=peer[0])
             if not self.deck.enabled or self.deck.unplugged:
                 self.net.runtime.release(conn)
                 continue
@@ -514,7 +515,10 @@ class LinkDeck:
         if not self.strict:
             return False
         unit = self.net.unit
-        return not (unit["number"] and requester == unit["number"])
+        known_target = unit["number"] and requester == unit["number"]
+        known_player = any(d["online"] and d["kind"] == "player" and d["number"] == requester
+                           for d in self.net.monitor.snapshot())
+        return not (known_target or known_player)
 
     def session(self, conn):
         name = self.deck.name
@@ -523,6 +527,7 @@ class LinkDeck:
             track = None
             while True:
                 txid, mtype, args = read_message(conn)
+                self.net.world.events.add("db_query", deck=self.number, transaction=txid, type=mtype)
                 if mtype == 0x0000:                         # query context setup
                     requester = args[0][1]
                     self.net.world.events.add("db_connect", deck=self.number, requester=requester)
@@ -589,7 +594,8 @@ class Prolink(Protocol):
 
     def __init__(self, world, loaded=None, titles=None, model=None, status_length=None,
                  addresses=None, broadcast=BROADCAST, refuse_db=False, strict=False, ports=DEFAULT_PORTS,
-                 claim=False, mixer_name=b"DJM-900NXS2", mixer_address=None, mixer_channels=4, profile=None, observer=False):
+                 claim=False, mixer_name=b"DJM-900NXS2", mixer_address=None, mixer_channels=4, profile=None, observer=False,
+                 target="DJS-"):
         """world.decks must have the decks (core.Deck, by player number) already.
         loaded: {deck: (source player, slot, rekordbox id)}; titles: {source
         player: {(slot, id): title}}. A deck has by default the track 100 + its
@@ -606,6 +612,8 @@ class Prolink(Protocol):
         being there at once. The mixer (off until it is switched on) is a DJM: its name, its address (default
         127.0.0.33) and its number of channels (4 or 6)."""
         self.world = world
+        # Preserve the Python integration default. The standalone CLI opts out.
+        self.target = target
         self.runtime = NetworkRuntime()
         self.observer = bool(observer)
         self.ports = ports
@@ -733,7 +741,9 @@ class Prolink(Protocol):
         """Stop this protocol's workers and release its sockets and timers."""
         self.mixer.changed.set()
         self.player_controls.clear()
-        return self.runtime.close()
+        result = self.runtime.close()
+        self.monitor.close()
+        return result
 
     def apply_profile(self, name, rename=True, resize=True, **_):
         """Stands in for another model of player (profiles.py): its name, the length of its statuses, its nexus byte and
@@ -1225,9 +1235,14 @@ class Prolink(Protocol):
         return True
 
     # -- the unit under test --
+    def matches_target(self, name, number, source):
+        if self.target == "DJS-":
+            return name.startswith("DJS-")
+        return self.target is not None and str(self.target) in (str(number), source)
+
     def sniff(self):
-        """Listens to the keep-alives and statuses on the network for the unit
-        (it names itself DJS-1000): its number and address, and whether it is
+        """Listens to keep-alives and statuses for the optional test target:
+        its number and address, and whether it is
         the tempo master and at what tempo; and passes the master role when the
         unit takes it from a deck that has agreed to yield it."""
         socks = []
@@ -1261,7 +1276,9 @@ class Prolink(Protocol):
                     continue
                 if port == self.ports.announce and startup.claimed_number(data) is not None:
                     self.defend(startup.claimed_number(data), addr[0])
-                if not (data[0x0B:0x0F] == b"DJS-" or data[0x0C:0x10] == b"DJS-"):
+                kind = "keep-alive" if port == self.ports.announce and data[0x0A] == 0x06 else "status"
+                name, number, declared = self.monitor.identify(kind, data)
+                if not self.matches_target(name, number, addr[0]) and not (declared and self.matches_target(name, number, declared)):
                     continue
                 with world.lock:
                     if port == self.ports.announce and data[0x0A] == 0x06:

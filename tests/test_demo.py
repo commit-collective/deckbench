@@ -37,6 +37,10 @@ class Demo(unittest.TestCase):
         out = subprocess.run(["node", os.path.join(ROOT, "tests", "player_controls_check.js")], capture_output=True, text=True, encoding="utf-8", timeout=60)
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
 
+    def test_events_reset_between_sessions_and_reconnects(self):
+        out = subprocess.run(["node", os.path.join(ROOT, "tests", "events_check.js")], capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,6 +13,7 @@ kind adds.
 import json
 import threading
 import time
+import uuid
 
 
 class Events:
@@ -20,12 +21,14 @@ class Events:
         self.items = []
         self.cond = threading.Condition()
         self.began = time.time()
+        self.session = uuid.uuid4().hex
         self.generation = 0                  # counts the times they were cleared
         self.file = open(path, "a", encoding="utf-8") if path else None
 
     def add(self, kind, **data):
         with self.cond:
-            item = {"n": len(self.items), "t": round(time.time() - self.began, 3), "kind": kind}
+            item = {"n": len(self.items), "t": round(time.time() - self.began, 3), "kind": kind,
+                    "session": self.session, "generation": self.generation}
             item.update(data)
             self.items.append(item)
             if self.file:
@@ -64,4 +67,3 @@ class Events:
         with self.cond:
             self.items = []
             self.generation += 1
-            self.began = time.time()

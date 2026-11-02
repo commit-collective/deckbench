@@ -265,7 +265,7 @@ class DemoBench {
       if (route === "api/ready") return ok({ready: true, version: "demo", numbers: Object.keys(this.decks).map(Number)});
       if (route === "api/scenario") return ok(Object.assign({}, this.scenario, {results: this.scenario.results.slice()}));
       if (route === "api/events") return ok(this.events.slice(Number(query.get("since") || 0)));
-      if (route === "api/packets") return ok(this.packetsSince(Number(query.get("since") || 0), query.get("noisy") !== "0", Math.max(1, Math.min(2000, Number(query.get("limit") || 400)))));
+      if (route === "api/packets") return ok(this.packetsSince(Number(query.get("since") || 0), query.get("noisy") !== "0", Math.max(1, Math.min(20000, Number(query.get("limit") || 400)))));
       if (route === "api/examples") return ok(DEMO_EXAMPLES);
       if (route === "api/unit") return ok({heard: false});
       return fail(404, "not found");
@@ -314,6 +314,10 @@ class DemoBench {
       return fail(400, "no such action");
     }
     if (parts[1] === "loss") { this.loss = Math.max(0, Math.min(100, Number(parts[2]))); return ok(); }
+    if (parts[1] === "mark") {
+      const label = (query.get("text") || "").trim();
+      return !label || label.length > 500 ? fail(400, "marker text must contain 1 to 500 characters") : ok(this.addEvent("marker", {text: label}));
+    }
     if (parts[1] === "events" && parts[2] === "clear") { this.events = []; this.generation++; return ok({}); }
     if (parts[1] === "packets" && parts[2] === "clear") { this.packets.noisy = []; this.packets.rest = []; this.packets.counts = {}; return ok({}); }
     if (parts[1] === "settings") {

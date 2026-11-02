@@ -268,6 +268,33 @@ still restrict outbound TCP connections. The existing scoped inbound UDP rule re
 
 ## Offline capture replay
 
+### Recording a hardware issue
+
+The Network view renders the latest 400 matching packets. Follow off holds those
+rows for reading. Export view saves filtered browser history, or the held rows.
+Export capture ignores those view filters and saves the server's retained UDP
+packets, up to 12,000 statuses/beats/positions and 8,000 other packets. Both
+buffers are bounded, so neither is a full-session recorder.
+
+For an intermittent failure, add `--capture session.jsonl --events events.jsonl`
+to the normal launch command. The capture file must not already exist. Recording
+continues regardless of the selected browser tab, filters, Pause, Follow or Clear.
+Stop the bench with Ctrl-C when finished. Long sessions can consume substantial
+disk space. A capture write failure is reported in the terminal.
+
+Use Mark in Network to note a physical button press, visible failure or recovery.
+Markers go into Events, not UDP. Events and Network share a session identifier
+and start time. Clearing Events does not reset the clock. Every external player's
+reported state changes generate `player_state` events, without requiring a target.
+Use `--target 2` or an IPv4 address only when unit-specific scenarios are needed.
+
+This records packets the bench observes, not every packet on the switch. Incoming
+database queries to the bench are also noted in Events. Unicast database or NFS
+traffic between two physical players requires a mirrored switch port or a network
+tap. Do not assume an ordinary PC capture can see it.
+
+### Inspecting an export
+
 New Network exports retain complete packet payloads. You can inspect them without sending anything to the DJ network:
 
 ```sh
@@ -278,3 +305,6 @@ This feeds only the decoder, using a virtual clock. Seeded impairments make a ru
 The JSON result contains device state, packet counts and dropped-packet totals. It does not replay commands onto live
 hardware or render a timed browser session. Older truncated exports are rejected. Keep real captures local, since they
 can contain device identities and track information. Do not commit them.
+JSON Lines recordings are accepted too. Offline decoding is bounded to 20,000
+packets, 16 MiB of payload and a 40 MiB file. Trim a long recording to the relevant
+window before replaying it, preserving complete JSON lines.

@@ -4,6 +4,10 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Add continuous UDP capture, a full retained-capture export and explicit view limits.
+- Keep Events and Network on one session clock and reset replayed history on reconnect.
+- Report external-player state changes and allow an explicit test target without auto-selecting a DJS.
+- Record incoming database queries for hardware troubleshooting.
 - Keep delayed simulated-mixer packets from restoring on-air state after the mixer is switched off.
 - Make the demo's observed synced player follow master tempo and bar phase, with matching packet-log values.
 - Decode acceptance in standard-length master takeover replies.

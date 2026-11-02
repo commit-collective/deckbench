@@ -121,16 +121,22 @@ class Page(unittest.TestCase):
             self.assertTrue(r.headers.get("Content-Type").startswith("text/event-stream"))
             self.world.events.add("test_event", deck=2)
             kind = None
-            while len(seen) < 3:
+            while len(seen) < 4:
                 line = r.readline().decode("utf-8").rstrip("\r\n")
                 if line.startswith("event: "):
                     kind = line[7:]
                 elif line.startswith("data: ") and kind:
                     seen[kind] = json.loads(line[6:])
-        self.assertEqual(set(seen), {"state", "event", "scenario"})
+        self.assertEqual(set(seen), {"cleared", "state", "event", "scenario"})
         self.assertIn("decks", seen["state"])
         self.assertEqual((seen["event"]["kind"], seen["event"]["deck"]), ("test_event", 2))
         self.assertIn("running", seen["scenario"])
+
+    def test_a_marker_has_the_session_clock(self):
+        event = self.api("api/mark?text=BACK%20pressed")
+        self.assertEqual(event["kind"], "marker")
+        self.assertEqual(event["text"], "BACK pressed")
+        self.assertEqual(event["session"], self.world.events.session)
 
 
 if __name__ == "__main__":

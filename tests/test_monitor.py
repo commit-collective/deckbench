@@ -408,13 +408,14 @@ class Rings(unittest.TestCase):
         monitor = net.monitor
         monitor.feed(startup.hello(b"CDJ-3000", 1), "10.0.0.9", net.ports.announce)
         deck = net.decks[2]
-        for _ in range(3000):
+        capacity = monitor.rings["noisy"].maxlen
+        for _ in range(capacity + 10):
             monitor.feed(deck.status(), "10.0.0.7", net.ports.update)
-        everything = monitor.since(0, limit=5000)
+        everything = monitor.since(0, limit=20000)
         kinds = [p["kind"] for p in everything["packets"]]
         self.assertEqual(kinds.count("hello"), 1)
-        self.assertEqual(kinds.count("status"), 1500)                       # the ring's length
-        self.assertEqual(everything["counts"]["status"], 3000)               # and the count is of all
+        self.assertEqual(kinds.count("status"), capacity)
+        self.assertEqual(everything["counts"]["status"], capacity + 10)
         self.assertEqual(monitor.since(0, noisy=False)["packets"][0]["kind"], "hello")
         self.assertEqual(len(monitor.since(0, limit=50)["packets"]), 50)
         monitor.clear()

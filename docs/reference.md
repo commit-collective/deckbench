@@ -27,7 +27,11 @@ Options (`python -m deckbench --help`):
   tempo you say it was made at (see [docs/audio.md](audio.md)). The page has the same in the deck's "Load a track" fold
 - `--scenario FILE`, `--then-exit`: play a timeline of what the decks do and what to expect of the device under test
   (see [docs/scenarios.md](scenarios.md))
-- `--events FILE`: what the device under test did, a JSON object a line
+- `--events FILE`: diagnostic events for all players, a JSON object a line
+- `--capture FILE`: continuously record observed UDP packets as JSON Lines to a new file, including statuses and outgoing traffic
+- `--target PLAYER|IP`: optionally select the player used by `/api/unit`, `unit_*` events and unit scenarios
+  No target is selected by the standalone CLI unless a device adapter supplies its legacy default.
+  Existing Python integrations retain the DJS-name default. Pass `target=None` to `Prolink` to disable it.
 - `--port-shift N`: move every port of the decks by N (UDP 50000-50002, TCP 12523 and 1051). For a bench beside something that
   holds the real ports, or where the system keeps them back (Windows can reserve UDP 50000-50059, see
   `netsh interface ipv4 show excludedportrange protocol=udp`). A unit on the real ports does not hear such decks
@@ -92,6 +96,7 @@ Options (`python -m deckbench --help`):
     GET  /api/packets?since=<n>       the Pro DJ Link packets the bench heard (docs/link.md). POST /api/packets/clear forgets them
     GET  /api/events?since=<n>        what the device under test did, from the n-th event on
     POST /api/events/clear            forget them
+    POST /api/mark?text=<label>        add a timestamped diagnostic marker
     POST /api/scenario                play the scenario in the body (JSON), one at a time. /stop ends it. GET gives how far it is
 
 `/api/state` has, for each deck, its switches, its tempo, its name, its track
