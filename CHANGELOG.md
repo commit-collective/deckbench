@@ -109,7 +109,6 @@ Newest first. A release is a tagged commit.
   when it is ahead, gone round when the deck is in it, left behind (still marked) when the deck is moved past it.
 - A pause stops where the playhead was when the page was clicked. The page sends the moment of the click (`?at=`, in the bench's clock), so a request that is slow
   to arrive (a bench across WSL) no longer makes the deck run on, or the strip jump, before it stops.
-
 - A loop that is set is drawn ahead of the playhead, with the chip "LOOP 4 in 1.4 beats", and on a stopped deck too (it only showed once the deck was in it).
 - The strip and the page's sound no longer jump forward by a tenth of a second or so when play or cue is pressed. The answer to a click comes by another road than the
   stream, and a quicker one moved the page's idea of the bench's clock half way at once. It now moves by 5 ms at most for each state.
