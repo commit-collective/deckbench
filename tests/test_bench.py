@@ -2,6 +2,7 @@
 """The bench in a process of its own, as a test of something else starts it (deckbench.testing)."""
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -46,10 +47,15 @@ class Started(unittest.TestCase):
             self.assertNotEqual(again.info["pid"], pid)
 
     def test_says_why_it_did_not_come_up(self):
-        with Bench(numbers=[2], timeout=5) as first:
-            second = Bench(numbers=[2], shift=first.shift, timeout=5)
+        # Own the collision directly. A second healthy subprocess would add
+        # an unrelated startup deadline before this assertion is reached.
+        bench = Bench(numbers=[2])
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as blocker:
+            blocker.bind(('127.0.0.2', bench.ports.db))
+            blocker.listen(1)
             with self.assertRaises(BenchError) as error:
-                second.start()
+                bench.start()
+            self.assertIn('TCP %d' % bench.ports.db, str(error.exception))
             self.assertIn("--port-shift", str(error.exception))
 
 
