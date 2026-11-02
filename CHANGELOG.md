@@ -2,7 +2,7 @@
 
 Newest first. A release is a tagged commit.
 
-## Unreleased
+## v0.5.0
 
 ### Compatibility changes
 
@@ -14,32 +14,38 @@ Newest first. A release is a tagged commit.
   session start, matching Network capture. Event numbering still restarts on
   clear. Use `session` and `generation` to distinguish histories.
 
-### Changes and fixes
+### MASTER, SYNC and player controls
 
 - Serialize automatic MASTER handoffs with explicit requests and skip device snapshots when no handoff is needed.
-- Clear an observer's number-conflict warning when the conflict ends, without discarding other network errors.
-- Make the startup-error test own its conflicting port without a timing-sensitive helper process.
 - Reconcile early MASTER commands with the sender's late status through a coordinated handoff.
-- Print a usable browser URL with the actual port and token, including in phone mode.
+- Decode acceptance in standard-length master takeover replies.
+- Add opt-in SYNC and MASTER commands on discovered player cards.
+- Hand a stopped virtual master's role to an eligible playing, synced follower.
+- Add opt-in fader-start transport controls for discovered players without enabling the simulated mixer.
+- Explain that hardware fader-start commands require a stopped player at cue to start and a playing player to return to cue.
+- Keep delayed simulated-mixer packets from restoring on-air state after the mixer is switched off.
+- Make the demo's observed synced player follow master tempo and bar phase, with matching packet-log values.
+
+### Observation and diagnostics
+
+- Add an announced observer mode without simulated playback decks or database servers.
+- Clear an observer's number-conflict warning when the conflict ends, without discarding other network errors.
 - Add continuous UDP capture, a full retained-capture export and explicit view limits.
 - Keep Events and Network on one session clock and reset replayed history on reconnect.
 - Report external-player state changes and allow an explicit test target without auto-selecting a DJS.
 - Record incoming database queries for hardware troubleshooting.
-- Keep delayed simulated-mixer packets from restoring on-air state after the mixer is switched off.
-- Make the demo's observed synced player follow master tempo and bar phase, with matching packet-log values.
-- Decode acceptance in standard-length master takeover replies.
-- Add native macOS interface and MAC discovery, a dedicated CI job and Ethernet/VM bridge setup guidance.
-- Bound listener waits during shutdown and use a configured localhost address for the Mac mixer endpoint.
-- Add an announced observer mode without simulated playback decks or database servers.
-- Add opt-in SYNC and MASTER commands on discovered player cards.
-- Hand a stopped virtual master's role to an eligible playing, synced follower.
 - Decode mixer tempo status and CDJ-3000 precise positions without inventing beat grids.
 - Query loaded-track metadata on demand and serve meaningful synthetic tempo and duration fields.
 - Export full packet payloads and replay captures offline with seeded loss, delay and jitter.
+
+### Platform support and reliability
+
+- Add native macOS interface and MAC discovery, a dedicated CI job and Ethernet/VM bridge setup guidance.
+- Print a usable browser URL with the actual port and token, including in phone mode.
+- Bound listener waits during shutdown and use a configured localhost address for the Mac mixer endpoint.
 - Add explicit network worker shutdown, socket cleanup and cancellable handoff timers.
 - Isolate CLI sleep mocking so checks cannot interrupt other network workers.
-- Add opt-in fader-start transport controls for discovered players without enabling the simulated mixer.
-- Explain that hardware fader-start commands require a stopped player at cue to start and a playing player to return to cue.
+- Make the startup-error test own its conflicting port without a timing-sensitive helper process.
 
 ## v0.4.0
 

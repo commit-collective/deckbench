@@ -264,7 +264,7 @@ python -m deckbench --phone --observe --dj-interface "Ethernet 2"
 Use your platform's actual interface name. This announces observer number 7 so players can send their full status,
 but creates no playback cards, simulated mixer, database servers or outgoing beat/status stream. It is not passive
 sniffing. Choose another unused identity with `--observer-number` if needed. A detected number conflict suppresses
-observer announcements and raises a network warning. Fix the conflict and restart the bench.
+observer announcements and raises a network warning. Announcements resume and the warning clears when the conflict ends.
 
 **Read track info** queries the reported track's source player, not necessarily the player playing it. This is a
 bounded, read-only request, separate from arming controls. Older players require an announced unused number 1 to 4,
