@@ -312,9 +312,17 @@ class LinkDeck:
                     self.send(s, startup.keepalive(b"deckbench", self.number, self.address, self.mac,
                                                   self.net.peer_count() + 1), (self.broadcast, self.ports.announce))
                     last_keep = now
-                if conflict and "observer number conflict" not in self.net.runtime.errors:
-                    self.net.runtime.errors.append("observer number conflict")
-                    log("observer number %d is in use, announcements suspended" % self.number)
+                warning = "observer number conflict"
+                with self.net.runtime.lock:
+                    warned = warning in self.net.runtime.errors
+                    if conflict and not warned:
+                        self.net.runtime.errors.append(warning)
+                    elif warned and not conflict:
+                        self.net.runtime.errors.remove(warning)
+                if conflict != warned:
+                    self.net.world.events.add("observer_conflict", number=self.number, on=conflict)
+                    log(("observer number %d is in use, announcements suspended" if conflict else
+                         "observer number %d is available, announcements resumed") % self.number)
                 self.net.runtime.stopping.wait(0.1)
                 continue
             if not self.deck.enabled or self.deck.unplugged:
@@ -913,19 +921,22 @@ class Prolink(Protocol):
 
     def play_changed(self, deck, playing):
         """A stopped master names a synced playing successor, without forcing its confirmation."""
-        peers = self.monitor.snapshot()
-        candidates = {link.number for link in self.decks.values()
-                      if link.deck.enabled and link.deck.playing and link.deck.sync and not link.deck.unplugged}
-        candidates.update(d["number"] for d in peers if d["online"] and d["kind"] == "player" and d["status"]
-                          and d["status"]["play"] and d["status"]["sync"] and d["number"] is not None)
-        for link in self.decks.values():
-            if not (link.deck.enabled and link.deck.master and not link.deck.playing and not link.deck.unplugged):
-                continue
-            targets = sorted(candidates - {link.number})
-            if targets and link.handing_to == 0xFF:
-                link.handing_to = targets[0]
-                self.runtime.later(4.0, link.cancel_handoff, targets[0])
-                self.world.events.add("automatic_handoff", deck=link.number, target=targets[0])
+        with self.world.lock:
+            waiting = [link for link in self.decks.values() if link.deck.enabled and link.deck.master
+                       and not link.deck.playing and not link.deck.unplugged and link.handing_to == 0xFF]
+            if not waiting:
+                return
+            peers = self.monitor.snapshot()
+            candidates = {link.number for link in self.decks.values()
+                          if link.deck.enabled and link.deck.playing and link.deck.sync and not link.deck.unplugged}
+            candidates.update(d["number"] for d in peers if d["online"] and d["kind"] == "player" and d["status"]
+                              and d["status"]["play"] and d["status"]["sync"] and d["number"] is not None)
+            for link in waiting:
+                targets = sorted(candidates - {link.number})
+                if targets:
+                    link.handing_to = targets[0]
+                    self.runtime.later(4.0, link.cancel_handoff, targets[0])
+                    self.world.events.add("automatic_handoff", deck=link.number, target=targets[0])
 
     def describe(self, deck):
         link = self.decks.get(deck.number)

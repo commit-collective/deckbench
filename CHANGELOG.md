@@ -4,6 +4,20 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+### Compatibility changes
+
+- Plain CLI sessions no longer automatically select devices named DJS- as the
+  test target. Pass `--target PLAYER|IP` for `/api/unit`, `unit_*` events and
+  unit scenarios. Existing Python defaults and the explicit emulator adapter
+  keep their previous target behavior.
+- Clearing Events no longer resets event timestamps. Times remain relative to
+  session start, matching Network capture. Event numbering still restarts on
+  clear. Use `session` and `generation` to distinguish histories.
+
+### Changes and fixes
+
+- Serialize automatic MASTER handoffs with explicit requests and skip device snapshots when no handoff is needed.
+- Clear an observer's number-conflict warning when the conflict ends, without discarding other network errors.
 - Make the startup-error test own its conflicting port without a timing-sensitive helper process.
 - Reconcile early MASTER commands with the sender's late status through a coordinated handoff.
 - Print a usable browser URL with the actual port and token, including in phone mode.
