@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 from time import sleep as idle_sleep
+from urllib.parse import quote
 
 from . import __version__
 from .core import Deck, World, log
@@ -319,6 +320,11 @@ def main(argv=None):
     server = serve(world, a.http_host, a.http_port, a.allow_origin, token, a.tracks_dir) if a.http_port >= 0 else None
     if server:
         world.info["http"] = "http://%s:%d/" % (a.http_host, server.server_address[1])
+        browser_host = "127.0.0.1" if a.http_host == "0.0.0.0" else a.http_host
+        browser_url = "http://%s:%d/" % (browser_host, server.server_address[1])
+        if token:
+            browser_url += "#token=" + quote(token, safe="")
+        log("open in browser: %s" % browser_url)
     if server and a.phone:
         address = a.phone_address or phone.route_address()
         try:

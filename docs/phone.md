@@ -45,6 +45,10 @@ the default route, which may be wrong on a machine with multiple networks. If th
 `--phone-address <PC address on the phone's network>`. The QR package is optional. Without it the pairing link is printed
 with an installation hint.
 
+The terminal also prints an **open in browser** URL with the actual port and token
+for use on the computer. You can keep that page and the phone connected at the same time.
+`0.0.0.0` is a listening address, not the address to enter in a browser.
+
 The phone and computer need a reachable path, such as both using the home Wi-Fi, or the phone on Wi-Fi and the computer
 on Ethernet connected to the same router. If the DJ network is isolated, give it a different subnet from the home network.
 Guest Wi-Fi isolation or a firewall may prevent the connection.

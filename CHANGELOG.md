@@ -4,6 +4,7 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Print a usable browser URL with the actual port and token, including in phone mode.
 - Add continuous UDP capture, a full retained-capture export and explicit view limits.
 - Keep Events and Network on one session clock and reset replayed history on reconnect.
 - Report external-player state changes and allow an explicit test target without auto-selecting a DJS.

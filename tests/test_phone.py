@@ -76,6 +76,7 @@ class Pairing(unittest.TestCase):
                 self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), phone.SITE)
             output = bench.output()
             self.assertIn("DJ link: loopback only", output)
+            self.assertIn("open in browser: " + bench.url + "#token=test-token", output)
             self.assertIn("phone pairing link: " + phone.pairing_url("192.0.2.10", int(urlsplit(bench.url).port),
                                                                     "test-token"), output)
 
