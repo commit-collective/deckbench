@@ -193,6 +193,14 @@ the role from the physical master and waits for its status to name the new maste
 `handoff_timeout` event and leaves the virtual deck out of the master role. A physical player can likewise request the
 role from a virtual master. SYNC must be enabled on each follower, as on real players.
 
+A become-master command can arrive before its sender's own MASTER status. If no
+master is known, the virtual player still claims immediately. For one second it
+remembers that command's sender. If the same player then announces MASTER, the
+bench drops its conflicting claim and requests a normal handoff. The
+`master_reconciled` event identifies this correction. Unrelated players and
+announcements outside that window do not trigger it. An unanswered handoff leaves
+the bench out of the role rather than restoring two masters.
+
 The bench exchanges control and timing packets. It does not route audio into physical players or serve virtual tracks
 as USB media. The CDJ-2000NXS2, XDJ-1000MK2 and DJM-900NXS2 still need validation as a combined setup.
 

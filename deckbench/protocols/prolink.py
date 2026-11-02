@@ -174,6 +174,7 @@ class LinkDeck:
         self.pending = False                # has asked the unit for the master role
         self.pending_peer = None
         self.pending_since = 0.0
+        self.early_master = None            # (command sender address, number, expiry) for a late MASTER announcement
         self.sync_number = 0
         self.counter = 0
         self.online = False                 # it has come onto the network (and claimed its number, if that is asked)
@@ -409,7 +410,7 @@ class LinkDeck:
                 elif command == 0x20:
                     world.set_sync(deck, False)
                 elif command == 0x01:
-                    world.set_master(deck, True)
+                    self.net.command_master(deck, sender, addr[0])
 
     # -- the master role --
     def cancel_handoff(self, target):
@@ -445,6 +446,7 @@ class LinkDeck:
             tempo = deck.tempo()
             self.pending = False
             self.pending_peer = None
+            self.early_master = None
             deck.base_bpm = tempo
             deck.master = True
             self.sync_number = max(self.sync_number, sync_number if sync_number is not None
@@ -887,6 +889,18 @@ class Prolink(Protocol):
             for link in self.decks.values():
                 if not link.deck.enabled or link.deck.unplugged:
                     continue
+                claim = link.early_master
+                if claim and time.monotonic() > claim[2]:
+                    link.early_master = None
+                elif (claim and not device["ours"] and device["status"]["master"]
+                      and claim[:2] == (device.get("packet_source", device["ip"]), device["number"])):
+                    link.early_master = None
+                    if link.deck.master and not link.pending and link.handing_to == 0xFF:
+                        # The sender's command beat its MASTER status to us.
+                        # Rejoin the normal request/grant exchange rather than
+                        # leave two masters asserting ownership indefinitely.
+                        self.take_master(link.deck)
+                        self.world.events.add("master_reconciled", deck=link.number, sender=device["number"])
                 if device["status"]["master"] and link.handing_to == device["number"]:
                     link.finish_handoff()
                 status = device["status"]
@@ -1121,6 +1135,7 @@ class Prolink(Protocol):
     def deck_enabled(self, deck, on):
         link = self.decks.get(deck.number)
         if link and not on:
+            link.early_master = None
             link.handing_to = 0xFF
             link.pending = False
             link.pending_peer = None
@@ -1128,6 +1143,7 @@ class Prolink(Protocol):
     def master_released(self, deck):
         link = self.decks.get(deck.number)
         if link:
+            link.early_master = None
             link.handing_to = 0xFF
             link.pending = False
             link.pending_peer = None
@@ -1183,6 +1199,17 @@ class Prolink(Protocol):
             return True
         return False
 
+    def command_master(self, deck, sender, address):
+        """Handle a network request to become MASTER."""
+        with self.world.lock:
+            link = self.decks[deck.number]
+            if (not deck.master and not link.pending and self.external_master() is None
+                    and not any(d.enabled and d.master for d in self.world.decks.values())):
+                # Do not delay a legitimate no-master command. Remember only
+                # this sender for one second (several normal status periods).
+                link.early_master = (address, sender, time.monotonic() + 1.0)
+            self.world.set_master(deck, True)
+
     def take_master(self, deck):
         link = self.decks.get(deck.number)
         if not link:
@@ -1197,6 +1224,7 @@ class Prolink(Protocol):
                               for o in world.decks.values())
             peer = self.external_master()
             if peer and not deck_master:
+                deck.master = False
                 # The unit has the role: ask it (to port 50001), and take the
                 # role when its status names this deck as the one to get it
                 # (Mh): see LinkDeck.take_after_handoff().

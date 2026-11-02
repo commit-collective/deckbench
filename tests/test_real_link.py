@@ -5,7 +5,7 @@ import struct
 import unittest
 import json
 import subprocess
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from deckbench.core import Deck, World
 from deckbench.protocols.prolink import Prolink
@@ -17,12 +17,14 @@ class ExternalPlayers(unittest.TestCase):
         self.world = World()
         self.world.decks[3] = Deck(self.world, 3, 128.0, 'deck 3')
         self.net = Prolink(self.world)
+        self.addCleanup(self.net.stop)
         self.deck = self.world.decks[3]
         self.deck.enabled = True
         self.link = self.net.decks[3]
         other = World()
         other.decks[1] = Deck(other, 1, 124.0, 'physical player')
         self.other = Prolink(other, profile='cdj-2000nxs2')
+        self.addCleanup(self.other.stop)
         self.player = self.other.decks[1]
         self.player.deck.master = self.player.deck.playing = True
 
@@ -66,6 +68,99 @@ class ExternalPlayers(unittest.TestCase):
         self.feed()
         self.assertTrue(self.deck.master)
         self.assertFalse(self.link.pending)
+
+    def test_early_master_command_reconciles_the_senders_late_status(self):
+        self.deck.playing = True
+        self.player.deck.master = False
+        self.feed()
+        with patch.object(self.link, 'send') as send:
+            self.net.command_master(self.deck, 1, '127.0.0.9')
+            self.assertTrue(self.deck.master)  # genuine no-master operation stays immediate
+            self.player.deck.master = True
+            self.feed()  # the sender announces MASTER after its command
+            self.assertTrue(self.link.pending)
+            self.assertFalse(self.deck.master)
+            packet, destination = send.call_args.args[1:]
+            self.assertEqual(packet[0x0A], 0x26)
+            self.assertEqual(destination, ('127.0.0.9', self.net.ports.beat))
+            self.player.handing_to = 3
+            self.feed()
+            self.assertTrue(self.deck.master)
+            self.assertFalse(self.link.pending)
+
+    def test_early_master_hint_is_scoped_to_sender_and_expires(self):
+        for address, sender, late in [('127.0.0.8', 1, False), ('127.0.0.9', 2, False), ('127.0.0.9', 1, True)]:
+            with self.subTest(address=address, sender=sender, late=late):
+                self.net.monitor.devices.clear()
+                self.deck.master = False
+                self.player.deck.master = False
+                self.net.monitor.recent.clear()
+                self.feed()
+                with patch.object(self.link, 'send') as send:
+                    self.net.command_master(self.deck, sender, address)
+                    if late:
+                        self.link.early_master = (address, sender, time.monotonic() - 1)
+                    self.player.deck.master = True
+                    self.feed()
+                    self.assertTrue(self.deck.master)
+                    self.assertFalse(self.link.pending)
+                    send.assert_not_called()
+
+    def test_release_and_disable_cancel_early_master_reconciliation(self):
+        for disable in (False, True):
+            with self.subTest(disable=disable):
+                self.net.monitor.devices.clear()
+                self.net.monitor.recent.clear()
+                self.deck.enabled, self.deck.master = True, False
+                self.net.command_master(self.deck, 1, '127.0.0.9')
+                if disable:
+                    self.world.set_enabled(self.deck, False)
+                else:
+                    self.world.set_master(self.deck, False)
+                self.assertIsNone(self.link.early_master)
+                with patch.object(self.link, 'send') as send:
+                    self.feed()
+                    send.assert_not_called()
+                self.assertFalse(self.link.pending)
+
+    def test_early_reconciliation_timeout_does_not_reclaim_without_a_grant(self):
+        self.net.command_master(self.deck, 1, '127.0.0.9')
+        with patch.object(self.link, 'send'):
+            self.feed()
+        self.assertTrue(self.link.pending)
+        self.link.pending_since -= 4
+        self.link.give_up()
+        self.assertFalse(self.link.pending)
+        self.assertFalse(self.deck.master)
+
+    def test_no_master_command_does_not_wait_or_send_a_takeover(self):
+        with patch.object(self.link, 'send') as send:
+            self.net.command_master(self.deck, 1, '127.0.0.9')
+        self.assertTrue(self.deck.master)
+        self.assertFalse(self.link.pending)
+        send.assert_not_called()
+
+    def test_master_command_with_known_peer_uses_normal_handoff(self):
+        self.feed()
+        self.deck.master = True  # recover an already conflicting local role too
+        with patch.object(self.link, 'send') as send:
+            self.net.command_master(self.deck, 1, '127.0.0.9')
+        self.assertIsNone(self.link.early_master)
+        self.assertTrue(self.link.pending)
+        self.assertFalse(self.deck.master)
+        self.assertEqual(send.call_args.args[1][0x0A], 0x26)
+
+    def test_network_command_remembers_its_actual_sender(self):
+        from deckbench.protocols.prolink import header
+        command = header(0x2A, b'CDJ-2000NXS2') + bytes([
+            1, 0, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 1])
+        receiver = Mock()
+        receiver.recvfrom.side_effect = [(command, ('127.0.0.9', self.net.ports.beat)), OSError('fixture finished')]
+        with patch.object(self.net.runtime, 'socket', return_value=receiver):
+            with self.assertRaisesRegex(OSError, 'fixture finished'):
+                self.link.control()
+        self.assertTrue(self.deck.master)
+        self.assertEqual(self.link.early_master[:2], ('127.0.0.9', 1))
 
     def test_timeout_and_release_cancel_pending_takeover(self):
         self.feed()
