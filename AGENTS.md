@@ -1,6 +1,6 @@
 # deckbench: working rules
 
-- Deckbench is a general-purpose public protocol test bench. Keep setup and platform guidance independent of any
+- DeckBench is a general-purpose public protocol test bench. Keep setup and platform guidance independent of any
   particular emulator or private workflow. Device-specific adapters are optional integrations, not core requirements
 - Nothing from Pioneer DJ or AlphaTheta goes in this repo: no firmware, no captures taken from a unit's firmware.
 - Always commit completed changes locally on `main`. Ask before pushing, tagging or deploying, and never amend a commit that is on `origin`.

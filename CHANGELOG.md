@@ -2,6 +2,11 @@
 
 Newest first. A release is a tagged commit.
 
+## Unreleased
+
+- The app, its page title and the docs write the name DeckBench. The command, the package and the name it
+  announces on the network stay `deckbench`.
+
 ## v0.5.0
 
 ### Compatibility changes
