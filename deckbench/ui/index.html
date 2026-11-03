@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DeckBench</title>
+<title>Deckbench</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 1000'%3E%3Crect width='1000' height='1000' fill='%23000'/%3E%3Cg transform='translate(100 308) scale(.8)' fill='%23fff'%3E%3Cg transform='matrix(1 0 0 -1 0 480)'%3E%3Cpath transform='translate(719 240)' d='m0 0c0-68-57-123-125-120-61 2.7-111 53-114 114-3.3 69 52 126 120 126v120c-131 0-238-105-240-236-.96-63-48-119-111-123-70-5.2-129 50-129 120 0 66 54 120 120 120v120c-142 0-254-123-238-267 13-113 105-202 219-211 80-6.3 151 26 199 81 44-50 108-82 180-82 133 0 240 107 240 240z'/%3E%3Ccircle cx='940' cy='60' r='60'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,7 +14,7 @@
 <header class="bar">
   <div class="brand">
     <svg viewBox="0 0 1000 480" aria-hidden="true"><g transform="matrix(1 0 0 -1 0 480)"><path transform="translate(719 240)" d="m0 0c0-68-57-123-125-120-61 2.7-111 53-114 114-3.3 69 52 126 120 126v120c-131 0-238-105-240-236-.96-63-48-119-111-123-70-5.2-129 50-129 120 0 66 54 120 120 120v120c-142 0-254-123-238-267 13-113 105-202 219-211 80-6.3 151 26 199 81 44-50 108-82 180-82 133 0 240 107 240 240z"/><circle cx="940" cy="60" r="60"/></g></svg>
-    <span>DeckBench</span> <small id="version"></small>
+    <span>Deckbench</span> <small id="version"></small>
   </div>
   <div class="chips" id="chips" aria-label="Status"></div>
   <div class="actions">
@@ -174,7 +174,7 @@
 <div id="connect" class="overlay" hidden>
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="conntitle">
     <h1 id="conntitle">Connect to a bench</h1>
-    <p>This page drives a <b>DeckBench</b> that runs on your network, on the machine that is cabled to the players. Start it there with:</p>
+    <p>This page drives a <b>Deckbench</b> that runs on your network, on the machine that is cabled to the players. Start it there with:</p>
     <pre id="connhow">python -m deckbench --http-host 0.0.0.0 --allow-origin ORIGIN --token auto</pre>
     <label>Its address<input type="text" id="connaddr" placeholder="http://192.168.1.20:8750" autocomplete="off" spellcheck="false"></label>
     <label>Its token<input type="text" id="conntoken" placeholder="printed when it starts" autocomplete="off" spellcheck="false"></label>
