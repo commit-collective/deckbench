@@ -1,10 +1,10 @@
 # Contributing
 
-Thanks for helping improve Deckbench. Bug reports, compatibility testing,
+Thanks for helping improve DeckBench. Bug reports, compatibility testing,
 documentation and code contributions are all welcome. You do not need DJ
 hardware to contribute.
 
-Deckbench is a general-purpose protocol test bench. Keep core features and
+DeckBench is a general-purpose protocol test bench. Keep core features and
 setup guidance useful across hardware, applications and platforms.
 
 ## Report a bug or test a setup

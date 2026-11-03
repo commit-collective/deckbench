@@ -1,4 +1,4 @@
-# deckbench
+# DeckBench
 
 [![release](https://img.shields.io/github/v/release/commit-collective/deckbench?display_name=tag)](https://github.com/commit-collective/deckbench/releases)
 [![tests](https://github.com/commit-collective/deckbench/actions/workflows/test.yml/badge.svg)](https://github.com/commit-collective/deckbench/actions/workflows/test.yml)
@@ -27,7 +27,7 @@ Its side panel shows events, scenarios, the mixer and network settings.
 The optional browser sound is the bench's, not the device under test's.
 
 Local decks use `127.0.0.N`. Run the device under test in the same network
-namespace. If an emulator runs in WSL, run deckbench there too.
+namespace. If an emulator runs in WSL, run DeckBench there too.
 Linux and Windows have full broadcast integration checks. On macOS, use an
 Ethernet or VM bridge interface rather than the default loopback setup.
 Native adapter support is implemented, with a dedicated CI job configured
