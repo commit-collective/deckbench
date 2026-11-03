@@ -1,7 +1,7 @@
-# DeckBench on macOS
+# Deckbench on macOS
 
 Native interface selection and MAC discovery are implemented using the system's read-only `/sbin/ifconfig -a` output.
-No runtime package or root access is needed by DeckBench. Physical Mac compatibility is still awaiting validation.
+No runtime package or root access is needed by Deckbench. Physical Mac compatibility is still awaiting validation.
 The dedicated Mac CI job is configured for native unicast, browser and packaging checks, not hardware certification.
 
 ## Real players
@@ -40,31 +40,31 @@ Start with one player using the adapter's existing address. Multiple simulated p
 IPv4 addresses. The selector refuses mixed-subnet or insufficient-address configurations rather than changing them.
 Advanced aliases can use /32 masks on macOS, so select those with explicit `--bind ADDRESS,... --netmask LAN-MASK`
 and `--broadcast LAN-BROADCAST` instead of expecting `--dj-interface` to infer their parent subnet.
-Any manually created aliases need explicit cleanup by their owner. DeckBench never creates or removes them.
+Any manually created aliases need explicit cleanup by their owner. Deckbench never creates or removes them.
 
 ## Local software and virtual machines
 
 The default `127.0.0.N` broadcast bench is not a supported native Mac topology. Adding loopback aliases alone does not
-make Linux-style loopback broadcasts work. Keep DeckBench and the software under test on the same broadcast-capable segment:
+make Linux-style loopback broadcasts work. Keep Deckbench and the software under test on the same broadcast-capable segment:
 
 - A VM's host-only bridge can provide an isolated segment without real DJ hardware
 - A bridged Ethernet interface can put applications, virtual machines and real players on the same segment
 - Default user-mode NAT and TCP port forwarding do not provide this discovery path
 
-Run DeckBench with `--dj-interface` set to the Mac interface on that segment, such as `bridge100` or `en7`. The host
+Run Deckbench with `--dj-interface` set to the Mac interface on that segment, such as `bridge100` or `en7`. The host
 and guest must have different addresses on the same subnet. Use the interface's actual IPv4 address and mask rather
 than assuming a particular vmnet address range.
 
 For a native application, configure it to use the same interface. For a virtual machine, use the virtualization
-software's documented host-only or bridged networking setup. DeckBench does not create or manage virtual networks.
+software's documented host-only or bridged networking setup. Deckbench does not create or manage virtual networks.
 Check that UDP discovery and replies can travel in both directions, not just that a TCP port is reachable.
 
 Encapsulated Ethernet-over-UDP segments are not native Pro DJ Link UDP. Pointing `--broadcast` at a multicast group
 does not add support for an arbitrary tunnel format. Such transports need a compatible bridge or adapter.
 These are network requirements, not a claim of validated compatibility with every application or hypervisor.
 
-Alternatively, run DeckBench and the client inside the same Linux VM using the Linux loopback bench. That remains
-distinct from running DeckBench natively on macOS.
+Alternatively, run Deckbench and the client inside the same Linux VM using the Linux loopback bench. That remains
+distinct from running Deckbench natively on macOS.
 
 ## Acceptance checklist
 

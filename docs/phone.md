@@ -1,4 +1,4 @@
-# Using DeckBench from a phone
+# Using Deckbench from a phone
 
 Phone pairing has worked with a Windows bench on a real DJ network. Running the bench itself on a phone remains untested.
 
@@ -86,8 +86,8 @@ the page with no network and no Python.
 
 ## 3. The phone is the bench (one device, not tried)
 
-The idea: a Pixel with a USB Ethernet adapter on the players' switch, DeckBench in Termux, the page in the phone's browser at
-`http://localhost:8750/`. DeckBench is plain Python, with nothing to install.
+The idea: a Pixel with a USB Ethernet adapter on the players' switch, Deckbench in Termux, the page in the phone's browser at
+`http://localhost:8750/`. Deckbench is plain Python, with nothing to install.
 
     pkg install python git
     git clone <deckbench's repository>

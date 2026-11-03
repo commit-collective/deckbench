@@ -1,4 +1,4 @@
-# Pro DJ Link in DeckBench
+# Pro DJ Link in Deckbench
 
 The layouts are those of Deep Symmetry's public analysis
 ([djl-analysis](https://djl-analysis.deepsymmetry.org/)) and of its Java

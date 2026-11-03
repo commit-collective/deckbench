@@ -1,6 +1,6 @@
 # On a real network
 
-Run DeckBench on a Windows, Linux or macOS computer connected by Ethernet to the same switch as the players. Use the
+Run Deckbench on a Windows, Linux or macOS computer connected by Ethernet to the same switch as the players. Use the
 computer's built-in Ethernet port, a dock or a USB Ethernet adapter. A second Ethernet adapter is optional.
 
 ## Connect the computer
@@ -15,7 +15,7 @@ For example, a laptop can use Ethernet for the players and Wi-Fi for internet an
 Ethernet port is already connected to the home router can use a second Ethernet port or USB adapter for an isolated
 DJ switch. If the players and computer already share the same wired LAN, that connection can serve both purposes.
 
-DeckBench itself does not need internet access. Loading the hosted browser page does. An isolated DJ network and a
+Deckbench itself does not need internet access. Loading the hosted browser page does. An isolated DJ network and a
 home network should use different IP subnets. Keep the home connection's default gateway, and do not add a gateway
 to the isolated DJ connection. Do not bridge the two connections or enable internet sharing for this setup.
 
@@ -23,7 +23,7 @@ to the isolated DJ connection. Do not bridge the two connections or enable inter
 
 Here, **DJ interface** means the Ethernet connection cabled to the players, regardless of whether it is built in or USB.
 Use `python -m deckbench --network-info` to find its name and IPv4 address. Names are assigned by the operating system,
-not by DeckBench. For one virtual player, use its existing address without adding another:
+not by Deckbench. For one virtual player, use its existing address without adding another:
 
 ```powershell
 # Windows example
@@ -161,7 +161,7 @@ Run these commands on the DJ-connected PC, even if development happens on anothe
 
 - **WSL, containers or virtual machines:** a virtual NAT network does not automatically expose the computer's physical
   DJ interface. For real hardware on Windows, use Windows Python. WSL means Windows Subsystem for Linux and is not
-  required by DeckBench. Its default networking uses NAT, while mirrored mode changes how interfaces are exposed.
+  required by Deckbench. Its default networking uses NAT, while mirrored mode changes how interfaces are exposed.
   Mirrored-mode Pro DJ Link has not been validated here. See [Microsoft's networking guide](https://learn.microsoft.com/en-us/windows/wsl/networking).
 - No "Unit under test": the broadcast address is probably wrong (give it
   with `--broadcast`), or a firewall drops UDP 50000, or the alias is on a
