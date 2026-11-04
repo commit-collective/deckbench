@@ -61,6 +61,15 @@ class Page(unittest.TestCase):
         for call in ("api/stream", "api/deck/", "api/scenario", "api/events/clear", "api/loss/", "api/settings/", "api/examples"):
             self.assertIn(call, script)
 
+    def test_checkbox_labels_do_not_use_the_short_field_width(self):
+        page = self.get("")[2].decode("utf-8")
+        css = self.get("app.css")[2].decode("utf-8")
+        self.assertRegex(page, r'<label class="check"><input type="checkbox" id="djremember"><span>Remember this choice</span></label>')
+        rule = re.search(r'\.row > label\.check\s*\{([^}]+)\}', css)
+        self.assertIsNotNone(rule)
+        self.assertIn('width: auto;', rule.group(1))
+        self.assertIn('display: inline-flex;', rule.group(1))
+
     def test_every_id_the_script_uses_is_in_the_page(self):
         page = self.get("")[2].decode("utf-8")
         script = self.get("app.js")[2].decode("utf-8")
