@@ -18,9 +18,13 @@ network, or report explicitly if recovery fails. Embedded Python servers only
 offer these routes when passed a `NetworkSetup` controller via `serve(network=...)`.
 The CLI enables them by default. Existing CLI network flags still take precedence
 at startup, and no remembered selection changes an automated launch.
-CLI sessions with browser network setup filter UDP sources to the configured subnet. This is not
-OS-level isolation between adapters that share a subnet. The simulated mixer
-remains off after reconnecting and uses the first selected address if enabled.
+Selecting an adapter in the browser or with `--dj-interface` enables UDP source
+filtering to its subnet. Manual `--bind` launches keep their previous unfiltered
+receive behavior, regardless of the mask or broadcast destination. A broadcast
+address alone does not establish a subnet. This is not OS-level isolation
+between adapters that share a subnet. The simulated mixer remains off after
+reconnecting. On a real adapter, it needs a distinct configured address supplied
+with `--mixer-address`, otherwise enabling it is refused with an explanation.
 
 Remembered choices live in `~/.deckbench/network.json`. They are only suggestions
 in the picker, never automatically connected. Adapter discovery lists configured

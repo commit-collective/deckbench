@@ -38,6 +38,7 @@ import random
 import os
 import socket
 import struct
+import sys
 import threading
 import time
 import ipaddress
@@ -643,6 +644,7 @@ class Prolink(Protocol):
         self.defended = {}                  # (claimer's address, number): when it was last told that the number is in use
         self.mixer = LinkMixer(self, mixer_name if isinstance(mixer_name, bytes) else mixer_name.encode(), 33,
                                mixer_address, broadcast, mixer_channels)
+        self.mixer_address = mixer_address
         self.profile = ""
         self.status_length, self.nexus, self.sync_counter = 0x124, 0x0F, True
         if profile:
@@ -767,7 +769,7 @@ class Prolink(Protocol):
             if any(d.enabled for d in self.world.decks.values()) or self.mixer.on:
                 raise RuntimeError('Switch off all simulated decks and the mixer before reconnecting')
         previous = {n: (d.address, d.broadcast, d.mac) for n, d in self.decks.items()}
-        previous_mixer = self.mixer.address, self.mixer.broadcast, self.mixer.mac
+        previous_mixer = self.mixer.address, self.mixer.broadcast, self.mixer.mac, self.mixer.unavailable
         previous_network = self.source_network
         self.mixer.changed.set()
         if not self.runtime.close():
@@ -780,7 +782,7 @@ class Prolink(Protocol):
                     deck.address, deck.broadcast, deck.mac = address, destination, mac
                     deck.handing_to, deck.pending, deck.pending_peer = 0xFF, False, None
                     deck.early_master = None
-                self.mixer.address, self.mixer.broadcast, self.mixer.mac = mixer
+                self.mixer.address, self.mixer.broadcast, self.mixer.mac, self.mixer.unavailable = mixer
                 self.mixer.sock = None
                 self.player_controls.clear()
                 with self._metadata_lock:
@@ -795,10 +797,17 @@ class Prolink(Protocol):
                     self.monitor.recent.clear()
 
         values = {n: (address, broadcast, macs[address]) for n, address in addresses.items()}
-        # The simulated mixer stays off. It uses the selected host address when enabled explicitly.
-        mixer_address = next(iter(addresses.values())) if not broadcast.startswith('127.') else '127.0.0.33'
-        mixer_mac = next(iter(values.values()))[2] if not broadcast.startswith('127.') else bytes([2, 0xFA, 0x4E, 0xDE, 0xC1, 33])
-        configure(values, (mixer_address, broadcast, mixer_mac))
+        mixer_address = '127.0.0.1' if sys.platform == 'darwin' else '127.0.0.33'
+        mixer_mac = bytes([2, 0xFA, 0x4E, 0xDE, 0xC1, 33])
+        unavailable = ''
+        if not ipaddress.IPv4Address(next(iter(addresses.values()))).is_loopback:
+            requested = self.mixer_address
+            if (requested and requested in macs and requested not in addresses.values()
+                    and (subnet is None or ipaddress.IPv4Address(requested) in subnet)):
+                mixer_address, mixer_mac = requested, macs[requested]
+            else:
+                unavailable = 'The simulated mixer needs a separate configured address on this adapter. Restart with --mixer-address ADDRESS'
+        configure(values, (mixer_address, broadcast, mixer_mac, unavailable))
         self.source_network = subnet
         try:
             self.start()
@@ -1134,7 +1143,7 @@ class Prolink(Protocol):
         if self.observer and self.truthy(params.get("on", False)):
             return False, "mixer simulation is disabled in observer mode"
         if "on" in params and not m.set_on(self.truthy(params["on"])):
-            return False, "the mixer cannot be on: its address (%s) is not this machine's" % m.address
+            return False, m.unavailable or "the mixer cannot be on: its address (%s) is not this machine's" % m.address
         if "master" in params:
             m.set_master(self.truthy(params["master"]))
         if params.get("channel") is not None:

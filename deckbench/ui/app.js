@@ -1027,6 +1027,7 @@ function renderMixer() {
   buildStrips(mixer);
   $("mixname").textContent = "Simulated mixer " + mixer.name + " (player " + mixer.number + ")";
   $("mixon").setAttribute("aria-checked", String(!!mixer.on));
+  $("mixon").disabled = !!mixer.unavailable;
   $("mixmaster").setAttribute("aria-checked", String(!!mixer.master));
   const active = document.activeElement;
   for (const [n, c] of Object.entries(mixer.channels)) {
@@ -1036,8 +1037,8 @@ function renderMixer() {
     strip.querySelector(".switch").setAttribute("aria-checked", String(!!c.fader_start));
     for (const b of strip.querySelectorAll(".btn")) b.disabled = !mixer.on;
   }
-  $("mixhint").textContent = mixer.on ? "Channel N is player N. The decks' on-air flag follows what the mixer says, and a unit that picks the deck to sync to looks at it."
-    : "Simulation off. A discovered physical mixer can still report which channels are on air.";
+  $("mixhint").textContent = mixer.unavailable || (mixer.on ? "Channel N is player N. The decks' on-air flag follows what the mixer says, and a unit that picks the deck to sync to looks at it."
+    : "Simulation off. A discovered physical mixer can still report which channels are on air.");
 }
 
 $("mixon").addEventListener("click", () => act("api/mixer/on/" + ($("mixon").getAttribute("aria-checked") === "true" ? 0 : 1)));
@@ -1068,6 +1069,12 @@ window.addEventListener("hashchange", () => { if (tabInAddress()) showTab(tabInA
 
 function frame() { lamps(); strips(); requestAnimationFrame(frame); }
 
+function updateNetworkReconnect() {
+  const option = $("djinterface").selectedOptions[0];
+  $("djreconnect").disabled = transport.demo || !option || option.disabled;
+}
+$("djinterface").onchange = updateNetworkReconnect;
+
 async function loadNetworkSetup() {
   const select = $("djinterface"), status = $("djnetworkstatus");
   $("djreconnect").disabled = true;
@@ -1088,7 +1095,7 @@ async function loadNetworkSetup() {
     select.value = chosen;
     status.textContent = "Current: " + Object.entries(data.current.addresses).map(([n, ip]) => "#" + n + " at " + ip).join(", ") +
       ". Broadcast " + data.current.broadcast + ". " + data.endpoints + " endpoint(s), each needs its own configured IPv4 address. " + data.error;
-    $("djreconnect").disabled = false;
+    updateNetworkReconnect();
   } catch (error) {
     status.textContent = "Network setup is unavailable: " + error.message;
   }
@@ -1102,7 +1109,7 @@ $("djreconnect").onclick = async () => {
       body: JSON.stringify({interface: $("djinterface").value, remember: $("djremember").checked})});
     toast(result.warning || "DJ network reconnected. Simulated decks remain off.", result.warning ? "warn" : "ok");
     await loadNetworkSetup();
-  } catch (error) { $("djreconnect").disabled = false; }
+  } catch (error) { updateNetworkReconnect(); }
 };
 
 function start() {

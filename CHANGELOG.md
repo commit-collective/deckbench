@@ -8,6 +8,9 @@ Newest first. A release is a tagged commit.
   Reconnect an idle bench without restarting its HTTP server, with explicit
   reset of discovered identities and armed controls and recovery on bind failure.
   Remember adapter choices as suggestions without changing CLI startup behavior.
+- Keep manual `--bind` receivers unfiltered and require a distinct mixer address
+  after switching to a real adapter. Release the reconnect guard after CLI
+  scenarios finish, and prevent reconnecting unavailable remembered adapters.
 
 - The app, its page title and the docs write the name Deckbench. The command, the package and the name it
   announces on the network stay `deckbench`.

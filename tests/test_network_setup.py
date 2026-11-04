@@ -13,6 +13,7 @@ from deckbench.core import Deck, World
 from deckbench.network_setup import NetworkSetup
 from deckbench.protocols.prolink import Prolink, PortError
 from deckbench.web import serve
+from deckbench.cli import run_cli_scenarios
 
 
 class NetworkSetupTests(unittest.TestCase):
@@ -31,6 +32,58 @@ class NetworkSetupTests(unittest.TestCase):
             result = self.setup.snapshot()
         self.assertEqual(result['interfaces'], [{'name': 'Ethernet 2', 'addresses': ['169.254.4.5/16'], 'default_route': True}])
         self.assertEqual(result['current']['addresses'], {'3': '127.0.0.3'})
+
+    def test_manual_bind_keeps_receivers_unfiltered(self):
+        address = '169.254.10.5'
+        for broadcast in ('169.254.10.255', '169.254.255.255'):
+            with self.subTest(broadcast=broadcast), patch('deckbench.protocols.prolink.interface_macs', return_value={address: b'abcdef'}):
+                world = World()
+                world.decks[3] = Deck(world, 3, 128)
+                link = Prolink(world, addresses={3: address}, broadcast=broadcast)
+                setup = NetworkSetup(link)
+                self.assertIsNone(setup.current()['subnet'])
+                self.assertTrue(link.accepts_source('169.254.77.3'))
+                link.stop()
+
+    def test_named_interface_uses_its_configured_mask(self):
+        self.link.decks[3].address = '169.254.10.5'
+        setup = NetworkSetup(self.link, interface='DJ', netmask='255.255.0.0')
+        self.assertEqual(setup.current()['subnet'], '169.254.0.0/16')
+        self.assertTrue(self.link.accepts_source('169.254.77.3'))
+        self.assertFalse(self.link.accepts_source('192.168.1.2'))
+
+    def test_cli_scenario_guard_is_released_after_completion_and_failure(self):
+        for fails in (False, True):
+            self.world.info['cli_scenarios'] = True
+            def run():
+                self.assertTrue(self.world.info['cli_scenarios'])
+                if fails:
+                    raise ValueError('scenario failed')
+            if fails:
+                with self.assertRaisesRegex(ValueError, 'scenario failed'):
+                    run_cli_scenarios(self.world, run)
+            else:
+                run_cli_scenarios(self.world, run)
+            self.assertFalse(self.world.info['cli_scenarios'])
+
+    def test_physical_reconnect_requires_a_distinct_mixer_address(self):
+        address, mixer_address = '169.254.10.5', '169.254.10.6'
+        for configured in (None, address, mixer_address):
+            with self.subTest(configured=configured), patch.object(self.link, 'start'), patch.object(self.link.runtime, 'close', return_value=True):
+                self.link.mixer_address = configured
+                self.link.reconnect({3: address}, '169.254.255.255',
+                                    {address: b'abcdef', mixer_address: b'abcdef'},
+                                    ipaddress.IPv4Network('169.254.0.0/16'))
+                if configured == mixer_address:
+                    self.assertEqual(self.link.mixer.address, mixer_address)
+                    self.assertFalse(self.link.mixer.unavailable)
+                else:
+                    self.assertNotEqual(self.link.mixer.address, address)
+                    self.assertIn('--mixer-address', self.link.mixer.unavailable)
+                    self.assertFalse(self.link.mixer.set_on(True))
+                    ok, message = self.link.mixer_do({'on': True})
+                    self.assertFalse(ok)
+                    self.assertIn('--mixer-address', message)
 
     def test_remember_is_a_suggestion_not_an_automatic_connection(self):
         with patch.object(self.link, 'reconnect') as reconnect, patch('deckbench.phone.dj_interface', return_value=[ipaddress.IPv4Interface('169.254.4.5/16')]), patch('deckbench.network_setup.interface_macs', return_value={'169.254.4.5': b'abcdef'}):

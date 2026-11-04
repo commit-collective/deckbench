@@ -1,0 +1,25 @@
+// Exercise the adapter picker guard without a browser or real interfaces.
+"use strict";
+const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
+const select = {selectedOptions: [{disabled: true}]};
+const button = {disabled: false};
+const context = vm.createContext({$: id => id === "djinterface" ? select : button, transport: {demo: false}});
+const source = fs.readFileSync(path.join(__dirname, "..", "deckbench", "ui", "app.js"), "utf8");
+const guard = source.split("function updateNetworkReconnect() {")[1].split('$("djinterface").onchange')[0];
+vm.runInContext("function updateNetworkReconnect() {" + guard, context);
+context.updateNetworkReconnect();
+assert.strictEqual(button.disabled, true, "An unavailable remembered adapter cannot reconnect");
+select.selectedOptions = [{disabled: false}];
+context.updateNetworkReconnect();
+assert.strictEqual(button.disabled, false, "Choosing loopback or an available adapter enables reconnect");
+select.selectedOptions = [];
+context.updateNetworkReconnect();
+assert.strictEqual(button.disabled, true, "A missing selection cannot reconnect");
+context.transport.demo = true;
+select.selectedOptions = [{disabled: false}];
+context.updateNetworkReconnect();
+assert.strictEqual(button.disabled, true, "The demo cannot reconnect a network");
+console.log("ok");
