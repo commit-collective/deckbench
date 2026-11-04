@@ -4,6 +4,11 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Choose the backend's DJ network adapter from the browser Network panel.
+  Reconnect an idle bench without restarting its HTTP server, with explicit
+  reset of discovered identities and armed controls and recovery on bind failure.
+  Remember adapter choices as suggestions without changing CLI startup behavior.
+
 - The app, its page title and the docs write the name Deckbench. The command, the package and the name it
   announces on the network stay `deckbench`.
 

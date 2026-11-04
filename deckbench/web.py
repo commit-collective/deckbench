@@ -111,7 +111,7 @@ class Server(ThreadingHTTPServer):
         self.server_name, self.server_port = self.server_address[:2]
 
 
-def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, tracks=None):
+def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, tracks=None, network=None):
     """Starts the server in a thread; returns it.
 
     A request to the API that comes from a page (it has an Origin header) is refused unless that page is the bench's own
@@ -122,6 +122,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
     allowed = {o.rstrip("/") for o in allow_origins}
     runner = Runner(world)
     journal = Journal()
+    mutation_lock = threading.RLock()
     folder = tracks or upload_store.default_dir()
 
     def loaded():
@@ -238,6 +239,9 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                     self.send(200, f.read(), KINDS.get(os.path.splitext(name)[1], "application/octet-stream"))
             elif path == "/api/state":
                 self.send(200, json.dumps(world.snapshot()))
+            elif path == "/api/network":
+                self.send(200 if network else 404, json.dumps(network.snapshot() if network else
+                          {'error': 'Network setup is not enabled for this embedded bench'}))
             elif path == "/api/uploads":
                 self.send(200, json.dumps(upload_store.summary(folder)))
             elif re.fullmatch(r"/api/deck/\d+/waveform", path):
@@ -285,8 +289,32 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
         def do_POST(self):
             if not self.guard():
                 return
+            if self.path.split('?')[0] == '/api/upload':
+                return self.post()
+            with mutation_lock:
+                self.post()
+
+        def post(self):
             parts = self.path.split("?")[0].strip("/").split("/")
             query = parse_qs(urlparse(self.path).query)
+            if parts == ['api', 'network']:
+                if not network:
+                    return self.send(404, json.dumps({'error': 'Network setup is unavailable'}))
+                if runner.snapshot().get('running') or world.info.get('recording') or world.info.get('cli_scenarios'):
+                    return self.send(409, json.dumps({'error': 'Stop the scenario or action recording before reconnecting'}))
+                try:
+                    length = int(self.headers.get('Content-Length', '0'))
+                    if not 0 < length <= 4096:
+                        raise ValueError('network settings must be a JSON object smaller than 4 KB')
+                    data = json.loads(self.rfile.read(length))
+                    if not isinstance(data, dict) or set(data) - {'interface', 'remember'}:
+                        raise ValueError('expected interface and optional remember')
+                    result = network.apply(data.get('interface'), data.get('remember', False))
+                except RuntimeError as error:
+                    return self.send(409, json.dumps({'error': str(error)}))
+                except (OSError, ValueError, TypeError, KeyError) as error:
+                    return self.send(400, json.dumps({'error': str(error)}))
+                return self.send(200, json.dumps(result))
             if parts == ["api", "journal", "start"]:
                 got = journal.start(world)
                 world.info["recording"] = True                    # the page says so

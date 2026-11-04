@@ -98,6 +98,13 @@
 
     <!-- Network -->
     <div class="panel" id="p-network" role="tabpanel" aria-labelledby="tab-network" hidden>
+      <h2>DJ network adapter</h2>
+      <p class="hint">Choose an adapter on the computer running Deckbench, not on this browser's device. This does not change its addresses or firewall.</p>
+      <div class="row"><label for="djinterface">Adapter</label><select id="djinterface"><option value="">Local testing (loopback)</option></select></div>
+      <p class="hint" id="djnetworkstatus" role="status">Loading network setup…</p>
+      <div class="row"><label><input type="checkbox" id="djremember"> Remember this choice</label></div>
+      <div class="toolbar"><button class="btn small" id="djrefresh">Refresh adapters</button><button class="btn small" id="djreconnect">Reconnect</button></div>
+      <p class="hint">Switch off simulated decks and the mixer first. Reconnecting interrupts discovery and clears discovered identities and armed controls. Remembered choices are offered next time, not connected automatically.</p>
       <h2>Datagrams lost</h2>
       <div class="row"><input type="range" id="loss" min="0" max="100" step="1" value="0" aria-label="Share of datagrams lost">
         <output id="lossout" class="mono">0 %</output></div>

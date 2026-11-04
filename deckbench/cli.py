@@ -23,6 +23,7 @@ from .protocols.prolink import Ports, PortError, Prolink
 from .scenario import Scenario, ScenarioError
 from .web import serve
 from . import phone
+from .network_setup import NetworkSetup
 
 
 def broadcast_of(address, netmask):
@@ -317,7 +318,9 @@ def main(argv=None):
         from . import uploads
         count, size = uploads.clear(a.tracks_dir or uploads.default_dir())
         log("removed %d sent file%s (%.1f MB)" % (count, "" if count == 1 else "s", size / 1048576.0))
-    server = serve(world, a.http_host, a.http_port, a.allow_origin, token, a.tracks_dir) if a.http_port >= 0 else None
+    network = NetworkSetup(link, a.dj_interface, netmask=a.netmask) if a.http_port >= 0 else None
+    world.info['cli_scenarios'] = bool(scenarios)
+    server = serve(world, a.http_host, a.http_port, a.allow_origin, token, a.tracks_dir, network=network) if a.http_port >= 0 else None
     if server:
         world.info["http"] = "http://%s:%d/" % (a.http_host, server.server_address[1])
         browser_host = "127.0.0.1" if a.http_host == "0.0.0.0" else a.http_host

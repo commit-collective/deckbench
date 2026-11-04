@@ -1068,7 +1068,45 @@ window.addEventListener("hashchange", () => { if (tabInAddress()) showTab(tabInA
 
 function frame() { lamps(); strips(); requestAnimationFrame(frame); }
 
+async function loadNetworkSetup() {
+  const select = $("djinterface"), status = $("djnetworkstatus");
+  $("djreconnect").disabled = true;
+  if (transport.demo) {
+    select.disabled = $("djrefresh").disabled = true;
+    status.textContent = "The demo has no network adapter. Connect to a running bench to choose one.";
+    return;
+  }
+  try {
+    const data = await api("api/network", {method: "GET"});
+    select.replaceChildren(h("option", {value: ""}, "Local testing (loopback)"));
+    for (const row of data.interfaces) select.append(h("option", {value: row.name},
+      row.name + " · " + row.addresses.join(", ") + (row.default_route ? " · default route" : "")));
+    const chosen = data.current.interface || data.remembered || "";
+    if (chosen && ![...select.options].some(option => option.value === chosen)) {
+      select.append(h("option", {value: chosen, disabled: true}, chosen + " · unavailable"));
+    }
+    select.value = chosen;
+    status.textContent = "Current: " + Object.entries(data.current.addresses).map(([n, ip]) => "#" + n + " at " + ip).join(", ") +
+      ". Broadcast " + data.current.broadcast + ". " + data.endpoints + " endpoint(s), each needs its own configured IPv4 address. " + data.error;
+    $("djreconnect").disabled = false;
+  } catch (error) {
+    status.textContent = "Network setup is unavailable: " + error.message;
+  }
+}
+$("djrefresh").onclick = loadNetworkSetup;
+$("djreconnect").onclick = async () => {
+  if (!window.confirm("Reconnect the DJ network? Discovery and armed player controls will reset. All simulated decks and the mixer must be off.")) return;
+  $("djreconnect").disabled = true;
+  try {
+    const result = await api("api/network", {headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({interface: $("djinterface").value, remember: $("djremember").checked})});
+    toast(result.warning || "DJ network reconnected. Simulated decks remain off.", result.warning ? "warn" : "ok");
+    await loadNetworkSetup();
+  } catch (error) { $("djreconnect").disabled = false; }
+};
+
 function start() {
+  loadNetworkSetup();
   pollPackets();
   fillSaved();
   drawEvents();

@@ -387,6 +387,8 @@ class LinkDeck:
                 continue
             if self.net.runtime.stopping.is_set():
                 return
+            if not self.net.accepts_source(addr[0]):
+                continue
             self.net.monitor.feed(data, addr[0], self.ports.beat, to=self.address)
             if not deck.enabled or deck.unplugged or len(data) < 0x25 or data[:10] != MAGIC:
                 continue
@@ -624,6 +626,7 @@ class Prolink(Protocol):
         self.world = world
         # Preserve the Python integration default. The standalone CLI opts out.
         self.target = target
+        self.source_network = None
         self.runtime = NetworkRuntime()
         self.observer = bool(observer)
         self.ports = ports
@@ -755,6 +758,63 @@ class Prolink(Protocol):
         self.monitor.close()
         return result
 
+    def accepts_source(self, address):
+        return self.source_network is None or ipaddress.IPv4Address(address) in self.source_network
+
+    def reconnect(self, addresses, broadcast, macs, subnet=None):
+        """Move an idle bench to another segment without replacing its HTTP API."""
+        with self.world.lock:
+            if any(d.enabled for d in self.world.decks.values()) or self.mixer.on:
+                raise RuntimeError('Switch off all simulated decks and the mixer before reconnecting')
+        previous = {n: (d.address, d.broadcast, d.mac) for n, d in self.decks.items()}
+        previous_mixer = self.mixer.address, self.mixer.broadcast, self.mixer.mac
+        previous_network = self.source_network
+        self.mixer.changed.set()
+        if not self.runtime.close():
+            raise RuntimeError('Network workers did not stop, restart the bench before reconnecting')
+
+        def configure(values, mixer):
+            with self.world.lock:
+                for n, (address, destination, mac) in values.items():
+                    deck = self.decks[n]
+                    deck.address, deck.broadcast, deck.mac = address, destination, mac
+                    deck.handing_to, deck.pending, deck.pending_peer = 0xFF, False, None
+                    deck.early_master = None
+                self.mixer.address, self.mixer.broadcast, self.mixer.mac = mixer
+                self.mixer.sock = None
+                self.player_controls.clear()
+                with self._metadata_lock:
+                    self.track_metadata.clear()
+                self.defended.clear()
+                self.unit = dict(number=0, ip=None, master=False, bpm=None, synced=False,
+                                 playing=False, on_air=False, beat=0, seen=0.0, announced=0.0)
+                for deck in self.world.decks.values():
+                    deck.on_air = None
+                with self.monitor.lock:
+                    self.monitor.devices.clear()
+                    self.monitor.recent.clear()
+
+        values = {n: (address, broadcast, macs[address]) for n, address in addresses.items()}
+        # The simulated mixer stays off. It uses the selected host address when enabled explicitly.
+        mixer_address = next(iter(addresses.values())) if not broadcast.startswith('127.') else '127.0.0.33'
+        mixer_mac = next(iter(values.values()))[2] if not broadcast.startswith('127.') else bytes([2, 0xFA, 0x4E, 0xDE, 0xC1, 33])
+        configure(values, (mixer_address, broadcast, mixer_mac))
+        self.source_network = subnet
+        try:
+            self.start()
+        except (OSError, ValueError) as error:
+            self.runtime.close()
+            configure(previous, previous_mixer)
+            self.source_network = previous_network
+            try:
+                self.start()
+            except (OSError, ValueError) as rollback:
+                raise RuntimeError('Reconnect failed (%s), and the previous network could not restart (%s)'
+                                   % (error, rollback)) from error
+            raise ValueError('Reconnect failed, previous network restored: %s' % error) from error
+        self.world.events.add('network_changed', addresses=addresses, broadcast=broadcast)
+        self.world.changed()
+
     def apply_profile(self, name, rename=True, resize=True, **_):
         """Stands in for another model of player (profiles.py): its name, the length of its statuses, its nexus byte and
         whether its sync counter counts."""
@@ -844,6 +904,8 @@ class Prolink(Protocol):
                 continue
             if self.runtime.stopping.is_set():
                 return
+            if not self.accepts_source(addr[0]):
+                continue
             self.monitor.feed(data, addr[0], self.ports.beat)
             flags = parse_on_air(data)
             if flags is not None:
@@ -1308,6 +1370,8 @@ class Prolink(Protocol):
             ready, _, _ = select.select([s for s, _ in socks], [], [], 0.5)
             for s in ready:
                 data, addr = s.recvfrom(2048)
+                if not self.accepts_source(addr[0]):
+                    continue
                 bound = s.getsockname()
                 port = bound[1]
                 self.monitor.feed(data, addr[0], port, to="*" if bound[0] == "0.0.0.0" else bound[0])
