@@ -1,5 +1,15 @@
 # On a real network
 
+You can choose the adapter in the browser's **Network → DJ network adapter**
+panel instead of passing `--dj-interface`. Start with the unused player number
+you need, for example `python -m deckbench --numbers 3`, then select the wired
+adapter and press Reconnect. For phone access, add `--phone` as before.
+The picker lists adapters on the server computer, including when using a phone.
+Switch off the simulated decks and mixer before reconnecting. No adapter
+addresses or firewall rules are changed. Each configured simulated deck needs
+its own existing IPv4 address, so a four-deck launch needs four addresses.
+Remembered choices are offered next time, not connected automatically.
+
 Run Deckbench on a Windows, Linux or macOS computer connected by Ethernet to the same switch as the players. Use the
 computer's built-in Ethernet port, a dock or a USB Ethernet adapter. A second Ethernet adapter is optional.
 

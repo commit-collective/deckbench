@@ -40,7 +40,7 @@ See [macOS setup and networking](docs/macos.md).
 |---|---|
 | Explore the interface without a network | [Browser demo](https://commitcollective.cc/deckbench/app/?demo), simulated in the browser |
 | Test an app or emulator locally | The command above, then [scenarios](docs/scenarios.md) |
-| Put simulated decks beside real hardware | [Network aliases, broadcast and ports](docs/real-network.md) |
+| Put simulated decks beside real hardware | [Choose a network adapter, addresses and ports](docs/real-network.md) |
 | Use a phone as the screen of a running bench | [Phone pairing and connection choices](docs/phone.md) |
 
 The bench provides discovery, statuses, beats, sync/master handover, track

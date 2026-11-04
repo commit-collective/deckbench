@@ -4,6 +4,28 @@ Run these commands from a checkout or an installed package.
 
 ## Command line
 
+The Network panel also offers adapter selection on the backend computer.
+`GET /api/network` lists its configured IPv4 adapters, current bindings and
+remembered choice. `POST /api/network` accepts a JSON object such as
+`{"interface":"Ethernet 2","remember":true}`. An empty interface selects
+loopback. These routes use the same token and origin checks as other API routes.
+
+Reconnect requires all simulated decks and the mixer to be off, with no running
+scenario or action recording. It resets discovered identities and armed player
+controls, while retaining packet history and continuous capture. The HTTP server
+stays at the same address. Failed network binding attempts restore the previous
+network, or report explicitly if recovery fails. Embedded Python servers only
+offer these routes when passed a `NetworkSetup` controller via `serve(network=...)`.
+The CLI enables them by default. Existing CLI network flags still take precedence
+at startup, and no remembered selection changes an automated launch.
+CLI sessions with browser network setup filter UDP sources to the configured subnet. This is not
+OS-level isolation between adapters that share a subnet. The simulated mixer
+remains off after reconnecting and uses the first selected address if enabled.
+
+Remembered choices live in `~/.deckbench/network.json`. They are only suggestions
+in the picker, never automatically connected. Adapter discovery lists configured
+IPv4 addresses, not proof of a cable, firewall permission or reachable players.
+
 Options (`python -m deckbench --help`):
 
 - `--decks N` or `--numbers N,N,...`: the players (default 1 to 4)
