@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Keep the network adapter's remember-choice checkbox beside its natural-width label.
+
 - Choose the backend's DJ network adapter from the browser Network panel.
   Reconnect an idle bench without restarting its HTTP server, with explicit
   reset of discovered identities and armed controls and recovery on bind failure.

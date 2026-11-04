@@ -191,6 +191,9 @@ button.num:disabled { cursor: default; opacity: .5; }
 
 .row { display: flex; align-items: center; gap: 8px; min-height: 30px; }
 .row > label, .row > .lbl { flex: none; width: 52px; font: 400 10px var(--lab); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+.row > label.check { display: inline-flex; align-items: center; gap: 8px; width: auto; max-width: 100%; min-height: 30px; cursor: pointer; }
+.check input[type=checkbox] { flex: none; margin: 0; }
+.check span { min-width: 0; }
 .row input[type=range] { flex: 1; min-width: 0; accent-color: var(--text); }
 .seg { display: flex; gap: 4px; flex-wrap: wrap; }
 .seg button { min-width: 32px; height: 28px; padding: 0 8px; border: 1px solid var(--line); background: transparent; color: var(--muted);
