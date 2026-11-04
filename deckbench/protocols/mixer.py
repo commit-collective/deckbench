@@ -88,6 +88,7 @@ class LinkMixer:
         self.broadcast = broadcast
         self.six = channels == 6
         self.on = False
+        self.unavailable = ''
         self.master = True                              # the master level is up: channels can be on the air
         self.channels = {n: {"fader": 0, "fader_start": False} for n in range(1, channels + 1)}
         self.mac = bytes([0x02, 0xFA, 0x4E, 0xDE, 0xC1, number])
@@ -105,7 +106,7 @@ class LinkMixer:
 
     def snapshot(self):
         return {"on": self.on, "name": self.name.decode(), "number": self.number, "address": self.address,
-                "master": self.master, "six": self.six,
+                "master": self.master, "six": self.six, "unavailable": self.unavailable,
                 "channels": {str(n): {"fader": c["fader"], "fader_start": c["fader_start"], "on_air": self.on_air(n)}
                              for n, c in self.channels.items()}}
 
@@ -113,6 +114,9 @@ class LinkMixer:
     def set_on(self, on):
         """Switches it on or off. False if it cannot be on: its address is not one of this machine's."""
         on = bool(on)
+        if on and self.unavailable:
+            log(self.unavailable)
+            return False
         if on == self.on:
             return True
         if on:

@@ -54,6 +54,16 @@ def parse_titles(path):
     return titles
 
 
+def run_cli_scenarios(world, run):
+    """Release the network setup guard even when a scenario raises."""
+    try:
+        run()
+    finally:
+        with world.lock:
+            world.info['cli_scenarios'] = False
+        world.changed()
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         prog="deckbench",
@@ -366,7 +376,7 @@ def main(argv=None):
             if a.then_exit:
                 done.set()
         done = threading.Event()
-        threading.Thread(target=play, daemon=True).start()
+        threading.Thread(target=run_cli_scenarios, args=(world, play), daemon=True).start()
         if a.then_exit:
             done.wait()
             kinds = {o[1] for o in outcomes}

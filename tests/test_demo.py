@@ -41,6 +41,10 @@ class Demo(unittest.TestCase):
         out = subprocess.run(["node", os.path.join(ROOT, "tests", "events_check.js")], capture_output=True, text=True, timeout=60)
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
 
+    def test_unavailable_adapter_cannot_reconnect(self):
+        out = subprocess.run(["node", os.path.join(ROOT, "tests", "network_setup_check.js")], capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

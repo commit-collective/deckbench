@@ -16,15 +16,14 @@ class NetworkSetup:
         self.interface = interface
         self.settings = settings or os.path.expanduser('~/.deckbench/network.json')
         address = next(iter(link.decks.values())).address
-        link.source_network = (ipaddress.IPv4Network('127.0.0.0/8')
-                               if ipaddress.ip_address(address).is_loopback else
-                               ipaddress.IPv4Interface(address + '/' + netmask).network)
+        if interface:
+            link.source_network = ipaddress.IPv4Interface(address + '/' + netmask).network
 
     def current(self):
         return {'interface': self.interface or '',
                 'addresses': {str(n): d.address for n, d in self.link.decks.items()},
                 'broadcast': next(iter(self.link.decks.values())).broadcast,
-                'subnet': str(self.link.source_network)}
+                'subnet': str(self.link.source_network) if self.link.source_network else None}
 
     def snapshot(self):
         """The interfaces belong to the server, never to the browser's device."""
