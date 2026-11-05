@@ -162,7 +162,7 @@ Inspect the installed rules, or remove them when no longer needed:
 .\tools\windows-firewall.ps1 -Action Remove
 ```
 
-Removal needs administrator rights. If Python, the adapter name or its subnet changes, remove and reinstall the rules.
+Removal needs administrator rights. If Python, the adapter name or its subnet changes, install again: it replaces its own rules.
 After installing the permanent rule, an earlier troubleshooting rule can be removed:
 
 ```powershell
