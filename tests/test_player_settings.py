@@ -14,11 +14,11 @@ class Settings(unittest.TestCase):
     feed = controls.PlayerControl.feed
     call = controls.PlayerControl.call
 
-    def test_on_by_default_and_off_for_an_observer(self):
+    def test_on_by_default_and_control_off_for_an_observer(self):
         settings = Prolink(World(), ports=fresh()).settings()
         self.assertEqual((settings["player_control"], settings["auto_track_info"]), (True, True))
         settings = Prolink(World(), ports=fresh(), observer=True).settings()
-        self.assertEqual((settings["player_control"], settings["auto_track_info"]), (False, False))
+        self.assertEqual((settings["player_control"], settings["auto_track_info"]), (False, True))
 
     def test_player_control_arms_every_eligible_player(self):
         device = lambda: self.net.info()["devices"][0]
