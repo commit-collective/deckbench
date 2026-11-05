@@ -76,6 +76,8 @@ class Monitor:
         A unit on the same machine sends from 127.0.0.1 as well, which is the address of deck 1: the name tells them apart."""
         for link in self.net.decks.values():
             if link.address == source:
+                if name == "deckbench" and number == self.net.PRESENCE:   # the presence of the bench with its decks off
+                    return True
                 return (not name or name == link.name.decode()) and (number is None or number == link.number)
         mixer = self.net.mixer
         return source == mixer.address and (not name or name == mixer.name.decode())

@@ -283,6 +283,15 @@ normal status reports to show the result. They do not force a local display chan
 CDJ-3000 players may use these commands while their fader-start buttons remain disabled. The new commands need hardware
 validation. Use them only when changing the setup's tempo ownership is safe.
 
+## Status with every deck off
+
+Players send their full status (playing, SYNC, MASTER, the bar) only to devices that announce themselves. Beats are
+broadcast, so they come anyway. On a real network with every simulated deck off, the bench therefore announces itself
+as observer 7, the way `--observe` does, and the cards' lamps and the master's beat follow the players. It sends only
+keep-alives: no status, beats or database. Number 7 is outside the players' range, so it takes no deck's place. It
+stops when a deck is switched on, since that deck announces itself, and is suspended while another device uses 7.
+Older players answer Read track info only from a number 1 to 4, which this presence does not give.
+
 ## Observe without a simulated deck
 
 ```sh
