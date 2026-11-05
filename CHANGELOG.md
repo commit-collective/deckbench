@@ -5,7 +5,7 @@ Newest first. A release is a tagged commit.
 ## Unreleased
 
 - Press PLAY/PAUSE and CUE on a CDJ-2000NXS2 too (experimental), in its own packet format, tried on a physical
-  NXS2. It keeps fader start as well.
+  NXS2. It keeps fader start as well. The XDJ-1000MK2 is sent the same format, untried.
 - A player card under control has switches like a bench deck's: PLAY/PAUSE, CUE, SYNC and MASTER, lit from what
   the player reports. Fader start, track info and loading stay under Player control.
 - Hold CUE on a CDJ-3000 from its card for as long as you hold the button, so it plays from the cue point.

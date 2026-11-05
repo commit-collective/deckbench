@@ -3,7 +3,7 @@
 
 Experimental. A remote controller connects, presses and releases a button, then disconnects: four short datagrams
 sent to the player's UDP 50001 from the bench's own 50001. Seen working on CDJ-3000 firmware (in cdj3k-emu) and on a
-physical CDJ-2000NXS2. Nothing comes back: a sent press is not a confirmed one.
+physical CDJ-2000NXS2. The XDJ-1000MK2 is sent the NXS2's format, untried. Nothing comes back: a sent press is not a confirmed one.
 
 The two formats differ after the header. The CDJ-3000's fields are big-endian with no slot. The NXS2's are
 little-endian and name a controller slot, 1 to 4: the tested one is the player's own number, which its receiver

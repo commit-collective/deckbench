@@ -156,7 +156,7 @@ for each discovered player:
 | Model | `transport_method` | `fader_start_supported` | Commands |
 |---|---|---|---|
 | CDJ-3000, CDJ-3000X | `buttons` | false | `play-pause` and `cue` |
-| CDJ-2000NXS2 | `buttons` | true | `play-pause` and `cue`, or `start` and `stop` |
+| CDJ-2000NXS2, XDJ-1000MK2 | `buttons` | true | `play-pause` and `cue`, or `start` and `stop` |
 | XDJ-XZ | (empty) | false | none |
 | others | `fader` | true | `start` and `stop`: fader start |
 
@@ -171,8 +171,8 @@ NXS2's fields are little-endian and name a controller slot, which the bench
 sets to the player's number (1 to 4), as tested. The presses worked on CDJ-3000
 firmware run in cdj3k-emu, and PLAY, PAUSE and a short CUE worked on a physical
 CDJ-2000NXS2. No physical CDJ-3000 or CDJ-3000X has been tried, nor a long CUE
-hold on the NXS2. Other models, such as the XDJ-1000MK2, get no presses until
-they are tried. The API answers HTTP 202 with `sent: true, confirmed: false` and
+hold on the NXS2. The XDJ-1000MK2 is sent the NXS2's format, untried. Other
+models get no presses until they are tried. The API answers HTTP 202 with `sent: true, confirmed: false` and
 records `player_button`.
 
 `POST /api/player/IP/command/play-pause?number=N` (or `cue`, one tap) needs

@@ -67,7 +67,7 @@ class Buttons(unittest.TestCase):
         return self.net.info()["devices"][0]
 
     def test_each_model_gets_its_own_method(self):
-        for name, method, fader in ((b"CDJ-2000NXS2", "buttons", True), (b"XDJ-1000MK2", "fader", True),
+        for name, method, fader in ((b"CDJ-2000NXS2", "buttons", True), (b"XDJ-1000MK2", "buttons", True), (b"CDJ-2000NXS", "fader", True),
                                     (b"CDJ-3000", "buttons", False), (b"CDJ-3000X", "buttons", False), (b"XDJ-XZ", "", False)):
             with self.subTest(model=name):
                 device = self.as_model(name)
@@ -93,14 +93,19 @@ class Buttons(unittest.TestCase):
         code, body = self.call("command", "start")
         self.assertEqual(code, 400)
         self.assertIn("play-pause", body["error"])
-        self.as_model(b"XDJ-1000MK2")              # its format matches the NXS2's on paper, untried
+        self.as_model(b"CDJ-2000NXS")
         self.call("arm", "1")
         code, body = self.call("command", "cue")
         self.assertEqual(code, 400)
         self.assertIn("start and stop", body["error"])
 
     def test_an_nxs2_press_is_in_its_own_format(self):
-        self.as_model(b"CDJ-2000NXS2")
+        for name in (b"CDJ-2000NXS2", b"XDJ-1000MK2"):
+            with self.subTest(model=name):
+                self.as_model(name)
+                self.press_in_legacy_format()
+
+    def press_in_legacy_format(self):
         self.call("arm", "1")
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
             receiver.bind((self.ip, self.net.ports.beat))
@@ -161,7 +166,7 @@ class Buttons(unittest.TestCase):
             self.assertEqual(self.received(receiver, 2), [transport.packet(0, 21).hex(), TESTED["disconnect"]])
 
     def test_holding_is_only_for_players_that_take_presses(self):
-        self.as_model(b"XDJ-1000MK2")
+        self.as_model(b"CDJ-2000NXS")
         self.call("arm", "1")
         self.assertEqual(self.call("command", "cue-down")[0], 400)
         self.assertEqual(self.call("command", "cue-up"), (200, {"released": False}))     # letting go is never refused
