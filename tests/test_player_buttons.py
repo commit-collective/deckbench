@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
-"""PLAY/PAUSE and CUE pressed on a CDJ-3000, and each model's way of being started and stopped."""
+"""PLAY/PAUSE and CUE pressed on a CDJ-3000 and a CDJ-2000NXS2, and each model's way of being started and stopped."""
 import socket
 import unittest
 
@@ -14,6 +14,15 @@ TESTED = {
     "play-pause up": "5173707431576d4a4f4c076465636b62656e63682070726f626500000000000100360030000000000001001400000000",
     "cue down": "5173707431576d4a4f4c076465636b62656e63682070726f626500000000000100360030000000000001001500010000",
 }
+# The NXS2's little-endian format, controller slot 2, as the probe's logs of the test on a physical CDJ-2000NXS2 recorded it.
+LEGACY = {
+    "connect": "5173707431576d4a4f4c076465636b62656e63682070726f62650000000000010036002a010002000000",
+    "disconnect": "5173707431576d4a4f4c076465636b62656e63682070726f62650000000000010036002a020002000000",
+    "play-pause down": "5173707431576d4a4f4c076465636b62656e63682070726f626500000000000100360030000002000100140000010000",
+    "play-pause up": "5173707431576d4a4f4c076465636b62656e63682070726f626500000000000100360030000002000100140000000000",
+    "cue down": "5173707431576d4a4f4c076465636b62656e63682070726f626500000000000100360030000002000100150000010000",
+    "cue up": "5173707431576d4a4f4c076465636b62656e63682070726f626500000000000100360030000002000100150000000000",
+}
 
 
 class Packets(unittest.TestCase):
@@ -23,6 +32,16 @@ class Packets(unittest.TestCase):
         self.assertEqual(transport.packet(0, 20, True).hex(), TESTED["play-pause down"])
         self.assertEqual(transport.packet(0, 20).hex(), TESTED["play-pause up"])
         self.assertEqual(transport.packet(0, 21, True).hex(), TESTED["cue down"])
+
+    def test_the_legacy_bytes_are_the_tested_ones(self):
+        self.assertEqual(transport.packet(transport.CONNECT, slot=2).hex(), LEGACY["connect"])
+        self.assertEqual(transport.packet(transport.DISCONNECT, slot=2).hex(), LEGACY["disconnect"])
+        for button, key in (("play-pause", 20), ("cue", 21)):
+            self.assertEqual(transport.packet(0, key, True, 2).hex(), LEGACY[button + " down"])
+            self.assertEqual(transport.packet(0, key, False, 2).hex(), LEGACY[button + " up"])
+        for slot in (0, 5):
+            with self.assertRaises(ValueError):
+                transport.packet(transport.CONNECT, slot=slot)
 
     def test_release_and_disconnect_follow_a_failed_press(self):
         sent = []
@@ -48,12 +67,12 @@ class Buttons(unittest.TestCase):
         return self.net.info()["devices"][0]
 
     def test_each_model_gets_its_own_method(self):
-        for name, method in ((b"CDJ-2000NXS2", "fader"), (b"CDJ-3000", "buttons"), (b"CDJ-3000X", "buttons"),
-                             (b"XDJ-XZ", "")):
+        for name, method, fader in ((b"CDJ-2000NXS2", "buttons", True), (b"XDJ-1000MK2", "fader", True),
+                                    (b"CDJ-3000", "buttons", False), (b"CDJ-3000X", "buttons", False), (b"XDJ-XZ", "", False)):
             with self.subTest(model=name):
                 device = self.as_model(name)
                 self.assertEqual(device["transport_method"], method)
-                self.assertEqual(device["fader_start_supported"], method == "fader")
+                self.assertEqual(device["fader_start_supported"], fader)
 
     def test_a_press_is_four_datagrams_from_the_beat_port(self):
         self.as_model(b"CDJ-3000")
@@ -74,11 +93,30 @@ class Buttons(unittest.TestCase):
         code, body = self.call("command", "start")
         self.assertEqual(code, 400)
         self.assertIn("play-pause", body["error"])
-        self.as_model(b"CDJ-2000NXS2")
+        self.as_model(b"XDJ-1000MK2")              # its format matches the NXS2's on paper, untried
         self.call("arm", "1")
         code, body = self.call("command", "cue")
         self.assertEqual(code, 400)
         self.assertIn("start and stop", body["error"])
+
+    def test_an_nxs2_press_is_in_its_own_format(self):
+        self.as_model(b"CDJ-2000NXS2")
+        self.call("arm", "1")
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
+            receiver.bind((self.ip, self.net.ports.beat))
+            receiver.settimeout(2)
+            self.assertEqual(self.call("command", "play-pause")[0], 202)
+            self.assertEqual(self.received(receiver, 4),
+                             [LEGACY["connect"], LEGACY["play-pause down"], LEGACY["play-pause up"], LEGACY["disconnect"]])
+            self.assertEqual(self.call("command", "cue-down")[0], 202)
+            self.assertEqual(self.received(receiver, 2), [LEGACY["connect"], LEGACY["cue down"]])
+            self.assertEqual(self.call("command", "cue-up"), (200, {"released": True}))
+            self.assertEqual(self.received(receiver, 2), [LEGACY["cue up"], LEGACY["disconnect"]])
+
+    def test_an_nxs2_keeps_fader_start(self):
+        self.as_model(b"CDJ-2000NXS2")
+        self.call("arm", "1")
+        self.assertEqual(self.call("command", "start")[0], 200)
 
     def received(self, receiver, count):
         return [receiver.recvfrom(1024)[0].hex() for _ in range(count)]
@@ -123,7 +161,7 @@ class Buttons(unittest.TestCase):
             self.assertEqual(self.received(receiver, 2), [transport.packet(0, 21).hex(), TESTED["disconnect"]])
 
     def test_holding_is_only_for_players_that_take_presses(self):
-        self.as_model(b"CDJ-2000NXS2")
+        self.as_model(b"XDJ-1000MK2")
         self.call("arm", "1")
         self.assertEqual(self.call("command", "cue-down")[0], 400)
         self.assertEqual(self.call("command", "cue-up"), (200, {"released": False}))     # letting go is never refused

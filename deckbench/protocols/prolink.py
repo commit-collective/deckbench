@@ -627,7 +627,7 @@ class Prolink(Protocol):
         # Preserve the Python integration default. The standalone CLI opts out.
         self.target = target
         self.source_network = None
-        self.held = {}                      # player address: (socket, send, watchdog) of a CUE held down (hold_player_cue)
+        self.held = {}                      # player address: (socket, send, slot, watchdog) of a held CUE (hold_player_cue)
         self.held_lock = threading.Lock()
         self.runtime = NetworkRuntime()
         self.observer = bool(observer)
@@ -1083,17 +1083,25 @@ class Prolink(Protocol):
         return 200, {}
 
     # How each model is started and stopped. Fader start is documented as unsupported on the CDJ-3000 and XDJ-XZ. The
-    # CDJ-3000 takes button presses (protocols/transport.py) instead: seen on CDJ-3000 firmware, the 3000X untried.
-    BUTTON_MODELS = ("CDJ-3000", "CDJ-3000X")
+    # CDJ-3000 takes button presses (protocols/transport.py) instead: seen on CDJ-3000 firmware, the 3000X untried. The
+    # CDJ-2000NXS2 takes them in its own format, and fader start too. Other models get only what was tried on them.
+    BUTTON_MODELS = ("CDJ-3000", "CDJ-3000X", "CDJ-2000NXS2")
+    SLOT_MODELS = ("CDJ-2000NXS2",)     # the little-endian format, whose controller slot is the player's number
     NO_FADER_START = ("CDJ-3000", "CDJ-3000X", "XDJ-XZ")
 
     @classmethod
     def transport_method(cls, device):
-        """'buttons', 'fader' or '' (none) for a discovered player."""
+        """'buttons', 'fader' or '' (none) for a discovered player: how it is played and paused. A player with
+        buttons can take fader start as well (fader_start_supported)."""
         name = device["name"].upper()
         if name in cls.BUTTON_MODELS:
             return "buttons"
         return "" if name in cls.NO_FADER_START else "fader"
+
+    @classmethod
+    def button_slot(cls, device):
+        """The controller slot of the player's button format: its number for the NXS2's, None for the CDJ-3000's."""
+        return device["number"] if device["name"].upper() in cls.SLOT_MODELS else None
 
     def control_devices(self):
         devices = self.monitor.snapshot()
@@ -1101,7 +1109,7 @@ class Prolink(Protocol):
         for device in devices:
             number = device["number"]
             available = (device["online"] and device["kind"] == "player"
-                         and (number in (1, 2, 3, 4) or device["name"].upper() in self.BUTTON_MODELS and number in (5, 6))
+                         and (number in (1, 2, 3, 4) or device["name"].upper() in ("CDJ-3000", "CDJ-3000X") and number in (5, 6))
                          and sum(d["online"] and d["number"] == number for d in devices) == 1
                          and sum(d["online"] and d["ip"] == device["ip"] for d in devices) == 1
                          and not any(l.deck.enabled and l.number == number for l in self.decks.values()))
@@ -1110,7 +1118,7 @@ class Prolink(Protocol):
                 eligible.add(identity)
             device["transport_available"] = bool(available)
             device["transport_method"] = self.transport_method(device)
-            device["fader_start_supported"] = device["transport_method"] == "fader"
+            device["fader_start_supported"] = device["name"].upper() not in self.NO_FADER_START
             device["transport_armed"] = bool(available and identity in self.player_controls)
             device["load_allowed"] = self.load_refusal(device) is None
         self.player_controls.intersection_update(eligible)
@@ -1150,13 +1158,14 @@ class Prolink(Protocol):
             try:
                 sock.bind((sender.address, self.ports.beat))
                 send = lambda data: sender.send(sock, data, (ip, self.ports.beat))
-                transport.down(send, "cue", self.runtime.stopping.wait)
+                slot = self.button_slot(device)
+                transport.down(send, "cue", self.runtime.stopping.wait, slot)
             except OSError as error:
                 sock.close()
                 return 400, {"error": "could not send the button press: %s" % error}
             watchdog = threading.Timer(self.HOLD_LIMIT, self.release_held_cue, (ip, "the page did not let go"))
             watchdog.daemon = True
-            self.held[ip] = (sock, send, watchdog)
+            self.held[ip] = (sock, send, slot, watchdog)
             watchdog.start()
         self.world.events.add("player_button", deck=device["number"], ip=ip, button="cue", held=True)
         return 202, {"sent": True, "confirmed": False, "held": True, "limit": self.HOLD_LIMIT}
@@ -1167,10 +1176,10 @@ class Prolink(Protocol):
             held = self.held.pop(ip, None)
         if not held:
             return False
-        sock, send, watchdog = held
+        sock, send, slot, watchdog = held
         watchdog.cancel()
         try:
-            transport.up(send, "cue")
+            transport.up(send, "cue", slot)
         except OSError as error:
             log("CUE on %s could not be let go (%s): check the player" % (ip, error))
         finally:
@@ -1186,7 +1195,7 @@ class Prolink(Protocol):
 
     def press_player_button(self, device, button):
         """One press of PLAY/PAUSE or CUE on a player that takes them (experimental, see protocols/transport.py),
-        sent from an address of the bench's own and its UDP 50001, as tested."""
+        sent from an address of the bench's own and its UDP 50001, as tested, in the player's format."""
         if device["ip"] in self.held:
             return 409, {"error": "CUE is held on this player: let it go first"}
         online = [d for d in self.monitor.snapshot() if d["online"]]
@@ -1200,7 +1209,7 @@ class Prolink(Protocol):
             with share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as sock:
                 sock.bind((sender.address, self.ports.beat))
                 transport.press(lambda data: sender.send(sock, data, (device["ip"], self.ports.beat)), button,
-                                self.runtime.stopping.wait)
+                                self.runtime.stopping.wait, self.button_slot(device))
         except OSError as error:
             return 400, {"error": "could not send the button press: %s" % error}
         self.world.events.add("player_button", deck=device["number"], ip=device["ip"], button=button)

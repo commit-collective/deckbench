@@ -381,6 +381,10 @@ window.addEventListener("pagehide", () => {
     fetch(transport.url("api/player/" + ip + "/command/cue-up?number=" + number), {method: "POST", keepalive: true}).catch(() => {});
 });
 
+function playerCommand(d, button, command) {
+  api("api/player/" + d.ip + "/command/" + command + "?number=" + button.dataset.number).catch(() => {});
+}
+
 function buildPlayerLoad(d) {
   const field = (text, node) => h('label', {}, text, node);
   return h('details', {class: 'player-load'}, h('summary', {}, 'Load a linked track (experimental)'),
@@ -412,31 +416,36 @@ function buildDevice(d) {
       beatIndicators(),
       h("div", {class: "lcd", "aria-label": "Tempo"}, h("b", {}, "--"), h("span", {}, "BPM"))),
     mixer ? null : h("canvas", {class: "strip", "aria-hidden": "true"}),
+    /* the player's own switches, as a bench deck's: pressed on the player once control is enabled, and lit from what it reports */
+    mixer ? null : h("div", {class: "switches player-switches", role: "group", "aria-label": "Player switches", hidden: true},
+      h("button", {class: "sw", "data-command": "play-pause", "data-method": "buttons", "aria-pressed": "false",
+        onclick: (e) => playerCommand(d, e.currentTarget, "play-pause")}, "PLAY/PAUSE"),
+      /* CUE follows the finger, as the player's own: down while pressed, up when let go (the bench lets go by itself after a
+         few seconds if this page never says so) */
+      h("button", {class: "sw", "data-command": "cue", "data-method": "buttons", "aria-pressed": "false",
+        onpointerdown: (e) => { e.currentTarget.setPointerCapture(e.pointerId); cueHold(d, e.currentTarget, true); },
+        onpointerup: (e) => cueHold(d, e.currentTarget, false),
+        onpointercancel: (e) => cueHold(d, e.currentTarget, false),
+        onkeydown: (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); cueHold(d, e.currentTarget, true); } },
+        onkeyup: (e) => { if (e.key === " " || e.key === "Enter") cueHold(d, e.currentTarget, false); }}, "CUE"),
+      h("button", {class: "sw", "data-command": "sync", "aria-pressed": "false",
+        onclick: (e) => playerCommand(d, e.currentTarget, e.currentTarget.getAttribute("aria-pressed") === "true" ? "sync-off" : "sync-on")}, "SYNC"),
+      h("button", {class: "sw", "data-command": "master", "aria-pressed": "false",
+        onclick: (e) => playerCommand(d, e.currentTarget, "master")}, "MASTER")),
     h("div", {class: "facts"}),
     mixer ? null : h("details", {class: "player-control", hidden: true},
       h("summary", {}, "Player control"),
       h("label", {class: "arm"}, h("input", {type: "checkbox", class: "player-arm",
         onchange: (e) => act("api/player/" + d.ip + "/arm/" + (e.target.checked ? 1 : 0) + "?number=" + e.target.dataset.number)}),
         " Enable player control"),
-      h("p", {class: "hint", "data-method": "fader"}, "Start only works at cue. Stop returns playback to cue and does nothing while paused."),
+      h("p", {class: "hint"}, "Once enabled, the switches above press the player's own, and they light from what it reports."),
       h("p", {class: "hint", "data-method": "buttons", hidden: true},
-        "Experimental: PLAY/PAUSE and CUE are pressed as buttons, as the player's own are. PLAY/PAUSE toggles. CUE is held as long as you hold it. Seen on CDJ-3000 firmware."),
-      h("div", {class: "player-actions"}, ...[["start", "Start cued track", "fader"], ["stop", "Stop playing track", "fader"],
-        ["play-pause", "PLAY/PAUSE", "buttons"], ["cue", "CUE", "buttons"],
-        ["sync-on", "Sync on"], ["sync-off", "Sync off"], ["master", "Make master"]].map(([command, label, method]) => command === "cue" ?
-        /* CUE follows the finger, as the player's own: down while pressed, up when let go (the bench lets go by itself after a
-           few seconds if this page never says so) */
-        h("button", {class: "btn small", "data-command": command, "data-method": method, disabled: true, hidden: true,
-          title: "Hold to hold CUE on the player: at the cue point it plays while held",
-          onpointerdown: (e) => { e.currentTarget.setPointerCapture(e.pointerId); cueHold(d, e.currentTarget, true); },
-          onpointerup: (e) => cueHold(d, e.currentTarget, false),
-          onpointercancel: (e) => cueHold(d, e.currentTarget, false),
-          onkeydown: (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); cueHold(d, e.currentTarget, true); } },
-          onkeyup: (e) => { if (e.key === " " || e.key === "Enter") cueHold(d, e.currentTarget, false); }}, label) :
-        h("button", {class: "btn small", "data-command": command, "data-method": method, disabled: true, hidden: method === "buttons", onclick: (e) => {
+        "Experimental: PLAY/PAUSE toggles. CUE is held as long as you hold it. Tried on CDJ-3000 firmware and a CDJ-2000NXS2."),
+      h("p", {class: "hint", "data-method": "fader"}, "Fader start: Start only works at cue. Stop returns playback to cue and does nothing while paused."),
+      h("div", {class: "player-actions"}, ...[["start", "Start cued track"], ["stop", "Stop playing track"]].map(([command, label]) =>
+        h("button", {class: "btn small", "data-command": command, "data-method": "fader", disabled: true, onclick: (e) => {
           api("api/player/" + d.ip + "/command/" + command + "?number=" + e.currentTarget.dataset.number)
-            .then(() => toast(method === "buttons" ? "Press sent, not confirmed. Check the player." : "Command sent. Check the player's reported state.", "info"))
-            .catch(() => {});
+            .then(() => toast("Command sent. Check the player's reported state.", "info")).catch(() => {});
         }}, label))),
       h("button", {class: "btn small player-read", onclick: (e) => {
         const button = e.currentTarget;
@@ -468,22 +477,32 @@ function renderDevices() {
       const arm = q("player-arm");
       arm.checked = !!d.transport_armed;
       arm.dataset.number = d.number;
-      /* the start and stop of this model: fader start, the experimental button presses, or none (both kinds hidden) */
-      for (const node of control.querySelectorAll("[data-method]")) {
-        const shown = node.dataset.method === (d.transport_method || "fader");
-        if (node.hidden !== !shown) node.hidden = !shown;
+      const usable = d.transport_armed && d.online && S.connected, live = st && d.online;
+      /* what this model takes: the button presses, fader start, both (the CDJ-2000NXS2) or none */
+      const takes = {buttons: d.transport_method === "buttons", fader: !!d.fader_start_supported};
+      const switches = q("player-switches");
+      switches.hidden = !d.transport_available;
+      for (const node of card.querySelectorAll("[data-method]")) {
+        if (node.hidden !== !takes[node.dataset.method]) node.hidden = !takes[node.dataset.method];
+      }
+      const lit = {"play-pause": !!(live && st.play), cue: heldCues.has(d.ip), sync: !!(live && st.sync), master: !!(live && st.master)};
+      for (const button of switches.querySelectorAll("button")) {
+        button.disabled = !usable;
+        button.dataset.number = d.number;
+        const pressed = String(lit[button.dataset.command]);
+        if (button.getAttribute("aria-pressed") !== pressed) button.setAttribute("aria-pressed", pressed);
+        const tip = usable ? "" : "Enable player control first";
+        if (button.title !== tip) button.title = tip;
       }
       for (const button of control.querySelectorAll("button")) {
         button.disabled = button.classList.contains("player-read") ? !!button.dataset.pending || !d.metadata_available || !S.connected :
-          !d.transport_armed || !d.online || !S.connected ||
-            (["start", "stop"].includes(button.dataset.command) && d.fader_start_supported === false) ||
-            (["play-pause", "cue"].includes(button.dataset.command) && d.transport_method !== "buttons");
+          !usable || (button.dataset.method === "fader" && !takes.fader);
         button.dataset.number = d.number;
         if (button.classList.contains("player-read")) button.title = d.metadata_reason || "Read the loaded track's title and artist";
         if (button.classList.contains('player-load-send')) button.disabled = button.disabled || !d.load_allowed;   // the bench's rule
       }
       /* loading needs player control too: its fields look as off as its button */
-      const locked = !d.transport_armed || !d.online || !S.connected, load = q("player-load");
+      const locked = !usable, load = q("player-load");
       if (load.classList.contains("locked") !== locked) {
         load.classList.toggle("locked", locked);
         for (const field of load.querySelectorAll("input, select")) field.disabled = locked;

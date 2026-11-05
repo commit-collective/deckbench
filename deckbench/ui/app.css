@@ -189,6 +189,8 @@ button.num:disabled { cursor: default; opacity: .5; }
 
 /* a switch: filled when pressed, with a bar in its colour (the lamp) */
 .switches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+/* a player's: as many columns as the switches its model takes */
+.player-switches { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; }
 .sw { position: relative; height: 34px; border: 1px solid var(--line); border-radius: var(--r); background: transparent; color: var(--muted);
   font-size: 11px; font-weight: 500; letter-spacing: .08em; padding-top: 9px; transition: background-color .15s, color .15s, border-color .15s; }
 .sw::before { content: ""; position: absolute; left: 50%; top: 5px; width: 14px; height: 3px; margin-left: -7px; border-radius: 2px; background: var(--unlit); }

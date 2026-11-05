@@ -149,23 +149,31 @@ acknowledgement is not proof of a successful load. Check the actual player.
 This implementation has packet and loopback coverage, not hardware validation.
 See the [public wire description](https://djl-analysis.deepsymmetry.org/djl-analysis/loading_tracks.html).
 
-How a player is started and stopped depends on its model, which the bench
-reports as `transport_method` for each discovered player:
+How a player is started and stopped depends on its model. The bench reports
+`transport_method` (button presses or fader start) and `fader_start_supported`
+for each discovered player:
 
-| Model | `transport_method` | Commands |
-|---|---|---|
-| CDJ-3000, CDJ-3000X | `buttons` | `play-pause` and `cue`: button presses, experimental |
-| XDJ-XZ | (empty) | none |
-| others | `fader` | `start` and `stop`: fader start |
+| Model | `transport_method` | `fader_start_supported` | Commands |
+|---|---|---|---|
+| CDJ-3000, CDJ-3000X | `buttons` | false | `play-pause` and `cue` |
+| CDJ-2000NXS2 | `buttons` | true | `play-pause` and `cue`, or `start` and `stop` |
+| XDJ-XZ | (empty) | false | none |
+| others | `fader` | true | `start` and `stop`: fader start |
 
-Fader start is documented as unsupported on the CDJ-3000 and XDJ-XZ. On a
-CDJ-3000 the bench instead presses PLAY/PAUSE or CUE as a remote controller
-does: it connects, presses, holds 0.1 s, releases and disconnects, as controller
+Fader start is documented as unsupported on the CDJ-3000 and XDJ-XZ. The bench
+can instead press PLAY/PAUSE or CUE as a remote controller does, experimental:
+it connects, presses, holds 0.1 s, releases and disconnects, as controller
 number 54, unicast to the player's UDP 50001 from the bench's own. PLAY/PAUSE is
-a toggle, and CUE is held like the real button. These presses worked on CDJ-3000
-firmware run in cdj3k-emu. A CDJ-2000NXS2 ignored them. No physical CDJ-3000 has
-been tried yet, nor a CDJ-3000X. The API answers HTTP 202 with
-`sent: true, confirmed: false` and records `player_button`.
+a toggle, never retried, and CUE is held like the real button.
+
+The CDJ-3000 and the CDJ-2000NXS2 take these presses in two formats. The
+NXS2's fields are little-endian and name a controller slot, which the bench
+sets to the player's number (1 to 4), as tested. The presses worked on CDJ-3000
+firmware run in cdj3k-emu, and PLAY, PAUSE and a short CUE worked on a physical
+CDJ-2000NXS2. No physical CDJ-3000 or CDJ-3000X has been tried, nor a long CUE
+hold on the NXS2. Other models, such as the XDJ-1000MK2, get no presses until
+they are tried. The API answers HTTP 202 with `sent: true, confirmed: false` and
+records `player_button`.
 
 `POST /api/player/IP/command/play-pause?number=N` (or `cue`, one tap) needs
 armed player control, like the other commands. The wrong command for a model is
@@ -173,7 +181,7 @@ refused with the right one named. Hot cues and loops are not implemented.
 
 CUE can also be held, as on the player, where it plays from the cue point while
 held: `cue-down` connects and presses it, `cue-up` lets go and disconnects. The
-card's CUE button does this while you hold it. `cue-up` is never refused. A CUE
+card's CUE switch does this while you hold it. `cue-up` is never refused. A CUE
 held 8 seconds is let go by the bench (a page that went away), and so is one
 held when the bench stops or reconnects.
 
