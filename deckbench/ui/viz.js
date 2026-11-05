@@ -136,8 +136,11 @@ const Strip = (() => {
    * middle, with the loudness between two values taken in proportion, so that it moves smoothly as the strip does. */
   v.waveform = (g, wave, ticks, x, gap, w, h, colour) => {
     const {peaks, rate, offset, bpm} = wave;
-    if (!peaks || !peaks.length || !(bpm > 0)) return;
-    const perBeat = 60 / bpm, mid = h / 2, scale = h * 0.42 / 100, last = peaks.length - 1;
+    if (!peaks || !peaks.length || !(wave.beatTime || bpm > 0)) return;
+    /* the file's second of a beat of the track: a real player's from its beat grid (beatTime), whose beats need not be
+       evenly spaced, a bench deck's from the tempo the file was made at */
+    const time = wave.beatTime || ((b) => offset + b * 60 / bpm);
+    const mid = h / 2, scale = h * 0.42 / 100, last = peaks.length - 1;
     const level = (i) => {                                          /* at a place of the file, in values: 0 outside it */
       if (i < 0 || i > last) return 0;
       const k = Math.floor(i);
@@ -148,11 +151,16 @@ const Strip = (() => {
     for (let from = 0; from < ticks.length;) {
       let to = from;
       while (to + 1 < ticks.length && ticks[to + 1].at === ticks[to].at + 1) to++;           /* a loop's jump back ends the run */
-      const x0 = x(ticks[from].dt), x1 = x(ticks[to].dt) + gap, start = offset + ticks[from].at * perBeat, span = (to - from + 1) * perBeat;
+      const x0 = x(ticks[from].dt), x1 = x(ticks[to].dt) + gap;
       if (x1 >= 0 && x0 <= w && x1 > x0) {
+        /* each beat between its tick and the next one's: the ticks of a real player are where its beats came */
         const tops = [];
+        let k = from;
         for (let px = Math.max(0, Math.floor(x0)); px <= Math.min(w, Math.ceil(x1)); px++) {
-          tops.push([px, Math.max(0.4, level((start + (px - x0) / (x1 - x0) * span) * rate) * scale)]);
+          while (k < to && x(ticks[k + 1].dt) <= px) k++;
+          const xa = x(ticks[k].dt), xb = k < to ? x(ticks[k + 1].dt) : xa + gap;
+          const b = ticks[k].at + Math.max(0, Math.min(1, (px - xa) / Math.max(1e-6, xb - xa)));
+          tops.push([px, Math.max(0.4, level(time(b) * rate) * scale)]);
         }
         g.beginPath();
         g.moveTo(tops[0][0], mid - tops[0][1]);
@@ -262,6 +270,82 @@ const Strip = (() => {
       g.globalAlpha = 1;
       g.fillStyle = plan.loop || plan.looping ? loopColor : muted;
       g.fillText(label, w - width + 1, h - 15);
+    }
+  };
+
+  /* A real player's track, from the bench's api/player/IP/waveform: its detail as peaks (0 to 100, RATE a second), its overview
+   * as heights, and its beat grid, which maps a beat of the track (counted from 0, as a player's ticks are) to its second, the
+   * beats' own times between them and the last interval past the ends. The colours the players draw are left out: the strip
+   * is drawn as a bench deck's is. */
+  v.realWave = (data) => {
+    const bytes = (text) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
+    const detail = bytes(data.detail), over = bytes(data.overview);
+    const peaks = [];
+    for (let i = 0; i + 1 < detail.length; i += 2) peaks.push((((detail[i] << 8) | detail[i + 1]) >> 2 & 31) * 100 / 31);
+    const overview = [];
+    for (let i = 0; i + 5 < over.length; i += 6) overview.push(Math.max(over[i + 3] & 127, over[i + 4] & 127, over[i + 5] & 127) * 100 / 127);
+    const times = data.grid.map((beat) => beat[0] / 1000), bars = data.grid.map((beat) => beat[1]), n = times.length;
+    const step = (i) => n > 1 ? times[Math.min(Math.max(i, 0), n - 2) + 1] - times[Math.min(Math.max(i, 0), n - 2)] : 0.5;
+    const beatTime = (b) => {
+      if (b <= 0 || n < 2) return times[0] + b * step(0);
+      if (b >= n - 1) return times[n - 1] + (b - n + 1) * step(n - 2);
+      const i = Math.floor(b);
+      return times[i] + (b - i) * (times[i + 1] - times[i]);
+    };
+    const beatOf = (seconds) => {                                   /* the inverse: the beat at a second of the track */
+      if (n < 2 || seconds <= times[0]) return (seconds - times[0]) / step(0);
+      if (seconds >= times[n - 1]) return n - 1 + (seconds - times[n - 1]) / step(n - 2);
+      let lo = 0, hi = n - 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (times[mid] <= seconds) lo = mid; else hi = mid; }
+      return lo + (seconds - times[lo]) / (times[hi] - times[lo]);
+    };
+    return {key: data.key, peaks: v.smooth(peaks), rate: data.rate || 150, overview, beatTime, beatOf, bars,
+            duration: peaks.length / (data.rate || 150)};
+  };
+
+  /* Where a real player is in its track, in seconds, and how it is known: its precise position (the CDJ-3000's, many a second),
+   * else its last beat and its tempo since, which is an estimate between beats and only the beat while it is paused. now and the
+   * device's times are the bench's. Null when nothing says. */
+  v.trackPlace = (device, wave, now) => {
+    const st = device.status, precise = device.precise;
+    if (!st || !wave) return null;
+    if (precise && precise.at != null && now - precise.at < 1.5) {
+      const rate = 1 + (precise.pitch || 0) / 100;
+      return {seconds: precise.position_ms / 1000 + (st.play ? (now - precise.at) * rate : 0), estimated: false};
+    }
+    if (st.play && device.phase && st.track_beat != null) {
+      const [t, pos, bpm] = device.phase;
+      return {seconds: wave.beatTime(pos + Math.max(0, now - t) * bpm / 60), estimated: true};
+    }
+    if (st.track_beat != null) return {seconds: wave.beatTime(st.track_beat - 1), estimated: true};
+    return null;
+  };
+
+  /* The whole track, small: its loudness, the part played dimmer, and the playhead. */
+  v.drawOverview = (canvas, wave, place) => {
+    const ratio = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;
+    if (canvas.width !== Math.round(w * ratio) || canvas.height !== Math.round(h * ratio)) {
+      canvas.width = Math.round(w * ratio);
+      canvas.height = Math.round(h * ratio);
+    }
+    const g = canvas.getContext("2d"), text = color("--text", "#e6e8ec"), muted = color("--muted", "#8f95a1");
+    g.setTransform(ratio, 0, 0, ratio, 0, 0);
+    g.clearRect(0, 0, w, h);
+    const cols = wave.overview, at = place ? Math.max(0, Math.min(1, place.seconds / wave.duration)) * w : -1, mid = h / 2;
+    for (let px = 0; px < w; px++) {
+      const from = Math.floor(px * cols.length / w), to = Math.max(from + 1, Math.floor((px + 1) * cols.length / w));
+      let top = 0;
+      for (let i = from; i < to && i < cols.length; i++) top = Math.max(top, cols[i]);
+      const a = Math.max(0.5, top * h * 0.46 / 100);
+      g.fillStyle = px < at ? muted : text;
+      g.globalAlpha = px < at ? 0.35 : 0.5;
+      g.fillRect(px, mid - a, 1, 2 * a);
+    }
+    g.globalAlpha = 1;
+    if (at >= 0) {
+      g.fillStyle = text;
+      g.fillRect(Math.round(at) - 1, 0, 2, h);
     }
   };
 

@@ -219,5 +219,44 @@ check("nothing heard, nothing drawn", Strip.layoutDevice("c", {status: null}, 5)
   check("numbers stay when two beats come close together", texts > 5, texts);
 }
 
+// a real player's track: its grid maps beats to seconds with the beats' own times, not one tempo for the whole track
+{
+  sandbox.atob = atob;
+  const b64 = (bytes) => Buffer.from(bytes).toString("base64");
+  const detail = [];
+  for (let i = 0; i < 1500; i++) detail.push(0, (i % 32) << 2);           // ten seconds at 150 a second
+  const over = [];
+  for (let i = 0; i < 1200; i++) over.push(0, 0, 0, 127, 10, 20);
+  const grid = [[1000, 1, 12000], [1500, 2, 12000], [2000, 3, 12000], [3000, 4, 6000], [4000, 1, 6000]];
+  const wave = Strip.realWave({key: "k", rate: 150, detail: b64(detail), overview: b64(over), grid});
+  check("the detail's heights", wave.peaks.length === 1500 && Math.abs(wave.duration - 10) < 1e-9);
+  check("the overview's heights", wave.overview.length === 1200 && Math.abs(wave.overview[0] - 100) < 1e-9);
+  check("a beat is its grid time", near(wave.beatTime(0), 1.0) && near(wave.beatTime(3), 3.0) && near(wave.beatTime(4), 4.0));
+  check("between beats, in proportion to their own interval", near(wave.beatTime(2.5), 2.5) && near(wave.beatTime(0.5), 1.25));
+  check("past the ends, the last interval", near(wave.beatTime(5), 5.0) && near(wave.beatTime(-1), 0.5));
+  check("the inverse", [0, 0.5, 2.5, 3.25, 4.5].every((b) => near(wave.beatOf(wave.beatTime(b)), b)));
+
+  // where it is: a CDJ-3000's precise position, else the last beat and the tempo since (an estimate), paused only the beat
+  const precise = Strip.trackPlace({status: {play: true}, precise: {at: 100, position_ms: 2000, pitch: 10}}, wave, 100.5);
+  check("precise position, at its pitch", near(precise.seconds, 2.55) && !precise.estimated, precise);
+  const stale = Strip.trackPlace({status: {play: true, track_beat: 2}, precise: {at: 90, position_ms: 2000}, phase: [100, 1, 120]}, wave, 100.25);
+  check("else from the beat, estimated", near(stale.seconds, wave.beatTime(1.5)) && stale.estimated, stale);
+  const paused = Strip.trackPlace({status: {play: false, track_beat: 3}}, wave, 100);
+  check("paused: its beat", near(paused.seconds, 2.0) && paused.estimated);
+  check("nothing known", Strip.trackPlace({status: null}, wave, 100) === null);
+
+  // a bench deck's waveform is drawn as it was: one tempo, linear over each run of beats
+  const tops = [];
+  const g = new Proxy({}, {get: (o, k) => k === "lineTo" ? (px, y) => tops.push([px, y]) : k in o ? o[k] : () => {},
+                           set: (o, k, value) => { o[k] = value; return true; }});
+  const peaks = Array.from({length: 2000}, (_, i) => (i * 7) % 100), sim = {peaks, rate: 100, offset: 0.2, bpm: 120};
+  const ticks = [0, 1, 2, 3].map((k) => ({dt: k * 0.5, at: 4 + k})), x = (dt) => 40 + dt * 50;
+  Strip.waveform(g, sim, ticks, x, 25, 600, 40, "#fff");
+  const level = (i) => { const k = Math.floor(i); return peaks[k] + (peaks[Math.min(k + 1, peaks.length - 1)] - peaks[k]) * (i - k); };
+  const x0 = x(0), x1 = x(1.5) + 25, top = tops.slice(0, tops.length / 2);
+  check("a bench deck's waveform is unchanged", top.every(([px, y]) => px < x0 ||
+    Math.abs(20 - y - Math.max(0.4, level((0.2 + 4 * 0.5 + (px - x0) / (x1 - x0) * 2.0) * 100) * 40 * 0.42 / 100)) < 1e-6), top.slice(0, 3));
+}
+
 console.log(failures ? failures + " failed" : "ok");
 process.exit(failures ? 1 : 0);

@@ -372,7 +372,7 @@ class Monitor:
                     "phase": d["phase"] if live_phase else None,
                     "bar_phase": d.get("bar_phase") if live_phase else None,
                     "at": d["at"] if not (st and st["play"]) else None,
-                    "precise": {k: v for k, v in d["precise"].items() if k != "seen"}
+                    "precise": dict({k: v for k, v in d["precise"].items() if k != "seen"}, at=d["precise"]["seen"])
                                if d.get("precise") and now - d["precise"]["seen"] < 2 else None,
                     "air": d["air"] if d["air"] and now - d["air_seen"] < 8 else None,
                     "fader": d["fader"]["commands"] if d["fader"] and now - d["fader"]["t"] < 8 else None}

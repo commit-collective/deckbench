@@ -40,6 +40,7 @@ import socket
 import struct
 import threading
 import time
+import collections
 import ipaddress
 import types
 
@@ -148,8 +149,16 @@ def read_message(conn):
     count = read_field(conn)[1]
     if not isinstance(count, int) or not 0 <= count <= 12:
         raise ValueError("invalid protocol argument count")
-    read_field(conn)                        # the tags
-    args = [read_field(conn) for _ in range(count)]
+    kind, tags = read_field(conn)           # the argument types
+    if kind != "b" or len(tags) != 12:
+        raise ValueError("invalid protocol argument table")
+    args = []
+    for expected in tags[:count]:
+        # a blob (type 3) that is empty is left out when the number before it, its length, is zero
+        if expected == 0x03 and args and args[-1] == ("n", 0):
+            args.append(("b", b""))
+        else:
+            args.append(read_field(conn))
     return txid, mtype, args
 
 
@@ -658,6 +667,11 @@ class Prolink(Protocol):
         # default, and control off for an observer, which is there to watch
         self.control_on, self.auto_info = not self.observer, True
         self.info_tried = {}                # metadata key: when the bench last read it by itself (auto_track_info)
+        # real players' waveforms (read_waveforms): by the source's identity, slot, track and style
+        self.waves = collections.OrderedDict()  # key: {"data": {...}, "used": time}, the least used first
+        self.wave_failed = {}               # key: (when, why) of the last read that failed, tried again after a minute
+        self.wave_busy = None               # the key being read now
+        self.wave_lock = threading.Lock()
         self.ports = ports
         self.claim = claim
         # Set when every socket that listens is bound (see listening()): a packet sent before is not lost for want of a listener.
@@ -772,6 +786,7 @@ class Prolink(Protocol):
         self.runtime.spawn(self.sniff)
         self.runtime.spawn(self.faders)
         self.runtime.spawn(self.read_track_info)
+        self.runtime.spawn(self.read_waveforms)
         if not self.observer:
             self.runtime.spawn(self.mixer.run)
         if wait:
@@ -1097,6 +1112,8 @@ class Prolink(Protocol):
             _, _, reason = self.metadata_context(device, devices)
             device["metadata_available"] = reason is None
             device["metadata_reason"] = reason or ""
+            if device["kind"] == "player":
+                device["waveform"] = self.wave_state(device)
         return {"unit": dict(self.unit) if self.unit["number"] else None, "settings": self.settings(),
                 "mixer": self.mixer.snapshot(), "devices": devices, "errors": list(self.runtime.errors)}
 
@@ -1153,6 +1170,94 @@ class Prolink(Protocol):
                         self.refresh_metadata(device)
                     except Exception as error:      # a worker must not die of one player's answer
                         log("track info of %s not read: %s" % (device["ip"], error))
+
+    WAVES = 8                           # waveforms kept: a few players' tracks and the ones before
+
+    def wave_key(self, device):
+        """(key, sender, source, None) for a player's track whose waveform can be read, or (None, None, None, why).
+        The key names the source that hosts the media (address, number, MAC), the slot, the track and the style."""
+        sender, source, reason = self.metadata_context(device)
+        if reason:
+            return None, None, None, reason
+        status = device["status"]
+        if status["slot"] not in (2, 3):
+            return None, None, None, "waveforms are read for SD and USB tracks only"
+        return (source["ip"], source["number"], source["mac"], status["slot"], status["rbid"], "rgb"), sender, source, None
+
+    def read_waveforms(self):
+        """Reads the waveform of each player's track by itself (auto_track_info), one at a time, outside the network
+        threads and the world lock. Drops one whose source has gone, or that no player has had loaded for a minute."""
+        from ..waveforms import Unavailable, read_track_waveforms
+        while not self.runtime.stopping.wait(1.0):
+            now = time.time()
+            devices = [d for d in self.monitor.snapshot() if d["online"]]
+            sources = {(d["ip"], d["number"], d["mac"]) for d in devices}
+            wanted = {}
+            for device in devices:
+                if device["kind"] == "player":
+                    key, sender, source, _ = self.wave_key(device)
+                    if key:
+                        wanted[key] = (sender, source)
+            with self.wave_lock:
+                for key, entry in list(self.waves.items()):
+                    if key in wanted:
+                        entry["used"] = now
+                    elif key[:3] not in sources or now - entry["used"] > 60:
+                        del self.waves[key]
+                self.wave_failed = {k: v for k, v in self.wave_failed.items() if now - v[0] < 60}
+                todo = [k for k in wanted if k not in self.waves and k not in self.wave_failed]
+            if not self.auto_info or not todo:
+                continue
+            key = todo[0]
+            sender, source = wanted[key]
+            self.wave_busy = key
+            try:
+                data = read_track_waveforms(source["ip"], sender.address, sender.number, key[3], key[4])
+            except (Unavailable, ValueError, OSError, EOFError) as error:   # TimeoutError is an OSError
+                with self.wave_lock:
+                    self.wave_failed[key] = (now, str(error) or type(error).__name__)
+                log("waveform of %s on %s not read: %s" % (key[4], key[0], error))
+                continue
+            finally:
+                self.wave_busy = None
+            # kept only if its source is still the one asked: the same address, number and MAC, online
+            if key[:3] not in {(d["ip"], d["number"], d["mac"]) for d in self.monitor.snapshot() if d["online"]}:
+                continue
+            with self.wave_lock:
+                self.waves[key] = {"data": data, "used": time.time()}
+                while len(self.waves) > self.WAVES:
+                    self.waves.popitem(last=False)
+            self.world.events.add("waveform_read", source=key[1], slot=key[3], rbid=key[4],
+                                  beats=len(data["grid"]), seconds=round(len(data["detail"]) / 2 / 150, 1))
+
+    def wave_state(self, device):
+        """What the page is told of a player's waveform: its key and whether it is ready, being read or failed."""
+        key, _, _, reason = self.wave_key(device)
+        if not key:
+            return {"state": "none", "reason": reason}
+        name = ":".join(str(part) for part in key)
+        with self.wave_lock:
+            if key in self.waves:
+                return {"key": name, "state": "ready"}
+            if key in self.wave_failed:
+                return {"key": name, "state": "failed", "reason": self.wave_failed[key][1]}
+        return {"key": name, "state": "reading" if self.wave_busy == key else ("waiting" if self.auto_info else "off")}
+
+    def waveform_asset(self, ip):
+        """GET /api/player/IP/waveform: the waveform of the track the player has now, from the cache. (status, body)"""
+        import base64
+        device = next((d for d in self.monitor.snapshot() if d["online"] and d["ip"] == ip), None)
+        if not device:
+            return 404, {"error": "no such player online"}
+        key, _, _, reason = self.wave_key(device)
+        with self.wave_lock:
+            entry = self.waves.get(key) if key else None
+        if not entry:
+            return 404, {"error": reason or "the waveform has not been read"}
+        data = entry["data"]
+        return 200, {"key": ":".join(str(part) for part in key), "rate": 150,
+                     "overview": base64.b64encode(data["overview"]).decode(),
+                     "detail": base64.b64encode(data["detail"]).decode(), "grid": data["grid"]}
 
     def refresh_metadata(self, device):
         from ..metadata import read_track_metadata

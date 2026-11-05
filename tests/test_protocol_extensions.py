@@ -2,6 +2,7 @@
 """Synthetic public-protocol fixtures, no device captures."""
 import socket
 import struct
+import time
 import unittest
 from unittest.mock import Mock, patch
 
@@ -53,6 +54,8 @@ class Extensions(unittest.TestCase):
     def test_precise_position_is_decoded_without_inventing_a_beat_grid(self):
         self.net.monitor.feed(position_packet(), "127.0.0.9", self.net.ports.beat)
         device = self.net.monitor.snapshot()[0]
+        at = device["precise"].pop("at")                    # when it came, on the bench's clock: the page's anchor
+        self.assertLess(abs(at - time.time()), 5)
         self.assertEqual(device["precise"], {"position_ms": 12345, "length_s": 240, "pitch": -3.26, "bpm": 120.2})
         self.assertIsNone(device["phase"])
 

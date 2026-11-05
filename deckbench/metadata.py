@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 """Bounded read-only track metadata queries using the public dbserver protocol."""
+import contextlib
 import socket
 import struct
 import time
@@ -17,10 +18,14 @@ class DeadlineSocket:
         return self.sock.recv(size)
 
 
-def read_track_metadata(address, source, number, slot, rbid, query_port=12523, timeout=4):
+@contextlib.contextmanager
+def session(address, source, number, query_port=12523, timeout=4):
+    """A database session with the player at `address`, from the bench's address `source`, as player `number`
+    (1 to 4), all of it within `timeout` seconds. Gives exchange(txid, kind, args) -> (kind, args), which checks
+    the answer's transaction."""
     from .protocols.prolink import message, num, read_exact, read_message
-    if not 1 <= number <= 4 or slot not in (1, 2, 3, 4) or not 0 < rbid <= 0xFFFFFFFF:
-        raise ValueError("invalid metadata player, slot or track ID")
+    if not 1 <= number <= 4:
+        raise ValueError("invalid metadata player")
     deadline = time.monotonic() + timeout
 
     def connect(port):
@@ -51,6 +56,16 @@ def read_track_metadata(address, source, number, slot, rbid, query_port=12523, t
         kind, args = exchange(0xFFFFFFFE, 0, [("n", number)])
         if kind != 0x4000:
             raise ValueError("source rejected the requesting player")
+        exchange.sock, exchange.reader = sock, reader
+        yield exchange
+
+
+def read_track_metadata(address, source, number, slot, rbid, query_port=12523, timeout=4):
+    from .protocols.prolink import message, read_message
+    if not 1 <= number <= 4 or slot not in (1, 2, 3, 4) or not 0 < rbid <= 0xFFFFFFFF:
+        raise ValueError("invalid metadata player, slot or track ID")
+    with session(address, source, number, query_port, timeout) as exchange:
+        sock, reader = exchange.sock, exchange.reader
         dmst = number << 24 | 1 << 16 | slot << 8 | 1
         kind, args = exchange(1, 0x2002, [("n", dmst), ("n", rbid)])
         if kind != 0x4000 or len(args) < 2 or not 0 < args[1][1] <= 128:
