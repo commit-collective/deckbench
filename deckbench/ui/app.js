@@ -368,12 +368,16 @@ function strips() {
 /* CUE held on real players: the bench presses it down and lets it go (api/player/IP/command/cue-down and cue-up). One down
    and one up per hold, and an up as the page goes away. The bench also lets go by itself after a few seconds. */
 const heldCues = new Map();             // player address: its number, while CUE is held from this page
+const cuePresses = new Map();           // player address: the cue-down on its way, which a cue-up waits for
 function cueHold(d, button, down) {
   if (down ? heldCues.has(d.ip) || button.disabled : !heldCues.has(d.ip)) return;
   const number = down ? button.dataset.number : heldCues.get(d.ip);
   if (down) heldCues.set(d.ip, number); else heldCues.delete(d.ip);
   button.setAttribute("aria-pressed", String(down));
-  api("api/player/" + d.ip + "/command/cue-" + (down ? "down" : "up") + "?number=" + number).catch(() => {});
+  const send = () => api("api/player/" + d.ip + "/command/cue-" + (down ? "down" : "up") + "?number=" + number).catch(() => {});
+  /* a quick tap: the up goes after the down was answered, so it cannot overtake it */
+  if (down) cuePresses.set(d.ip, send());
+  else (cuePresses.get(d.ip) || Promise.resolve()).then(send);
 }
 window.addEventListener("pagehide", () => {
   if (transport.demo) return;
@@ -417,6 +421,8 @@ function buildDevice(d) {
       h("div", {class: "lcd", "aria-label": "Tempo"}, h("b", {}, "--"), h("span", {}, "BPM"))),
     mixer ? null : h("canvas", {class: "strip", "aria-hidden": "true"}),
     /* the player's own switches, as a bench deck's: pressed on the player once control is enabled, and lit from what it reports */
+    /* the player's own switches, as a bench deck's: pressed on the player while player control is on (Settings), and lit
+       from what it reports. A model that takes no presses has fader start's START and STOP instead */
     mixer ? null : h("div", {class: "switches player-switches", role: "group", "aria-label": "Player switches", hidden: true},
       h("button", {class: "sw", "data-command": "play-pause", "data-method": "buttons", "aria-pressed": "false",
         onclick: (e) => playerCommand(d, e.currentTarget, "play-pause")}, "PLAY/PAUSE"),
@@ -428,25 +434,18 @@ function buildDevice(d) {
         onpointercancel: (e) => cueHold(d, e.currentTarget, false),
         onkeydown: (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); cueHold(d, e.currentTarget, true); } },
         onkeyup: (e) => { if (e.key === " " || e.key === "Enter") cueHold(d, e.currentTarget, false); }}, "CUE"),
+      h("button", {class: "sw", "data-command": "start", "data-method": "fader", "aria-pressed": "false", hidden: true,
+        "data-tip": "Fader start: plays a track paused at its cue point",
+        onclick: (e) => playerCommand(d, e.currentTarget, "start")}, "START"),
+      h("button", {class: "sw", "data-command": "stop", "data-method": "fader", "aria-pressed": "false", hidden: true,
+        "data-tip": "Fader stop: back to the cue point. Nothing while paused",
+        onclick: (e) => playerCommand(d, e.currentTarget, "stop")}, "STOP"),
       h("button", {class: "sw", "data-command": "sync", "aria-pressed": "false",
         onclick: (e) => playerCommand(d, e.currentTarget, e.currentTarget.getAttribute("aria-pressed") === "true" ? "sync-off" : "sync-on")}, "SYNC"),
       h("button", {class: "sw", "data-command": "master", "aria-pressed": "false",
         onclick: (e) => playerCommand(d, e.currentTarget, "master")}, "MASTER")),
     h("div", {class: "facts"}),
-    mixer ? null : h("details", {class: "player-control", hidden: true},
-      h("summary", {}, "Player control"),
-      h("label", {class: "arm"}, h("input", {type: "checkbox", class: "player-arm",
-        onchange: (e) => act("api/player/" + d.ip + "/arm/" + (e.target.checked ? 1 : 0) + "?number=" + e.target.dataset.number)}),
-        " Enable player control"),
-      h("p", {class: "hint"}, "Once enabled, the switches above press the player's own, and they light from what it reports."),
-      h("p", {class: "hint", "data-method": "buttons", hidden: true},
-        "Experimental: PLAY/PAUSE toggles. CUE is held as long as you hold it. Tried on CDJ-3000 firmware and a CDJ-2000NXS2, not yet on an XDJ-1000MK2."),
-      h("p", {class: "hint", "data-method": "fader"}, "Fader start: Start only works at cue. Stop returns playback to cue and does nothing while paused."),
-      h("div", {class: "player-actions"}, ...[["start", "Start cued track"], ["stop", "Stop playing track"]].map(([command, label]) =>
-        h("button", {class: "btn small", "data-command": command, "data-method": "fader", disabled: true, onclick: (e) => {
-          api("api/player/" + d.ip + "/command/" + command + "?number=" + e.currentTarget.dataset.number)
-            .then(() => toast("Command sent. Check the player's reported state.", "info")).catch(() => {});
-        }}, label))),
+    mixer ? null : h("div", {class: "player-control", hidden: true},
       h("button", {class: "btn small player-read", onclick: (e) => {
         const button = e.currentTarget;
         button.dataset.pending = "1";
@@ -474,39 +473,38 @@ function renderDevices() {
     const control = q("player-control");
     if (control) {
       control.hidden = !d.transport_available;
-      const arm = q("player-arm");
-      arm.checked = !!d.transport_armed;
-      arm.dataset.number = d.number;
-      const usable = d.transport_armed && d.online && S.connected, live = st && d.online;
-      /* what this model takes: the button presses, fader start, both (the CDJ-2000NXS2) or none */
-      const takes = {buttons: d.transport_method === "buttons", fader: !!d.fader_start_supported};
+      const set = settingsOf(S.state), usable = d.transport_armed && d.online && S.connected, live = st && d.online;
+      /* what this model takes: the button presses, or else fader start (START and STOP), or neither */
+      const takes = {buttons: d.transport_method === "buttons", fader: !!d.fader_start_supported && d.transport_method !== "buttons"};
       const switches = q("player-switches");
       switches.hidden = !d.transport_available;
-      for (const node of card.querySelectorAll("[data-method]")) {
-        if (node.hidden !== !takes[node.dataset.method]) node.hidden = !takes[node.dataset.method];
-      }
-      const lit = {"play-pause": !!(live && st.play), cue: heldCues.has(d.ip), sync: !!(live && st.sync), master: !!(live && st.master)};
+      const lit = {"play-pause": !!(live && st.play), cue: heldCues.has(d.ip), start: false, stop: false,
+                   sync: !!(live && st.sync), master: !!(live && st.master)};
+      const why = usable ? "" : !set.player_control && !d.transport_armed ? "Player control is off in Settings" : "";
       for (const button of switches.querySelectorAll("button")) {
+        const method = button.dataset.method, shown = !method || takes[method];
+        if (button.hidden !== !shown) button.hidden = !shown;
         button.disabled = !usable;
         button.dataset.number = d.number;
         const pressed = String(lit[button.dataset.command]);
         if (button.getAttribute("aria-pressed") !== pressed) button.setAttribute("aria-pressed", pressed);
-        const tip = usable ? "" : "Enable player control first";
+        const tip = why || button.dataset.tip || "";
         if (button.title !== tip) button.title = tip;
       }
-      for (const button of control.querySelectorAll("button")) {
-        button.disabled = button.classList.contains("player-read") ? !!button.dataset.pending || !d.metadata_available || !S.connected :
-          !usable || (button.dataset.method === "fader" && !takes.fader);
-        button.dataset.number = d.number;
-        if (button.classList.contains("player-read")) button.title = d.metadata_reason || "Read the loaded track's title and artist";
-        if (button.classList.contains('player-load-send')) button.disabled = button.disabled || !d.load_allowed;   // the bench's rule
-      }
+      const read = q("player-read");
+      read.hidden = !!set.auto_track_info;
+      read.disabled = !!read.dataset.pending || !d.metadata_available || !S.connected;
+      read.dataset.number = d.number;
+      read.title = d.metadata_reason || "Read the loaded track's title and artist";
+      const send = q("player-load-send");
+      send.disabled = !usable || !d.load_allowed;          // the bench's rule
+      send.dataset.number = d.number;
       /* loading needs player control too: its fields look as off as its button */
       const locked = !usable, load = q("player-load");
       if (load.classList.contains("locked") !== locked) {
         load.classList.toggle("locked", locked);
         for (const field of load.querySelectorAll("input, select")) field.disabled = locked;
-        load.querySelector("summary").title = locked ? "Enable player control first" : "";
+        load.querySelector("summary").title = locked ? why || "The player is offline" : "";
       }
     }
     card.classList.toggle("online", d.online);
@@ -855,7 +853,7 @@ function renderNetwork() {
 
 /* ---- settings ---- */
 
-for (const name of ["strict", "refuse_db", "claim"]) {
+for (const name of ["strict", "refuse_db", "claim", "player_control", "auto_track_info"]) {
   $(name).addEventListener("click", () => act("api/settings/" + name + "/" + ($(name).getAttribute("aria-checked") === "true" ? 0 : 1)));
 }
 $("profile").addEventListener("change", (e) => act("api/settings/profile/" + (e.target.value || "default")));
@@ -864,7 +862,7 @@ $("model").addEventListener("keydown", (e) => { if (e.key === "Enter") $("models
 
 function renderSettings() {
   const s = S.state, set = settingsOf(s), b = s.bench || {};
-  for (const name of ["strict", "refuse_db", "claim"]) $(name).setAttribute("aria-checked", String(!!set[name]));
+  for (const name of ["strict", "refuse_db", "claim", "player_control", "auto_track_info"]) $(name).setAttribute("aria-checked", String(!!set[name]));
   if (document.activeElement !== $("model")) $("model").value = set.model || "";
   const profile = $("profile"), titles = b.profiles || {};
   if (profile.options.length !== Object.keys(titles).length + 1) {

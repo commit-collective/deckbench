@@ -107,12 +107,12 @@ Options (`python -m deckbench --help`):
     GET  /api/deck/<n>/audio.wav      the deck's sound file as a WAV, which the page's Listen button plays for it (404 if it has none)
     GET  /api/deck/<n>/waveform       its loudness, 100 values a second of 0 to 100, which the deck's strip draws behind its grid
     POST /api/deck/<n>/unplug         the cable is pulled (also plug, and silence/<seconds>)
-    POST /api/settings/<name>/<value> strict and refuse_db (0 or 1), model (the name the decks announce)
+    POST /api/settings/<name>/<value> strict, refuse_db, player_control and auto_track_info (0 or 1), model (the name the decks announce)
     GET  /api/unit                    what is known of the device under test (the network's word, and the adapters')
     POST /api/unit/press/<control>    press a control of the device under test through an adapter
     GET  /api/examples                the scenarios that come with the bench (deckbench/examples)
     GET  /api/stream                  the state, the events and the scenario as server-sent events (what the page follows)
-    POST /api/player/<ip>/arm/<0|1>?number=<n>       opt in to transport control of a discovered online player
+    POST /api/player/<ip>/arm/<0|1>?number=<n>       arm one player while player_control is off (scripts, --observe)
     POST /api/player/<ip>/command/<command>?number=<n>   start, stop, sync-on, sync-off or master, requires arming
     POST /api/player/<ip>/metadata/refresh?number=<n>    read the loaded analyzed track's metadata, no arming required
     POST /api/player/<ip>/load/<id>?number=<n>&source=<player>&slot=<2|3>    request an analyzed SD/USB track, requires arming
@@ -133,8 +133,8 @@ beats on from, and for each protocol what it knows of the other side.
 
 ## Remote loading
 
-On a discovered player's card, open Player control, enable control and open
-Load a linked track. Enter the source player number, media slot and rekordbox
+With Player control on in Settings, open Load a linked track on a discovered
+player's card. Enter the source player number, media slot and rekordbox
 track ID reported on a player card. This is not a library browser or an upload
 to a physical player's USB drive.
 
@@ -176,7 +176,7 @@ models get no presses until they are tried. The API answers HTTP 202 with `sent:
 records `player_button`.
 
 `POST /api/player/IP/command/play-pause?number=N` (or `cue`, one tap) needs
-armed player control, like the other commands. The wrong command for a model is
+player control on (or the player armed), like the other commands. The wrong command for a model is
 refused with the right one named. Hot cues and loops are not implemented.
 
 CUE can also be held, as on the player, where it plays from the cue point while

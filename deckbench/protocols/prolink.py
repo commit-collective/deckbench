@@ -645,10 +645,14 @@ class Prolink(Protocol):
         # Preserve the Python integration default. The standalone CLI opts out.
         self.target = target
         self.source_network = None
-        self.held = {}                      # player address: (socket, send, slot, watchdog) of a held CUE (hold_player_cue)
+        self.held = {}                      # player address: a CUE held down, or on its way (hold_player_cue)
         self.held_lock = threading.Lock()
         self.runtime = NetworkRuntime()
         self.observer = bool(observer)
+        # the real players' controls and the reading of their track info, for every eligible player at once. On by
+        # default, off for an observer, which is there to watch
+        self.control_on = self.auto_info = not self.observer
+        self.info_tried = {}                # metadata key: when the bench last read it by itself (auto_track_info)
         self.ports = ports
         self.claim = claim
         # Set when every socket that listens is bound (see listening()): a packet sent before is not lost for want of a listener.
@@ -762,6 +766,7 @@ class Prolink(Protocol):
                     % ((deck.name, link.address, link.source, link.slot, link.rbid, deck.base_bpm)))
         self.runtime.spawn(self.sniff)
         self.runtime.spawn(self.faders)
+        self.runtime.spawn(self.read_track_info)
         if not self.observer:
             self.runtime.spawn(self.mixer.run)
         if wait:
@@ -1106,6 +1111,27 @@ class Prolink(Protocol):
             return None, None, "enable an unused bench player 1 to 4, or use an observer in that range"
         return sender, peers[0], None
 
+    def read_track_info(self):
+        """Reads each player's track info by itself when its track changes (auto_track_info), as Read track info
+        does. One that failed is tried again after 30 seconds, and one that worked when it leaves the cache."""
+        while not self.runtime.stopping.wait(1.0):
+            if not self.auto_info:
+                continue
+            now = time.time()
+            with self._metadata_lock:
+                cached = set(self.track_metadata)
+            self.info_tried = {k: t for k, t in self.info_tried.items() if now - t < 30}
+            for device in self.monitor.snapshot():
+                key = self.metadata_key(device)
+                if device["kind"] != "player" or key in cached or key in self.info_tried:
+                    continue
+                if self.metadata_context(device)[2] is None:
+                    self.info_tried[key] = now
+                    try:
+                        self.refresh_metadata(device)
+                    except Exception as error:      # a worker must not die of one player's answer
+                        log("track info of %s not read: %s" % (device["ip"], error))
+
     def refresh_metadata(self, device):
         from ..metadata import read_track_metadata
         sender, source, reason = self.metadata_context(device)
@@ -1161,7 +1187,7 @@ class Prolink(Protocol):
             device["transport_available"] = bool(available)
             device["transport_method"] = self.transport_method(device)
             device["fader_start_supported"] = device["name"].upper() not in self.NO_FADER_START
-            device["transport_armed"] = bool(available and identity in self.player_controls)
+            device["transport_armed"] = bool(available and (self.control_on or identity in self.player_controls))
             device["load_allowed"] = self.load_refusal(device) is None
         self.player_controls.intersection_update(eligible)
         return devices
@@ -1182,10 +1208,12 @@ class Prolink(Protocol):
 
     def hold_player_cue(self, device, down):
         """CUE held down until cue-up, as a finger holds the player's own: at the cue point it plays while held. A page
-        that never says cue-up (closed, offline) is covered by a watchdog, which lets go after HOLD_LIMIT."""
+        that never says cue-up (closed, offline) is covered by a watchdog, which lets go after HOLD_LIMIT. A cue-up
+        that comes while the press is still on its way is kept, and every press lasts at least transport.HOLD, so a
+        quick tap is one the player sees."""
         ip = device["ip"]
         if not down:
-            return (200, {"released": True}) if self.release_held_cue(ip) else (200, {"released": False})
+            return 200, {"released": self.release_held_cue(ip)}
         online = [d for d in self.monitor.snapshot() if d["online"]]
         if any(d["number"] == transport.CONTROLLER for d in online):
             return 409, {"error": "a device on the link already uses controller number %d" % transport.CONTROLLER}
@@ -1193,39 +1221,54 @@ class Prolink(Protocol):
                        if not l.deck.unplugged), None)
         if sender is None:
             return 400, {"error": "no connected bench interface to send from"}
+        held = {"sock": None, "send": None, "slot": self.button_slot(device), "watchdog": None, "since": 0.0,
+                "let_go": False}
         with self.held_lock:
             if ip in self.held:
                 return 200, {"held": True}
-            sock = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
-            try:
-                sock.bind((sender.address, self.ports.beat))
-                send = lambda data: sender.send(sock, data, (ip, self.ports.beat))
-                slot = self.button_slot(device)
-                transport.down(send, "cue", self.runtime.stopping.wait, slot)
-            except OSError as error:
-                sock.close()
-                return 400, {"error": "could not send the button press: %s" % error}
-            watchdog = threading.Timer(self.HOLD_LIMIT, self.release_held_cue, (ip, "the page did not let go"))
-            watchdog.daemon = True
-            self.held[ip] = (sock, send, slot, watchdog)
-            watchdog.start()
+            self.held[ip] = held                    # pending: a cue-up from now on is kept (let_go)
+        sock = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+        try:
+            sock.bind((sender.address, self.ports.beat))
+            send = lambda data: sender.send(sock, data, (ip, self.ports.beat))
+            transport.down(send, "cue", self.runtime.stopping.wait, held["slot"])
+        except OSError as error:
+            sock.close()
+            with self.held_lock:
+                self.held.pop(ip, None)
+            return 400, {"error": "could not send the button press: %s" % error}
+        watchdog = threading.Timer(self.HOLD_LIMIT, self.release_held_cue, (ip, "the page did not let go"))
+        watchdog.daemon = True
+        with self.held_lock:
+            held.update(sock=sock, send=send, watchdog=watchdog, since=time.monotonic())
+            let_go = held["let_go"]
         self.world.events.add("player_button", deck=device["number"], ip=ip, button="cue", held=True)
+        if let_go:
+            self.release_held_cue(ip)
+            return 202, {"sent": True, "confirmed": False, "held": False}
+        watchdog.start()
         return 202, {"sent": True, "confirmed": False, "held": True, "limit": self.HOLD_LIMIT}
 
     def release_held_cue(self, ip, why=None):
-        """Let go of a held CUE (cue-up, the watchdog, the bench stopping). True if one was held."""
+        """Let go of a held CUE (cue-up, the watchdog, the bench stopping). True if one was held or on its way."""
         with self.held_lock:
-            held = self.held.pop(ip, None)
-        if not held:
-            return False
-        sock, send, slot, watchdog = held
-        watchdog.cancel()
+            held = self.held.get(ip)
+            if not held:
+                return False
+            if held["sock"] is None:                # still being pressed: hold_player_cue lets go when it is down
+                held["let_go"] = True
+                return True
+            self.held.pop(ip)
+        held["watchdog"].cancel()
+        rest = transport.HOLD - (time.monotonic() - held["since"])
+        if rest > 0:
+            self.runtime.stopping.wait(rest)
         try:
-            transport.up(send, "cue", slot)
+            transport.up(held["send"], "cue", held["slot"])
         except OSError as error:
             log("CUE on %s could not be let go (%s): check the player" % (ip, error))
         finally:
-            sock.close()
+            held["sock"].close()
         if why:
             log("CUE on %s let go: %s" % (ip, why))
         self.world.events.add("player_button", ip=ip, button="cue", held=False)
@@ -1314,8 +1357,8 @@ class Prolink(Protocol):
                 self.player_controls.discard(identity)
             return 200, {}
         if parts[2] == 'load':
-            if identity not in self.player_controls:
-                return 403, {'error': 'enable player control for this player first'}
+            if not device["transport_armed"]:
+                return 403, {'error': 'switch Player control on in Settings first'}
             return self.load_player_track(device, parts[3], query)
         command = parts[3]
         if command not in ("start", "stop", "play-pause", "cue", "cue-down", "cue-up", "sync-on", "sync-off", "master"):
@@ -1328,8 +1371,8 @@ class Prolink(Protocol):
         if command in ("play-pause", "cue", "cue-down") and device["transport_method"] != "buttons":
             return 400, {"error": "button presses are only sent to " + ", ".join(self.BUTTON_MODELS) +
                          (", use start and stop" if device["fader_start_supported"] else "")}
-        if identity not in self.player_controls:
-            return 403, {"error": "enable player control for this player first"}
+        if not device["transport_armed"]:
+            return 403, {"error": "switch Player control on in Settings first"}
         if command == "cue-down":
             return self.hold_player_cue(device, True)
         if command in ("play-pause", "cue"):
@@ -1469,6 +1512,7 @@ class Prolink(Protocol):
         links = list(self.decks.values())
         return {"strict": any(l.strict for l in links), "refuse_db": any(l.refuse_db for l in links),
                 "claim": self.claim, "mixer": self.mixer.on, "profile": self.profile, "observer": self.observer,
+                "player_control": self.control_on, "auto_track_info": self.auto_info,
                 "model": links[0].name.decode() if len({l.name for l in links}) == 1 else ""}
 
     def set_option(self, name, value):
@@ -1487,6 +1531,17 @@ class Prolink(Protocol):
         if name == "claim" and value in ("0", "1", 0, 1, True, False):
             self.claim = str(value) in ("1", "True")
             log("a deck that comes online %s" % ("claims its number first" if self.claim else "is there at once"))
+            return True
+        if name in ("player_control", "auto_track_info") and value in ("0", "1", 0, 1, True, False):
+            on = str(value) in ("1", "True")
+            if name == "player_control":
+                self.control_on = on
+                if not on:
+                    self.player_controls.clear()
+                    self.release_held_cues()
+            else:
+                self.auto_info = on
+            log("%s %s" % (name.replace("_", " "), "on" if on else "off"))
             return True
         if name == "mixer" and value in ("0", "1", 0, 1, True, False):
             return self.mixer.set_on(str(value) in ("1", "True"))

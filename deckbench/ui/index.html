@@ -30,7 +30,7 @@
     <section id="decks" aria-label="Decks"></section>
     <section id="others" aria-label="Other devices on the link" hidden>
       <h2>On the network</h2>
-      <p class="hint">Live reports from the link. Eligible players have optional player controls, off until explicitly enabled.</p>
+      <p class="hint">Live reports from the link. Eligible players have switches that press their own while Player control is on in Settings.</p>
       <div id="devices"></div>
     </section>
   </div>
@@ -134,6 +134,15 @@
 
     <!-- Settings -->
     <div class="panel" id="p-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+      <h2>Real players</h2>
+      <div class="setting">
+        <div class="what"><b>Player control</b><span>The switches of a real player's card press its own: PLAY/PAUSE, CUE, SYNC and MASTER, or fader start's START and STOP on a model that takes no presses. Experimental. Off by default with --observe.</span></div>
+        <button class="switch" role="switch" id="player_control" aria-checked="false" aria-label="Player control"></button>
+      </div>
+      <div class="setting">
+        <div class="what"><b>Read track info by itself</b><span>Ask each player for its track's title and artist when the track changes. Older players answer only a bench player 1 to 4 that is on. Off by default with --observe.</span></div>
+        <button class="switch" role="switch" id="auto_track_info" aria-checked="false" aria-label="Read track info by itself"></button>
+      </div>
       <h2>Behaviour</h2>
       <div class="setting">
         <div class="what"><b>Strict decks</b><span>Serve the players 1 to 4 that announced themselves and nobody else, as a CDJ-2000NXS2 or an XDJ-1000MK2 does.</span></div>
