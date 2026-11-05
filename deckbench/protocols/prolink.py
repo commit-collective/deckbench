@@ -627,6 +627,8 @@ class Prolink(Protocol):
         # Preserve the Python integration default. The standalone CLI opts out.
         self.target = target
         self.source_network = None
+        self.held = {}                      # player address: (socket, send, watchdog) of a CUE held down (hold_player_cue)
+        self.held_lock = threading.Lock()
         self.runtime = NetworkRuntime()
         self.observer = bool(observer)
         self.ports = ports
@@ -753,6 +755,7 @@ class Prolink(Protocol):
 
     def stop(self):
         """Stop this protocol's workers and release its sockets and timers."""
+        self.release_held_cues()
         self.mixer.changed.set()
         self.player_controls.clear()
         result = self.runtime.close()
@@ -771,6 +774,7 @@ class Prolink(Protocol):
         previous_mixer = self.mixer.address, self.mixer.broadcast, self.mixer.mac, self.mixer.unavailable
         previous_network = self.source_network
         self.mixer.changed.set()
+        self.release_held_cues()
         if not self.runtime.close():
             raise RuntimeError('Network workers did not stop, restart the bench before reconnecting')
 
@@ -1124,9 +1128,67 @@ class Prolink(Protocol):
             return 409, 'a recent stopped-player status is required before loading'
         return None
 
+    HOLD_LIMIT = 8.0                    # seconds: a CUE held longer is let go by the bench (a page that went away)
+
+    def hold_player_cue(self, device, down):
+        """CUE held down until cue-up, as a finger holds the player's own: at the cue point it plays while held. A page
+        that never says cue-up (closed, offline) is covered by a watchdog, which lets go after HOLD_LIMIT."""
+        ip = device["ip"]
+        if not down:
+            return (200, {"released": True}) if self.release_held_cue(ip) else (200, {"released": False})
+        online = [d for d in self.monitor.snapshot() if d["online"]]
+        if any(d["number"] == transport.CONTROLLER for d in online):
+            return 409, {"error": "a device on the link already uses controller number %d" % transport.CONTROLLER}
+        sender = next((l for l in sorted(self.decks.values(), key=lambda link: not link.deck.enabled)
+                       if not l.deck.unplugged), None)
+        if sender is None:
+            return 400, {"error": "no connected bench interface to send from"}
+        with self.held_lock:
+            if ip in self.held:
+                return 200, {"held": True}
+            sock = share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+            try:
+                sock.bind((sender.address, self.ports.beat))
+                send = lambda data: sender.send(sock, data, (ip, self.ports.beat))
+                transport.down(send, "cue", self.runtime.stopping.wait)
+            except OSError as error:
+                sock.close()
+                return 400, {"error": "could not send the button press: %s" % error}
+            watchdog = threading.Timer(self.HOLD_LIMIT, self.release_held_cue, (ip, "the page did not let go"))
+            watchdog.daemon = True
+            self.held[ip] = (sock, send, watchdog)
+            watchdog.start()
+        self.world.events.add("player_button", deck=device["number"], ip=ip, button="cue", held=True)
+        return 202, {"sent": True, "confirmed": False, "held": True, "limit": self.HOLD_LIMIT}
+
+    def release_held_cue(self, ip, why=None):
+        """Let go of a held CUE (cue-up, the watchdog, the bench stopping). True if one was held."""
+        with self.held_lock:
+            held = self.held.pop(ip, None)
+        if not held:
+            return False
+        sock, send, watchdog = held
+        watchdog.cancel()
+        try:
+            transport.up(send, "cue")
+        except OSError as error:
+            log("CUE on %s could not be let go (%s): check the player" % (ip, error))
+        finally:
+            sock.close()
+        if why:
+            log("CUE on %s let go: %s" % (ip, why))
+        self.world.events.add("player_button", ip=ip, button="cue", held=False)
+        return True
+
+    def release_held_cues(self):
+        for ip in list(self.held):
+            self.release_held_cue(ip, "the bench stops or reconnects")
+
     def press_player_button(self, device, button):
         """One press of PLAY/PAUSE or CUE on a player that takes them (experimental, see protocols/transport.py),
         sent from an address of the bench's own and its UDP 50001, as tested."""
+        if device["ip"] in self.held:
+            return 409, {"error": "CUE is held on this player: let it go first"}
         online = [d for d in self.monitor.snapshot() if d["online"]]
         if any(d["number"] == transport.CONTROLLER for d in online):
             return 409, {"error": "a device on the link already uses controller number %d" % transport.CONTROLLER}
@@ -1205,16 +1267,20 @@ class Prolink(Protocol):
                 return 403, {'error': 'enable player control for this player first'}
             return self.load_player_track(device, parts[3], query)
         command = parts[3]
-        if command not in ("start", "stop", "play-pause", "cue", "sync-on", "sync-off", "master"):
-            return 400, {"error": "a command is start, stop, play-pause, cue, sync-on, sync-off or master"}
+        if command not in ("start", "stop", "play-pause", "cue", "cue-down", "cue-up", "sync-on", "sync-off", "master"):
+            return 400, {"error": "a command is start, stop, play-pause, cue, cue-down, cue-up, sync-on, sync-off or master"}
+        if command == "cue-up":                 # always allowed: letting go must never be refused
+            return self.hold_player_cue(device, False)
         if command in ("start", "stop") and not device["fader_start_supported"]:
             return 400, {"error": "this player does not support fader start" +
                          (", use play-pause and cue" if device["transport_method"] == "buttons" else "")}
-        if command in ("play-pause", "cue") and device["transport_method"] != "buttons":
+        if command in ("play-pause", "cue", "cue-down") and device["transport_method"] != "buttons":
             return 400, {"error": "button presses are only sent to " + ", ".join(self.BUTTON_MODELS) +
                          (", use start and stop" if device["fader_start_supported"] else "")}
         if identity not in self.player_controls:
             return 403, {"error": "enable player control for this player first"}
+        if command == "cue-down":
+            return self.hold_player_cue(device, True)
         if command in ("play-pause", "cue"):
             return self.press_player_button(device, command)
         occupied = {d["number"] for d in self.monitor.snapshot() if d["online"]}

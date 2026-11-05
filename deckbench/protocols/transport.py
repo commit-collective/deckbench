@@ -39,21 +39,34 @@ def packet(subtype, button=None, pressed=False):
     return bytes(data)
 
 
-def press(send, button, pause):
-    """The four datagrams of one press, through send(datagram). The release and the disconnect are sent even if the
-    press failed, so a held CUE is let go. pause(seconds) waits."""
-    code = BUTTONS[button]
+def down(send, button, pause):
+    """Connect, then the button goes down, through send(datagram). pause(seconds) waits. If the press cannot be sent,
+    it is let go at once (up), so nothing is left held."""
+    send(packet(CONNECT))
+    pause(SETTLE)
     try:
-        send(packet(CONNECT))
-        pause(SETTLE)
-        send(packet(0, code, True))
+        send(packet(0, BUTTONS[button], True))
+    except OSError:
+        up(send, button)
+        raise
+
+
+def up(send, button):
+    """The button goes up, then the disconnect. Both are tried, whatever happens to the first."""
+    errors = []
+    for data in (packet(0, BUTTONS[button]), packet(DISCONNECT)):
+        try:
+            send(data)
+        except OSError as error:
+            errors.append(error)
+    if errors:
+        raise errors[0]
+
+
+def press(send, button, pause):
+    """One press: down, held for HOLD, up. The up is sent even if the hold was cut short."""
+    down(send, button, pause)
+    try:
         pause(HOLD)
     finally:
-        errors = []
-        for data in (packet(0, code), packet(DISCONNECT)):
-            try:
-                send(data)
-            except OSError as error:
-                errors.append(error)
-        if errors:
-            raise errors[0]
+        up(send, button)

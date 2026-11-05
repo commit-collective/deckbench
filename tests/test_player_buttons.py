@@ -80,6 +80,54 @@ class Buttons(unittest.TestCase):
         self.assertEqual(code, 400)
         self.assertIn("start and stop", body["error"])
 
+    def received(self, receiver, count):
+        return [receiver.recvfrom(1024)[0].hex() for _ in range(count)]
+
+    def test_cue_is_held_until_let_go(self):
+        self.as_model(b"CDJ-3000")
+        self.call("arm", "1")
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
+            receiver.bind((self.ip, self.net.ports.beat))
+            receiver.settimeout(2)
+            code, body = self.call("command", "cue-down")
+            self.assertEqual((code, body["held"]), (202, True))
+            self.assertEqual(self.received(receiver, 2), [TESTED["connect"], TESTED["cue down"]])
+            self.assertEqual(self.call("command", "cue-down"), (200, {"held": True}))      # a second down sends nothing
+            self.assertEqual(self.call("command", "cue")[0], 409)                         # nor a tap while it is held
+            self.assertEqual(self.call("command", "cue-up"), (200, {"released": True}))
+            self.assertEqual(self.received(receiver, 2), [transport.packet(0, 21).hex(), TESTED["disconnect"]])
+            self.assertEqual(self.call("command", "cue-up"), (200, {"released": False}))
+        self.assertEqual(self.net.held, {})
+
+    def test_a_hold_the_page_never_ends_is_let_go(self):
+        self.as_model(b"CDJ-3000")
+        self.call("arm", "1")
+        self.net.HOLD_LIMIT = 0.3
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
+            receiver.bind((self.ip, self.net.ports.beat))
+            receiver.settimeout(3)
+            self.assertEqual(self.call("command", "cue-down")[0], 202)
+            self.received(receiver, 2)
+            self.assertEqual(self.received(receiver, 2), [transport.packet(0, 21).hex(), TESTED["disconnect"]])
+        self.assertEqual(self.net.held, {})
+
+    def test_stopping_the_bench_lets_go(self):
+        self.as_model(b"CDJ-3000")
+        self.call("arm", "1")
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
+            receiver.bind((self.ip, self.net.ports.beat))
+            receiver.settimeout(2)
+            self.call("command", "cue-down")
+            self.received(receiver, 2)
+            self.net.stop()
+            self.assertEqual(self.received(receiver, 2), [transport.packet(0, 21).hex(), TESTED["disconnect"]])
+
+    def test_holding_is_only_for_players_that_take_presses(self):
+        self.as_model(b"CDJ-2000NXS2")
+        self.call("arm", "1")
+        self.assertEqual(self.call("command", "cue-down")[0], 400)
+        self.assertEqual(self.call("command", "cue-up"), (200, {"released": False}))     # letting go is never refused
+
     def test_a_device_with_the_controller_number_stops_it(self):
         self.as_model(b"CDJ-3000")
         self.call("arm", "1")

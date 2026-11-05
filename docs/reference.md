@@ -167,9 +167,15 @@ firmware run in cdj3k-emu. A CDJ-2000NXS2 ignored them. No physical CDJ-3000 has
 been tried yet, nor a CDJ-3000X. The API answers HTTP 202 with
 `sent: true, confirmed: false` and records `player_button`.
 
-`POST /api/player/IP/command/play-pause?number=N` (or `cue`) needs armed player
-control, like the other commands. The wrong command for a model is refused with
-the right one named. Hot cues and loops are not implemented.
+`POST /api/player/IP/command/play-pause?number=N` (or `cue`, one tap) needs
+armed player control, like the other commands. The wrong command for a model is
+refused with the right one named. Hot cues and loops are not implemented.
+
+CUE can also be held, as on the player, where it plays from the cue point while
+held: `cue-down` connects and presses it, `cue-up` lets go and disconnects. The
+card's CUE button does this while you hold it. `cue-up` is never refused. A CUE
+held 8 seconds is let go by the bench (a page that went away), and so is one
+held when the bench stops or reconnects.
 
 ## Package layout
 
