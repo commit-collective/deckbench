@@ -115,6 +115,7 @@ Options (`python -m deckbench --help`):
     POST /api/player/<ip>/arm/<0|1>?number=<n>       opt in to transport control of a discovered online player
     POST /api/player/<ip>/command/<command>?number=<n>   start, stop, sync-on, sync-off or master, requires arming
     POST /api/player/<ip>/metadata/refresh?number=<n>    read the loaded analyzed track's metadata, no arming required
+    POST /api/player/<ip>/load/<id>?number=<n>&source=<player>&slot=<2|3>    request an analyzed SD/USB track, requires arming
     POST /api/mixer/on/<0|1>          the mixer on or off. Also master/<0|1>, channel/<n>/fader/<0-100>, channel/<n>/fader_start/<0|1>,
                                       channel/<n>/command/<start|stop>
     POST /api/loss/<percent>          that share of the datagrams is lost (0 for none)
@@ -129,6 +130,28 @@ Options (`python -m deckbench --help`):
 and, while it plays, a `phase` ([time, beats into its bar, tempo]) to count the
 beats on from, and for each protocol what it knows of the other side.
 
+
+## Remote loading
+
+On a discovered player's card, open Player control, enable control and open
+Load a linked track. Enter the source player number, media slot and rekordbox
+track ID reported on a player card. This is not a library browser or an upload
+to a physical player's USB drive.
+
+The destination must report a recent stopped state. The source must be online
+and unambiguous, and the sender must be an announced unused bench player 1 to 4
+or observer. Slots are 2 for SD and 3 for USB, with analyzed rekordbox tracks
+only. XDJ-XZ loading is excluded because its documented behavior differs.
+
+The API returns HTTP 202 with `sent: true, confirmed: false`. It records
+`player_load_requested` without changing observed state. A request or an
+acknowledgement is not proof of a successful load. Check the actual player.
+This implementation has packet and loopback coverage, not hardware validation.
+See the [public wire description](https://djl-analysis.deepsymmetry.org/djl-analysis/loading_tracks.html).
+
+Start and Stop still use conditional fader-start commands, not general
+PLAY, PAUSE or CUE buttons. Genuine button, hot-cue and loop-control commands
+are not implemented. Adding them needs verified packet evidence, not guesses.
 
 ## Package layout
 

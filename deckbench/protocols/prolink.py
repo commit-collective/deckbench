@@ -1084,13 +1084,49 @@ class Prolink(Protocol):
         self.player_controls.intersection_update(eligible)
         return devices
 
+    def load_player_track(self, device, track, query):
+        """Request a linked analyzed track, never claim that a player accepted it."""
+        from .remote import load_track_packet
+        if not device['name'].upper().startswith(('CDJ-', 'XDJ-')) or device['name'].upper() == 'XDJ-XZ':
+            return 400, {'error': 'remote loading is not enabled for this model'}
+        status = device.get('status')
+        if not status or status.get('play') or status.get('state') not in ('no track', 'paused', 'cued', 'track ended'):
+            return 409, {'error': 'a recent stopped-player status is required before loading'}
+        try:
+            if not track.isdecimal():
+                raise ValueError('track ID must be a positive integer')
+            source, slot, track = int(query.get('source', [''])[0]), int(query.get('slot', [''])[0]), int(track)
+            packet_args = (device['number'], source, slot, track)
+            if not 1 <= source <= 6:
+                raise ValueError('source player must be 1 to 6')
+        except (ValueError, TypeError) as error:
+            return 400, {'error': str(error)}
+        peers = self.monitor.snapshot()
+        if sum(d['online'] and d['number'] == source and d['kind'] == 'player' for d in peers) != 1:
+            return 400, {'error': 'source player is missing or ambiguous'}
+        occupied = {d['number'] for d in peers if d['online']}
+        sender = next((d for d in self.decks.values() if 1 <= d.number <= 4 and d.number not in occupied
+                       and not d.deck.unplugged and (d.deck.enabled or self.observer)), None)
+        if sender is None:
+            return 400, {'error': 'enable an unused bench player 1 to 4, or use an announced observer in that range'}
+        try:
+            packet = load_track_packet(sender.name, sender.number, *packet_args)
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.bind((sender.address, 0))
+                sender.send(sock, packet, (device['ip'], self.ports.update))
+        except (OSError, ValueError) as error:
+            return 400, {'error': 'could not send track load: %s' % error}
+        self.world.events.add('player_load_requested', deck=device['number'], ip=device['ip'],
+                              source=source, slot=slot, track=track)
+        return 202, {'sent': True, 'confirmed': False}
+
     def player_api(self, parts, query):
-        """Arm a discovered player or send one unicast fader-start command."""
-        if len(parts) != 4 or parts[2] not in ("arm", "command", "metadata"):
+        """Arm a discovered player or request an explicit unicast action."""
+        if len(parts) != 4 or parts[2] not in ("arm", "command", "metadata", "load"):
             return 404, {"error": "no such player control"}
         device = next((d for d in self.control_devices() if d["ip"] == parts[1]), None)
         if not device or not device["transport_available"]:
-            return 400, {"error": "player is offline, conflicting or not eligible for fader start"}
+            return 400, {"error": "player is offline, conflicting or not eligible for player control"}
         if query.get("number", [None])[0] != str(device["number"]):
             return 409, {"error": "player identity changed, refresh and enable control again"}
         identity = self.control_identity(device)
@@ -1106,6 +1142,10 @@ class Prolink(Protocol):
             else:
                 self.player_controls.discard(identity)
             return 200, {}
+        if parts[2] == 'load':
+            if identity not in self.player_controls:
+                return 403, {'error': 'enable player control for this player first'}
+            return self.load_player_track(device, parts[3], query)
         command = parts[3]
         if command not in ("start", "stop", "sync-on", "sync-off", "master"):
             return 400, {"error": "a command is start, stop, sync-on, sync-off or master"}

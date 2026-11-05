@@ -351,6 +351,25 @@ function strips() {
   }
 }
 
+function buildPlayerLoad(d) {
+  const field = (text, node) => h('label', {}, text, node);
+  return h('details', {class: 'player-load'}, h('summary', {}, 'Load a linked track (experimental)'),
+    h('p', {class: 'hint'}, 'Analyzed SD/USB tracks only. Use the source player, slot and track ID shown on a player card. The destination must be stopped.'),
+    h('div', {class: 'fields'},
+      field('Source player', h('input', {class: 'load-source', type: 'number', min: 1, max: 6, value: d.number || 1})),
+      field('Media', h('select', {class: 'load-slot'}, h('option', {value: 3}, 'USB'), h('option', {value: 2}, 'SD'))),
+      field('Track ID', h('input', {class: 'load-id', type: 'number', min: 1, max: 4294967295, step: 1}))),
+    h('button', {class: 'btn small player-load-send', disabled: true, onclick: (event) => {
+      const button = event.currentTarget, form = button.closest('.player-load');
+      if (![...form.querySelectorAll('input')].every(input => input.reportValidity()) || !form.querySelector('.load-id').value) return;
+      const source = form.querySelector('.load-source').value, slot = form.querySelector('.load-slot').value;
+      const track = form.querySelector('.load-id').value;
+      if (!window.confirm('Replace the stopped track on player ' + button.dataset.number + ' with track ' + track + ' from player ' + source + '?')) return;
+      api('api/player/' + d.ip + '/load/' + encodeURIComponent(track) + '?number=' + button.dataset.number + '&source=' + encodeURIComponent(source) + '&slot=' + encodeURIComponent(slot))
+        .then(() => toast('Load request sent, not confirmed. Check the real player.', 'info')).catch(() => {});
+    }}, 'Request load'));
+}
+
 function buildDevice(d) {
   const mixer = d.kind === "mixer";
   return h("article", {class: "deck device off", id: devId(d.ip), "aria-label": (d.model || "Device") + " on the link"},
@@ -381,7 +400,7 @@ function buildDevice(d) {
         button.disabled = true;
         api("api/player/" + d.ip + "/metadata/refresh?number=" + button.dataset.number)
           .then(() => toast("Track information read.", "ok")).catch(() => {}).finally(() => { delete button.dataset.pending; renderDevices(); });
-      }}, "Read track info")));
+      }}, "Read track info"), buildPlayerLoad(d)));
 }
 
 function renderDevices() {
@@ -410,6 +429,8 @@ function renderDevices() {
           !d.transport_armed || !d.online || !S.connected ||
             (["start", "stop"].includes(button.dataset.command) && d.fader_start_supported === false);
         button.dataset.number = d.number;
+        if (button.classList.contains('player-load-send')) button.disabled = button.disabled || !st || !!st.play || !['no track', 'paused', 'cued', 'track ended'].includes(st.state) ||
+          !/^(CDJ-|XDJ-)/i.test(d.name || '') || d.name.toUpperCase() === 'XDJ-XZ';
       }
     }
     card.classList.toggle("online", d.online);

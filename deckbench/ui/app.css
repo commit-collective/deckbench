@@ -337,6 +337,8 @@ h2:first-child { margin-top: 0; }
 .player-control { border-top: 1px solid var(--line); padding: 10px 16px; }
 .player-control summary { cursor: pointer; font: 400 11px var(--lab); }
 .player-control label { display: block; margin-top: 10px; }
+.player-load { margin-top: 12px; }
+.player-load .fields { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); margin-block: 8px; }
 .player-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* ---- toasts ---- */
@@ -349,6 +351,7 @@ h2:first-child { margin-top: 0; }
 @media (max-width: 520px) {
   .layout { padding: 12px; } .bar { padding: 8px 12px; }
   #decks { grid-template-columns: minmax(0, 1fr); }
+  #devices { grid-template-columns: minmax(0, 1fr); }
   .actions .btn span { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
