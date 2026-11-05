@@ -1109,8 +1109,9 @@ async function loadNetworkSetup() {
   try {
     const data = await api("api/network", {method: "GET"});
     select.replaceChildren(h("option", {value: ""}, "Local testing (loopback)"));
-    for (const row of data.interfaces) select.append(h("option", {value: row.name},
-      row.name + " · " + row.addresses.join(", ") + (row.default_route ? " · default route" : "")));
+    for (const row of data.interfaces) select.append(h("option", {value: row.name, disabled: row.ready === false},
+      row.name + " · " + row.addresses.join(", ") + (row.default_route ? " · default route" : "") +
+      (row.ready === false ? " · not usable yet (Windows says " + (row.state || "not ready") + ")" : "")));
     const chosen = data.current.interface || data.remembered || "";
     if (chosen && ![...select.options].some(option => option.value === chosen)) {
       select.append(h("option", {value: chosen, disabled: true}, chosen + " · unavailable"));

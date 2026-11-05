@@ -12,16 +12,24 @@ SITE = "https://commitcollective.cc"
 APP = SITE + "/deckbench/app/"
 
 
-def interfaces():
-    """Return preferred IPv4 interfaces without changing the network."""
+def interfaces(waiting=False):
+    """Return preferred IPv4 interfaces without changing the network.
+
+    With waiting, return instead (name, address, state) for the network cards whose address Windows has not made
+    usable (Tentative, Duplicate...): nothing can bind to them, but a list that hides them leaves the adapter
+    unexplained. Other systems report no such state here."""
     if sys.platform == "darwin":
         from .net import macos_interfaces
-        return [(name, address) for name, address, _ in macos_interfaces()]
+        return [] if waiting else [(name, address) for name, address, _ in macos_interfaces()]
     if sys.platform == "win32":
         command = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                   "$physical = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | ForEach-Object Name); "
                    "Get-NetIPAddress -AddressFamily IPv4 | "
-                   "Where-Object { $_.AddressState -eq 'Preferred' } | "
-                   "Select-Object InterfaceAlias,IPAddress,PrefixLength | ConvertTo-Json -Compress"]
+                   "Select-Object InterfaceAlias,IPAddress,PrefixLength,@{n='State';e={[string]$_.AddressState}},"
+                   "@{n='Physical';e={$physical -contains $_.InterfaceAlias}} | "
+                   "ConvertTo-Json -Compress"]
+    elif waiting:
+        return []
     elif sys.platform.startswith("linux"):
         command = ["ip", "-j", "-4", "address", "show"]
     else:
@@ -33,7 +41,10 @@ def interfaces():
     data = json.loads(result.stdout or "[]")
     if sys.platform == "win32":
         entries = data if isinstance(data, list) else [data]
-        entries = [(x["InterfaceAlias"], x["IPAddress"], x["PrefixLength"]) for x in entries]
+        if waiting:     # only network cards: Windows keeps the 169.254 addresses of its virtual adapters tentative too
+            return [(x["InterfaceAlias"], ipaddress.IPv4Interface("%s/%s" % (x["IPAddress"], x["PrefixLength"])),
+                     x.get("State") or "unknown") for x in entries if x.get("State") != "Preferred" and x.get("Physical")]
+        entries = [(x["InterfaceAlias"], x["IPAddress"], x["PrefixLength"]) for x in entries if x.get("State") == "Preferred"]
     else:
         entries = [(iface["ifname"], a["local"], a["prefixlen"]) for iface in data
                    if "LOOPBACK" not in iface.get("flags", [])          # WSL puts a DNS address on lo (10.255.255.254)

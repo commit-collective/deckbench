@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- List a Windows network card whose address is not usable yet (Tentative) in the adapter
+  choice, marked as such, instead of hiding it. It cannot be chosen until Windows marks it Preferred.
 - Reveal full discovered-player names, addresses and track text on hover,
   or expand them with a tap or keyboard. Keep the compact card layout.
 - Disable Read track info when no eligible sender or track source is available,

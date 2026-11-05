@@ -28,9 +28,14 @@ class NetworkSetupTests(unittest.TestCase):
 
     def test_discovery_reports_server_addresses_and_route(self):
         entries = [('Ethernet 2', ipaddress.IPv4Interface('169.254.4.5/16'))]
-        with patch('deckbench.phone.interfaces', return_value=entries), patch('deckbench.phone.route_address', return_value='169.254.4.5'):
+        waiting = [('Ethernet 3', ipaddress.IPv4Interface('169.254.7.7/16'), 'Tentative')]
+        listed = lambda waiting_only=False, **named: waiting if named.get('waiting') else entries
+        with patch('deckbench.phone.interfaces', side_effect=listed), \
+                patch('deckbench.phone.route_address', return_value='169.254.4.5'):
             result = self.setup.snapshot()
-        self.assertEqual(result['interfaces'], [{'name': 'Ethernet 2', 'addresses': ['169.254.4.5/16'], 'default_route': True}])
+        self.assertEqual(result['interfaces'], [
+            {'name': 'Ethernet 2', 'addresses': ['169.254.4.5/16'], 'default_route': True, 'ready': True},
+            {'name': 'Ethernet 3', 'addresses': ['169.254.7.7/16'], 'default_route': False, 'ready': False, 'state': 'Tentative'}])
         self.assertEqual(result['current']['addresses'], {'3': '127.0.0.3'})
 
     def test_manual_bind_keeps_receivers_unfiltered(self):
