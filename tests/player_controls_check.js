@@ -19,24 +19,16 @@ const card = context.buildDevice({ip: "127.0.0.9", kind: "player", model: "CDJ-2
 const find = (node, predicate) => predicate(node) ? node : (node.children || []).map(child => find(child, predicate)).find(Boolean);
 const control = find(card, node => node.attrs && node.attrs.class === "player-control");
 assert.strictEqual(control.attrs.hidden, true, "Controls stay hidden until the backend reports eligibility");
-const arm = find(control, node => node.tag === "input");
 const identity = find(card, node => node.tag === "details" && node.attrs.class === "deck-id");
 assert(identity, "Player identity can expand with native touch and keyboard controls");
 assert(find(identity, node => node.tag === "summary" && node.attrs.title), "Identity has a full-value tooltip");
-assert(find(control, node => node.tag === "p" && node.children[0] === "Fader start: Start only works at cue. Stop returns playback to cue and does nothing while paused."), "Explain the observed transport restrictions");
+assert(!find(control, node => node.tag === "input" && node.attrs.type === "checkbox"), "Player control is a setting, not a box on each card");
 assert.strictEqual(calls.length, 0, "Building controls must never send a command");
-arm.attrs.onchange({target: {checked: true, dataset: {number: "2"}}});
-assert.strictEqual(calls.pop(), "api/player/127.0.0.9/arm/1?number=2");
-for (const [label, command] of [["Start cued track", "start"], ["Stop playing track", "stop"]]) {
-  const button = find(control, node => node.tag === "button" && node.children[0] === label);
-  assert.strictEqual(button.attrs.disabled, true, "Commands start disabled");
-  button.attrs.onclick({currentTarget: {dataset: {number: "2"}}});
-  assert.strictEqual(calls.pop(), "api/player/127.0.0.9/command/" + command + "?number=2");
-}
 // the switches, as a bench deck's: SYNC asks for the opposite of what it shows
 const switches = find(card, node => node.attrs && node.attrs.class === "switches player-switches");
 assert.strictEqual(switches.attrs.hidden, true, "Switches stay hidden until the backend reports eligibility");
-for (const [label, command, pressed] of [["PLAY/PAUSE", "play-pause", "false"], ["SYNC", "sync-on", "false"],
+for (const [label, command, pressed] of [["PLAY/PAUSE", "play-pause", "false"], ["START", "start", "false"],
+  ["STOP", "stop", "false"], ["SYNC", "sync-on", "false"],
   ["SYNC", "sync-off", "true"], ["MASTER", "master", "false"]]) {
   const button = find(switches, node => node.tag === "button" && node.children[0] === label);
   button.attrs.onclick({currentTarget: {dataset: {number: "2"}, getAttribute: () => pressed}});

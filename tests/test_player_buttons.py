@@ -2,6 +2,7 @@
 """PLAY/PAUSE and CUE pressed on a CDJ-3000 and a CDJ-2000NXS2, and each model's way of being started and stopped."""
 import socket
 import unittest
+import unittest.mock
 
 import test_player_control as controls
 from deckbench.protocols import transport
@@ -170,6 +171,22 @@ class Buttons(unittest.TestCase):
         self.call("arm", "1")
         self.assertEqual(self.call("command", "cue-down")[0], 400)
         self.assertEqual(self.call("command", "cue-up"), (200, {"released": False}))     # letting go is never refused
+
+    def test_a_quick_tap_is_let_go_after_its_press(self):
+        self.as_model(b"CDJ-3000")
+        self.call("arm", "1")
+        sent, waits = [], []
+        sender = self.net.decks[3]
+        # cue-up comes while the press is on its way (during the settle): it is kept, and sent once CUE is down
+        def pause(seconds):
+            waits.append(seconds)
+            if seconds == transport.SETTLE:
+                self.assertEqual(self.call("command", "cue-up"), (200, {"released": True}))
+        with unittest.mock.patch.object(sender, "send", lambda sock, data, addr: sent.append(data.hex())),              unittest.mock.patch.object(self.net.runtime.stopping, "wait", pause):
+            self.assertEqual(self.call("command", "cue-down")[1]["held"], False)
+        self.assertEqual(sent, [TESTED["connect"], TESTED["cue down"], transport.packet(0, 21).hex(), TESTED["disconnect"]])
+        self.assertGreater(waits[-1], 0)                    # held at least transport.HOLD before the release
+        self.assertEqual(self.net.held, {})
 
     def test_a_device_with_the_controller_number_stops_it(self):
         self.as_model(b"CDJ-3000")

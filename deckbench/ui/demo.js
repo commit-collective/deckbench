@@ -60,7 +60,7 @@ class DemoBench {
         anchorT: this.now(), anchorPos: 0, on_air: null, track: {id: 100 + n, title: "Track of deck " + n, source: n, slot: 3}};
     });
     this.loss = 0;
-    this.settings = {strict: false, refuse_db: false, claim: false, mixer: false, profile: "", model: ""};
+    this.settings = {strict: false, refuse_db: false, claim: false, mixer: false, profile: "", model: "", player_control: true, auto_track_info: true};
     this.mixer = {on: false, master: true, name: "DJM-900NXS2", number: 33, channels: {}};
     for (const n of [1, 2, 3, 4]) this.mixer.channels[n] = {fader: 0, fader_start: false};
     this.events = [];
@@ -322,7 +322,7 @@ class DemoBench {
     if (parts[1] === "packets" && parts[2] === "clear") { this.packets.noisy = []; this.packets.rest = []; this.packets.counts = {}; return ok({}); }
     if (parts[1] === "settings") {
       const name = parts[2], value = decodeURIComponent(parts[3] ?? "");
-      if (["strict", "refuse_db", "claim", "mixer"].includes(name) && (value === "0" || value === "1")) {
+      if (["strict", "refuse_db", "claim", "mixer", "player_control", "auto_track_info"].includes(name) && (value === "0" || value === "1")) {
         this.settings[name] = value === "1";
         if (name === "mixer") { this.mixer.on = this.settings.mixer; this.noteAir(); }
         return ok();

@@ -4,6 +4,10 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Player control and the reading of track info are settings for every player at once, on by default and off with
+  --observe. A player's card shows its switches straight away, without a box to tick on each card.
+- A quick tap of CUE on a real player is no longer lost: the bench keeps a release that comes early and holds every
+  press at least 0.1 s.
 - With every simulated deck off on a real network, the bench announces itself as observer 7, so players send it their
   status: the cards' PLAY, SYNC and MASTER lamps and the master's beat follow them without a deck switched on.
 - Press PLAY/PAUSE and CUE on a CDJ-2000NXS2 too (experimental), in its own packet format, tried on a physical

@@ -351,7 +351,6 @@ h2:first-child { margin-top: 0; }
 .player-control { border-top: 1px solid var(--line); padding: 10px 16px; }
 .player-control summary { cursor: pointer; font: 400 11px var(--lab); }
 .player-control label { display: block; margin-top: 10px; }
-.player-control label.arm { font-size: 12px; color: var(--text); }
 .player-load { margin-top: 12px; }
 .player-load.locked > :not(summary) { opacity: .5; }
 .player-load.locked summary { color: var(--muted); }

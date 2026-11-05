@@ -259,8 +259,9 @@ establish physical compatibility. A `handoff_timeout` means the requested transf
 ## Trying player transport control
 
 Use the PC-served page for unreleased controls. Leave the simulated mixer off, particularly with a real DJM present.
-On a discovered player's card, open **Player control** and check **Enable player control**. No command is sent by
-enabling it. Then use **Start cued track** or **Stop playing track**. Stop is not pause-in-place.
+**Player control** in Settings is on by default, and off with `--observe`. While it is on, an eligible player's card has
+switches like a bench deck's: PLAY/PAUSE, CUE, SYNC and MASTER on models that take button presses, START and STOP
+(fader start) on the others. No command is sent until a switch is pressed. Stop is not pause-in-place.
 
 On tested hardware, Start is accepted only when stopped at the cue point, not while playing or
 paused elsewhere. Stop playing track returns to cue while playing, but does nothing while paused away from cue. These are
@@ -270,15 +271,15 @@ Start and Stop use Pro DJ Link fader-start commands sent only to the selected pl
 set to leave unchanged. Players must have distinct numbers from 1 to 4. CDJ-3000 and XDJ-XZ are excluded because
 the documented fader-start feature is unsupported there. Other models still need hardware validation.
 
-For a quiet test, load a track on one player, set a cue, and try Start cued track, then Stop playing track. Watch the
+For a quiet test, load a track on one player, set a cue, and try START, then STOP. Watch the
 reported player state and the physical unit. A sent command is not an acknowledgement. If ignored, announce an unused
 virtual player such as player 3 and retry. Do not use this first test during a performance.
 
 Commands appear as `player_transport` events and as outgoing fader-start packets in Network with **The bench's own**
-enabled. Arming is shared by clients of that bench, not persisted across restarts, and cleared when the player is
-observed offline, its identity changes or its number conflicts. Uncheck the enable box when finished.
+enabled. The setting is shared by clients of that bench and not persisted across restarts. A player that goes offline,
+changes identity or has its number taken loses its switches until that clears. Switch Player control off when finished.
 
-The same opt-in also enables **Sync on**, **Sync off** and **Make master**. These send a unicast command and wait for
+The same setting also enables **SYNC** and **MASTER**. These send a unicast command and wait for
 normal status reports to show the result. They do not force a local display change or imply that hardware accepted it.
 CDJ-3000 players may use these commands while their fader-start buttons remain disabled. The new commands need hardware
 validation. Use them only when changing the setup's tempo ownership is safe.
