@@ -176,6 +176,11 @@ Run these commands on the DJ-connected PC, even if development happens on anothe
 - No "Unit under test": the broadcast address is probably wrong (give it
   with `--broadcast`), or a firewall drops UDP 50000, or the alias is on a
   different network card than the unit.
+- `PermissionError: [WinError 10013]` when the page's server starts, on Windows: something else holds port 8750,
+  or Windows reserves it. With WSL in mirrored mode, a bench running in WSL (the DJS-1000 emulator starts one) shares
+  Windows' ports. Check with `netstat -ano | findstr :8750` and
+  `netsh interface ipv4 show excludedportrange protocol=tcp`. Stop the other bench, or start this one with
+  `--http-port 8751`.
 - The unit sees the decks but not their tracks: TCP 12523 and 1051 are blocked.
 - Decks that vanish after a few seconds: the keep-alive (every 2 s, to the
   broadcast address) does not reach the unit.
