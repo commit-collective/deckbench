@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- The Windows firewall helper takes several adapters, such as a DJ adapter and the network bridge
+  another program makes of it, and covers each with one rule.
 - Say in one line which port is busy when the page or the sound cannot start, instead of a traceback.
 - List a Windows network card whose address is not usable yet (Tentative) in the adapter
   choice, marked as such, instead of hiding it. It cannot be chosen until Windows marks it Preferred.

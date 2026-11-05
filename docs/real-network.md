@@ -139,7 +139,17 @@ Use `-WhatIf` to preview installation. The rule persists across restarts.
 For metadata requests from physical players, add `-IncludeMetadata` when installing. This also allows TCP 1051 and
 12523 under the same restrictions. This is metadata access, not network audio or a virtual USB drive.
 Phone HTTP access is separate and is not opened by this script.
-Replace `Ethernet` with the name of your DJ interface. The Windows firewall helper is only for Windows. On Linux,
+Replace `Ethernet` with the name of your DJ interface. Name several to cover each with one rule. A program that
+bridges the DJ adapter (cdj3k-emu does) moves its address to a `Network Bridge` adapter while it runs, so name both,
+with the bridge in place:
+
+```powershell
+.\tools\windows-firewall.ps1 -Action Install -InterfaceAlias "Ethernet 2","Network Bridge"
+```
+
+If PowerShell refuses to run the script ("running scripts is disabled"), run it once without changing the policy:
+`powershell -ExecutionPolicy Bypass -File .\tools\windows-firewall.ps1 ...`.
+The Windows firewall helper is only for Windows. On Linux,
 check any active firewall for the same UDP ports and optional metadata TCP ports.
 
 Inspect the installed rules, or remove them when no longer needed:
