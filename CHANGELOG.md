@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Press PLAY/PAUSE and CUE on a CDJ-3000 or 3000X from its card (experimental), since it does not take fader
+  start. Each player shows the start and stop its model takes. Tried on CDJ-3000 firmware in an emulator only.
 - Text on the cards can be selected and copied: the page no longer rewrites text that did not change.
 - The Windows firewall helper takes several adapters, such as a DJ adapter and the network bridge
   another program makes of it, and covers each with one rule.

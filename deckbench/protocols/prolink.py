@@ -46,7 +46,7 @@ from ..core import Protocol, log
 
 from .. import profiles
 from ..net import share, interface_macs, NetworkRuntime
-from . import loopback, startup
+from . import loopback, startup, transport
 from .mixer import LinkMixer, parse_on_air, fader_start_packet
 from .monitor import Monitor
 from .startup import MAGIC
@@ -1078,13 +1078,26 @@ class Prolink(Protocol):
         self.world.events.add("metadata_read", deck=device["number"], title=metadata.get("title", ""))
         return 200, {}
 
+    # How each model is started and stopped. Fader start is documented as unsupported on the CDJ-3000 and XDJ-XZ. The
+    # CDJ-3000 takes button presses (protocols/transport.py) instead: seen on CDJ-3000 firmware, the 3000X untried.
+    BUTTON_MODELS = ("CDJ-3000", "CDJ-3000X")
+    NO_FADER_START = ("CDJ-3000", "CDJ-3000X", "XDJ-XZ")
+
+    @classmethod
+    def transport_method(cls, device):
+        """'buttons', 'fader' or '' (none) for a discovered player."""
+        name = device["name"].upper()
+        if name in cls.BUTTON_MODELS:
+            return "buttons"
+        return "" if name in cls.NO_FADER_START else "fader"
+
     def control_devices(self):
         devices = self.monitor.snapshot()
         eligible = set()
         for device in devices:
             number = device["number"]
             available = (device["online"] and device["kind"] == "player"
-                         and (number in (1, 2, 3, 4) or device["name"].upper() == "CDJ-3000" and number in (5, 6))
+                         and (number in (1, 2, 3, 4) or device["name"].upper() in self.BUTTON_MODELS and number in (5, 6))
                          and sum(d["online"] and d["number"] == number for d in devices) == 1
                          and sum(d["online"] and d["ip"] == device["ip"] for d in devices) == 1
                          and not any(l.deck.enabled and l.number == number for l in self.decks.values()))
@@ -1092,7 +1105,8 @@ class Prolink(Protocol):
             if available:
                 eligible.add(identity)
             device["transport_available"] = bool(available)
-            device["fader_start_supported"] = device["name"].upper() not in ("CDJ-3000", "XDJ-XZ")
+            device["transport_method"] = self.transport_method(device)
+            device["fader_start_supported"] = device["transport_method"] == "fader"
             device["transport_armed"] = bool(available and identity in self.player_controls)
             device["load_allowed"] = self.load_refusal(device) is None
         self.player_controls.intersection_update(eligible)
@@ -1109,6 +1123,26 @@ class Prolink(Protocol):
         if not status or status.get('play') or status.get('state') not in ('no track', 'paused', 'cued', 'track ended'):
             return 409, 'a recent stopped-player status is required before loading'
         return None
+
+    def press_player_button(self, device, button):
+        """One press of PLAY/PAUSE or CUE on a player that takes them (experimental, see protocols/transport.py),
+        sent from an address of the bench's own and its UDP 50001, as tested."""
+        online = [d for d in self.monitor.snapshot() if d["online"]]
+        if any(d["number"] == transport.CONTROLLER for d in online):
+            return 409, {"error": "a device on the link already uses controller number %d" % transport.CONTROLLER}
+        sender = next((l for l in sorted(self.decks.values(), key=lambda link: not link.deck.enabled)
+                       if not l.deck.unplugged), None)
+        if sender is None:
+            return 400, {"error": "no connected bench interface to send from"}
+        try:
+            with share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as sock:
+                sock.bind((sender.address, self.ports.beat))
+                transport.press(lambda data: sender.send(sock, data, (device["ip"], self.ports.beat)), button,
+                                self.runtime.stopping.wait)
+        except OSError as error:
+            return 400, {"error": "could not send the button press: %s" % error}
+        self.world.events.add("player_button", deck=device["number"], ip=device["ip"], button=button)
+        return 202, {"sent": True, "confirmed": False}
 
     def load_player_track(self, device, track, query):
         """Request a linked analyzed track, never claim that a player accepted it."""
@@ -1171,12 +1205,18 @@ class Prolink(Protocol):
                 return 403, {'error': 'enable player control for this player first'}
             return self.load_player_track(device, parts[3], query)
         command = parts[3]
-        if command not in ("start", "stop", "sync-on", "sync-off", "master"):
-            return 400, {"error": "a command is start, stop, sync-on, sync-off or master"}
+        if command not in ("start", "stop", "play-pause", "cue", "sync-on", "sync-off", "master"):
+            return 400, {"error": "a command is start, stop, play-pause, cue, sync-on, sync-off or master"}
         if command in ("start", "stop") and not device["fader_start_supported"]:
-            return 400, {"error": "this player does not support fader start"}
+            return 400, {"error": "this player does not support fader start" +
+                         (", use play-pause and cue" if device["transport_method"] == "buttons" else "")}
+        if command in ("play-pause", "cue") and device["transport_method"] != "buttons":
+            return 400, {"error": "button presses are only sent to " + ", ".join(self.BUTTON_MODELS) +
+                         (", use start and stop" if device["fader_start_supported"] else "")}
         if identity not in self.player_controls:
             return 403, {"error": "enable player control for this player first"}
+        if command in ("play-pause", "cue"):
+            return self.press_player_button(device, command)
         occupied = {d["number"] for d in self.monitor.snapshot() if d["online"]}
         sender = next((l for l in sorted(self.decks.values(), key=lambda link: not link.deck.enabled)
                        if not l.deck.unplugged and l.number not in occupied), None)

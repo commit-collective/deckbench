@@ -149,9 +149,27 @@ acknowledgement is not proof of a successful load. Check the actual player.
 This implementation has packet and loopback coverage, not hardware validation.
 See the [public wire description](https://djl-analysis.deepsymmetry.org/djl-analysis/loading_tracks.html).
 
-Start and Stop still use conditional fader-start commands, not general
-PLAY, PAUSE or CUE buttons. Genuine button, hot-cue and loop-control commands
-are not implemented. Adding them needs verified packet evidence, not guesses.
+How a player is started and stopped depends on its model, which the bench
+reports as `transport_method` for each discovered player:
+
+| Model | `transport_method` | Commands |
+|---|---|---|
+| CDJ-3000, CDJ-3000X | `buttons` | `play-pause` and `cue`: button presses, experimental |
+| XDJ-XZ | (empty) | none |
+| others | `fader` | `start` and `stop`: fader start |
+
+Fader start is documented as unsupported on the CDJ-3000 and XDJ-XZ. On a
+CDJ-3000 the bench instead presses PLAY/PAUSE or CUE as a remote controller
+does: it connects, presses, holds 0.1 s, releases and disconnects, as controller
+number 54, unicast to the player's UDP 50001 from the bench's own. PLAY/PAUSE is
+a toggle, and CUE is held like the real button. These presses worked on CDJ-3000
+firmware run in cdj3k-emu. A CDJ-2000NXS2 ignored them. No physical CDJ-3000 has
+been tried yet, nor a CDJ-3000X. The API answers HTTP 202 with
+`sent: true, confirmed: false` and records `player_button`.
+
+`POST /api/player/IP/command/play-pause?number=N` (or `cue`) needs armed player
+control, like the other commands. The wrong command for a model is refused with
+the right one named. Hot cues and loops are not implemented.
 
 ## Package layout
 

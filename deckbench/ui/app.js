@@ -402,12 +402,16 @@ function buildDevice(d) {
       h("label", {class: "hint"}, h("input", {type: "checkbox", class: "player-arm",
         onchange: (e) => act("api/player/" + d.ip + "/arm/" + (e.target.checked ? 1 : 0) + "?number=" + e.target.dataset.number)}),
         " Enable player control"),
-      h("p", {class: "hint"}, "Start only works at cue. Stop returns playback to cue and does nothing while paused."),
-      h("div", {class: "player-actions"}, ...[["start", "Start cued track"], ["stop", "Stop playing track"],
-        ["sync-on", "Sync on"], ["sync-off", "Sync off"], ["master", "Make master"]].map(([command, label]) =>
-        h("button", {class: "btn small", "data-command": command, disabled: true, onclick: (e) => {
+      h("p", {class: "hint", "data-method": "fader"}, "Start only works at cue. Stop returns playback to cue and does nothing while paused."),
+      h("p", {class: "hint", "data-method": "buttons", hidden: true},
+        "Experimental: PLAY/PAUSE and CUE are pressed as buttons, as the player's own are. PLAY/PAUSE toggles. Seen on CDJ-3000 firmware."),
+      h("div", {class: "player-actions"}, ...[["start", "Start cued track", "fader"], ["stop", "Stop playing track", "fader"],
+        ["play-pause", "PLAY/PAUSE", "buttons"], ["cue", "CUE", "buttons"],
+        ["sync-on", "Sync on"], ["sync-off", "Sync off"], ["master", "Make master"]].map(([command, label, method]) =>
+        h("button", {class: "btn small", "data-command": command, "data-method": method, disabled: true, hidden: method === "buttons", onclick: (e) => {
           api("api/player/" + d.ip + "/command/" + command + "?number=" + e.currentTarget.dataset.number)
-            .then(() => toast("Command sent. Check the player's reported state.", "info")).catch(() => {});
+            .then(() => toast(method === "buttons" ? "Press sent, not confirmed. Check the player." : "Command sent. Check the player's reported state.", "info"))
+            .catch(() => {});
         }}, label))),
       h("button", {class: "btn small player-read", onclick: (e) => {
         const button = e.currentTarget;
@@ -439,10 +443,16 @@ function renderDevices() {
       const arm = q("player-arm");
       arm.checked = !!d.transport_armed;
       arm.dataset.number = d.number;
+      /* the start and stop of this model: fader start, the experimental button presses, or none (both kinds hidden) */
+      for (const node of control.querySelectorAll("[data-method]")) {
+        const shown = node.dataset.method === (d.transport_method || "fader");
+        if (node.hidden !== !shown) node.hidden = !shown;
+      }
       for (const button of control.querySelectorAll("button")) {
         button.disabled = button.classList.contains("player-read") ? !!button.dataset.pending || !d.metadata_available || !S.connected :
           !d.transport_armed || !d.online || !S.connected ||
-            (["start", "stop"].includes(button.dataset.command) && d.fader_start_supported === false);
+            (["start", "stop"].includes(button.dataset.command) && d.fader_start_supported === false) ||
+            (["play-pause", "cue"].includes(button.dataset.command) && d.transport_method !== "buttons");
         button.dataset.number = d.number;
         if (button.classList.contains("player-read")) button.title = d.metadata_reason || "Read the loaded track's title and artist";
         if (button.classList.contains('player-load-send')) button.disabled = button.disabled || !d.load_allowed;   // the bench's rule
