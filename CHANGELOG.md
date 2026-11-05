@@ -4,6 +4,10 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Reveal full discovered-player names, addresses and track text on hover,
+  or expand them with a tap or keyboard. Keep the compact card layout.
+- Disable Read track info when no eligible sender or track source is available,
+  with the reason shown on the button. Recheck eligibility before querying.
 - Request analyzed SD/USB tracks on stopped discovered players through an
   armed, experimental remote-load form or API. Require an online source and
   announced sender, and distinguish a sent request from a confirmed load.

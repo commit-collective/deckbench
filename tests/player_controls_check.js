@@ -19,6 +19,9 @@ const find = (node, predicate) => predicate(node) ? node : (node.children || [])
 const control = find(card, node => node.attrs && node.attrs.class === "player-control");
 assert.strictEqual(control.attrs.hidden, true, "Controls stay hidden until the backend reports eligibility");
 const arm = find(control, node => node.tag === "input");
+const identity = find(card, node => node.tag === "details" && node.attrs.class === "deck-id");
+assert(identity, "Player identity can expand with native touch and keyboard controls");
+assert(find(identity, node => node.tag === "summary" && node.attrs.title), "Identity has a full-value tooltip");
 assert(find(control, node => node.tag === "p" && node.children[0] === "Start only works at cue. Stop returns playback to cue and does nothing while paused."), "Explain the observed transport restrictions");
 assert.strictEqual(calls.length, 0, "Building controls must never send a command");
 arm.attrs.onchange({target: {checked: true, dataset: {number: "2"}}});
