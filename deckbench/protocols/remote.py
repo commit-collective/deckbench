@@ -18,5 +18,5 @@ def load_track_packet(name, sender, target, source, slot, track):
     struct.pack_into('>H', packet, 0x22, 0x34)
     packet[0x28:0x2B] = bytes((source, slot, 1))
     struct.pack_into('>I', packet, 0x2C, track)
-    packet[0x34], packet[0x40] = 0x32, target - 1
+    packet[0x33], packet[0x40] = 0x32, target - 1   # as beat-link sends it (its payload index 0x14)
     return bytes(packet)

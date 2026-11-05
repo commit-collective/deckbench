@@ -14,7 +14,7 @@ class LoadPacket(unittest.TestCase):
         self.assertEqual(packet[0x0A], 0x19)
         self.assertEqual(packet[0x1F:0x25], bytes((1, 0, 3, 0, 0x34, 3)))
         self.assertEqual(packet[0x28:0x30], bytes((1, 3, 1, 0, 0x12, 0x34, 0x56, 0x78)))
-        self.assertEqual((packet[0x34], packet[0x40]), (0x32, 1))
+        self.assertEqual((packet[0x33], packet[0x34], packet[0x40]), (0x32, 0, 1))
 
     def test_invalid_track_and_slot_are_rejected(self):
         for slot, track in ((1, 10), (3, 0), (3, 0x100000000)):
