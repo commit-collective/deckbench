@@ -193,7 +193,10 @@ const Strip = (() => {
     const first = color("--first", "#ef4444"), muted = color("--muted", "#8f95a1"), loopColor = color("--loop", "#b98af0"), text = color("--text", "#e6e8ec");
     const x = (dt) => head + dt * pps;
     const ticks = plan.ticks;
-    const gap = ticks.length > 1 ? Math.abs(x(ticks[1].dt) - x(ticks[0].dt)) : 30;
+    /* a beat's width: the middle of the spacings, since a real player's beats are timed as they arrived and two of them can be
+       close together, which hid every number now and then */
+    const spacings = ticks.slice(1).map((t, i) => Math.abs(t.dt - ticks[i].dt) * pps).sort((a, b) => a - b);
+    const gap = spacings.length ? spacings[spacings.length >> 1] : 30;
 
     g.fillStyle = "rgba(128,128,128,0.07)";                         /* every other bar a little lighter */
     ticks.forEach((t, i) => {

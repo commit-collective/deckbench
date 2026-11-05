@@ -207,5 +207,17 @@ check("nothing heard, nothing drawn", Strip.layoutDevice("c", {status: null}, 5)
   check("a stopped deck without one shows none", !plain.ticks.some((t) => t.inLoop || t.wrap) && plain.loopAhead === 0);
 }
 
+// a real player's beats come when they arrive: two close together must not hide every number of the strip
+{
+  sandbox.getComputedStyle = () => ({getPropertyValue: () => ""});
+  let texts = 0;
+  const g = new Proxy({}, {get: (o, k) => k === "fillText" ? () => { texts++; } : k === "measureText" ? () => ({width: 10}) : k in o ? o[k] : () => {},
+                           set: (o, k, value) => { o[k] = value; return true; }});
+  const canvas = {clientWidth: 400, clientHeight: 60, width: 0, height: 0, getContext: () => g};
+  for (const [t, pos] of [[49.0, 1], [49.1, 2], [49.5, 3], [50.0, 4]]) Strip.observe("jitter", [t, pos, 120], 0);
+  Strip.draw(canvas, Strip.layoutDevice("jitter", {status: null}, 50.0), {bars: true});
+  check("numbers stay when two beats come close together", texts > 5, texts);
+}
+
 console.log(failures ? failures + " failed" : "ok");
 process.exit(failures ? 1 : 0);
