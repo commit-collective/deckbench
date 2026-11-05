@@ -278,7 +278,12 @@ def main(argv=None):
     world.info["strict"] = a.strict
     if a.audio_port:
         heard = {int(x) for x in a.audio_decks.split(",")} if a.audio_decks else None
-        server = AudioServer(world, "127.0.0.1", a.audio_port, heard)
+        try:
+            server = AudioServer(world, "127.0.0.1", a.audio_port, heard)
+        except OSError as e:
+            link.stop()
+            ap.exit(2, "deckbench: the sound cannot listen on 127.0.0.1:%d (%s). Another bench may hold it: stop it "
+                       "or give another port with --audio-port.\n" % (a.audio_port, e.strerror or e))
         log("sound on tcp://127.0.0.1:%d (raw stereo 16-bit 44.1 kHz)" % server.port)
         world.info["audio"] = "tcp://127.0.0.1:%d" % server.port
     log("broadcasting to %s" % broadcast)
@@ -330,7 +335,14 @@ def main(argv=None):
         log("removed %d sent file%s (%.1f MB)" % (count, "" if count == 1 else "s", size / 1048576.0))
     network = NetworkSetup(link, a.dj_interface, netmask=a.netmask) if a.http_port >= 0 else None
     world.info['cli_scenarios'] = bool(scenarios)
-    server = serve(world, a.http_host, a.http_port, a.allow_origin, token, a.tracks_dir, network=network) if a.http_port >= 0 else None
+    try:
+        server = serve(world, a.http_host, a.http_port, a.allow_origin, token, a.tracks_dir, network=network) \
+            if a.http_port >= 0 else None
+    except OSError as e:
+        link.stop()
+        ap.exit(2, "deckbench: the page cannot listen on %s:%d (%s). Another program, often a bench already running "
+                   "(in WSL too, with mirrored networking), holds the port, or Windows reserves it. Stop it or give "
+                   "another port with --http-port. See docs/real-network.md.\n" % (a.http_host, a.http_port, e.strerror or e))
     if server:
         world.info["http"] = "http://%s:%d/" % (a.http_host, server.server_address[1])
         browser_host = "127.0.0.1" if a.http_host == "0.0.0.0" else a.http_host
