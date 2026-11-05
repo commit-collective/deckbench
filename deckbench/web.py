@@ -66,6 +66,7 @@ import json
 import os
 import re
 import threading
+import sys
 import time
 from urllib.parse import parse_qs, unquote, urlparse
 import socketserver
@@ -109,6 +110,13 @@ class Server(ThreadingHTTPServer):
         whose DNS is slow, a macOS runner for one, and holds up the start."""
         socketserver.TCPServer.server_bind(self)
         self.server_name, self.server_port = self.server_address[:2]
+
+    def handle_error(self, request, client_address):
+        """A page that went away before its answer (closed, reloaded, gave up) is normal: no traceback for that. Anything
+        else is printed as socketserver does."""
+        if isinstance(sys.exc_info()[1], (ConnectionAbortedError, ConnectionResetError, BrokenPipeError)):
+            return
+        super().handle_error(request, client_address)
 
 
 def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, tracks=None, network=None):
