@@ -34,8 +34,8 @@ Options (`python -m deckbench --help`):
 
 - `--decks N` or `--numbers N,N,...`: the players (default 1 to 4)
 - `--observe`: announce an observer, with no simulated playback decks, beat packets or database servers.
-  `--observer-number N` selects its unused identity, default 7. Older players may require an unused number 1 to 4
-  for metadata queries. This is an announced observer, not a silent packet capture
+  `--observer-number N` selects its unused identity. By default it is a free number 1 to 4 while track info is
+  read by itself, which older players require for metadata queries, and 7 otherwise. This is an announced observer, not a silent packet capture
 - `--on`: start them on (otherwise off, switch on from the page)
 - `--init DECK=play,sync,master,loopN`: start a deck on, playing, synced, the master, looping N beats
 - `--loaded DECK=SOURCE:SLOT:ID`, `--titles FILE`: the track a deck has loaded
