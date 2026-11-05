@@ -519,7 +519,7 @@ function renderDevices() {
     } else {
       const bpm = st ? st.bpm : d.phase ? d.phase[2] : null;
       setText(q("lcd").firstChild, bpm != null && d.online ? bpm.toFixed(1) : "--");
-      if (st && st.pitch) facts.push(h("span", {}, "pitch " + (st.pitch > 0 ? "+" : "") + st.pitch + " %"));
+      if (st && st.pitch) facts.push(h("span", {}, "pitch " + (st.pitch > 0 ? "+" : "") + st.pitch.toFixed(2) + " %"));
       if (d.firmware) facts.push(h("span", {}, "firmware " + d.firmware));
       if (d.precise) facts.push(h("span", {}, "position " + (d.precise.position_ms / 1000).toFixed(3) + " s"));
     }
