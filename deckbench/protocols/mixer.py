@@ -15,11 +15,10 @@ analysis (mixer_integration.html) and of Beat Link's `VirtualCdj`.
 """
 import random
 import socket
-import sys
 import threading
 import time
 
-from . import startup
+from . import loopback, startup
 from ..core import log
 
 ON_AIR, FADER_START = 0x03, 0x02
@@ -84,14 +83,14 @@ class LinkMixer:
         self.net = net
         self.name = name
         self.number = number
-        self.address = address or ("127.0.0.1" if sys.platform == "darwin" else "127.0.0.%d" % number)
+        self.address = address or loopback.mixer_address(number)
         self.broadcast = broadcast
         self.six = channels == 6
         self.on = False
         self.unavailable = ''
         self.master = True                              # the master level is up: channels can be on the air
         self.channels = {n: {"fader": 0, "fader_start": False} for n in range(1, channels + 1)}
-        self.mac = bytes([0x02, 0xFA, 0x4E, 0xDE, 0xC1, number])
+        self.mac = loopback.mixer_mac(number)
         self.alone = False
         self.changed = threading.Event()
         self.sock = None

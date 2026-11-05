@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 
 from . import phone
+from .protocols import loopback
 from .net import interface_macs
 
 
@@ -66,8 +67,8 @@ class NetworkSetup:
             broadcast = str(selected[0].network.broadcast_address)
             subnet = selected[0].network
         else:
-            addresses = {n: '127.0.0.%d' % n for n in link.decks}
-            macs = {address: bytes([2, 0xFA, 0x4E, 0xDE, 0xC0, n]) for n, address in addresses.items()}
+            addresses = {n: loopback.deck_address(n) for n in link.decks}
+            macs = {address: loopback.deck_mac(n) for n, address in addresses.items()}
             broadcast = '127.255.255.255'
             subnet = ipaddress.IPv4Network('127.0.0.0/8')
         link.reconnect(addresses, broadcast, macs, subnet)
