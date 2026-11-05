@@ -55,6 +55,8 @@ if (-not $Python) {
     if ($LASTEXITCODE -ne 0) { throw 'Could not locate Python, specify -Python explicitly' }
 }
 $Python = (Resolve-Path -LiteralPath $Python).Path
+# powershell -File passes "A","B" as the one string "A,B": split it, so both ways of running the script work.
+$InterfaceAlias = @($InterfaceAlias | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 foreach ($alias in $InterfaceAlias) {
     if (-not (Get-NetAdapter -Name $alias -IncludeHidden -ErrorAction SilentlyContinue)) {
         throw "No adapter named $alias. Get-NetAdapter lists them"
