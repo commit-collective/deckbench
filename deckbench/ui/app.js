@@ -429,8 +429,7 @@ function renderDevices() {
           !d.transport_armed || !d.online || !S.connected ||
             (["start", "stop"].includes(button.dataset.command) && d.fader_start_supported === false);
         button.dataset.number = d.number;
-        if (button.classList.contains('player-load-send')) button.disabled = button.disabled || !st || !!st.play || !['no track', 'paused', 'cued', 'track ended'].includes(st.state) ||
-          !/^(CDJ-|XDJ-)/i.test(d.name || '') || d.name.toUpperCase() === 'XDJ-XZ';
+        if (button.classList.contains('player-load-send')) button.disabled = button.disabled || !d.load_allowed;   // the bench's rule
       }
     }
     card.classList.toggle("online", d.online);

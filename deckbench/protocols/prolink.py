@@ -38,7 +38,6 @@ import random
 import os
 import socket
 import struct
-import sys
 import threading
 import time
 import ipaddress
@@ -47,7 +46,7 @@ from ..core import Protocol, log
 
 from .. import profiles
 from ..net import share, interface_macs, NetworkRuntime
-from . import startup
+from . import loopback, startup
 from .mixer import LinkMixer, parse_on_air, fader_start_packet
 from .monitor import Monitor
 from .startup import MAGIC
@@ -180,7 +179,7 @@ class LinkDeck:
         self.counter = 0
         self.online = False                 # it has come onto the network (and claimed its number, if that is asked)
         self.alone = False                  # nothing else was on the network when it came online (a byte of its keep-alive)
-        self.mac = bytes([0x02, 0xFA, 0x4E, 0xDE, 0xC0, deck.number])
+        self.mac = loopback.deck_mac(deck.number)
 
     @property
     def number(self):
@@ -661,7 +660,7 @@ class Prolink(Protocol):
         for n, deck in world.decks.items():
             self.decks[n] = LinkDeck(self, deck, loaded.get(n, (n, 3, 100 + n)),
                                      known.get(n, {}), model or (profiles.get(profile)["model"] if profile else None),
-                                     (addresses or {}).get(n, "127.0.0.%d" % n), broadcast, refuse_db, strict, ports)
+                                     (addresses or {}).get(n, loopback.deck_address(n)), broadcast, refuse_db, strict, ports)
         if self.observer:
             for link in self.decks.values():
                 link.name = b"deckbench"
@@ -797,8 +796,8 @@ class Prolink(Protocol):
                     self.monitor.recent.clear()
 
         values = {n: (address, broadcast, macs[address]) for n, address in addresses.items()}
-        mixer_address = '127.0.0.1' if sys.platform == 'darwin' else '127.0.0.33'
-        mixer_mac = bytes([2, 0xFA, 0x4E, 0xDE, 0xC1, 33])
+        mixer_address = loopback.mixer_address(self.mixer.number)
+        mixer_mac = loopback.mixer_mac(self.mixer.number)
         unavailable = ''
         if not ipaddress.IPv4Address(next(iter(addresses.values()))).is_loopback:
             requested = self.mixer_address
@@ -1081,17 +1080,28 @@ class Prolink(Protocol):
             device["transport_available"] = bool(available)
             device["fader_start_supported"] = device["name"].upper() not in ("CDJ-3000", "XDJ-XZ")
             device["transport_armed"] = bool(available and identity in self.player_controls)
+            device["load_allowed"] = self.load_refusal(device) is None
         self.player_controls.intersection_update(eligible)
         return devices
+
+    @staticmethod
+    def load_refusal(device):
+        """Why a player cannot be asked to load a track now, as (HTTP status, reason), or None if it can. The page is
+        told the answer (load_allowed), so the rule is only here."""
+        name = device['name'].upper()
+        if not name.startswith(('CDJ-', 'XDJ-')) or name == 'XDJ-XZ':
+            return 400, 'remote loading is not enabled for this model'
+        status = device.get('status')
+        if not status or status.get('play') or status.get('state') not in ('no track', 'paused', 'cued', 'track ended'):
+            return 409, 'a recent stopped-player status is required before loading'
+        return None
 
     def load_player_track(self, device, track, query):
         """Request a linked analyzed track, never claim that a player accepted it."""
         from .remote import load_track_packet
-        if not device['name'].upper().startswith(('CDJ-', 'XDJ-')) or device['name'].upper() == 'XDJ-XZ':
-            return 400, {'error': 'remote loading is not enabled for this model'}
-        status = device.get('status')
-        if not status or status.get('play') or status.get('state') not in ('no track', 'paused', 'cued', 'track ended'):
-            return 409, {'error': 'a recent stopped-player status is required before loading'}
+        refusal = self.load_refusal(device)
+        if refusal:
+            return refusal[0], {'error': refusal[1]}
         try:
             if not track.isdecimal():
                 raise ValueError('track ID must be a positive integer')

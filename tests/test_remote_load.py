@@ -49,8 +49,10 @@ class RemoteLoad(unittest.TestCase):
     def test_playing_and_missing_sources_are_rejected(self):
         self.call('arm', '1')
         self.world.decks[3].enabled = True
+        self.assertTrue(self.net.info()['devices'][0]['load_allowed'])     # what the page enables its button by
         self.player.deck.playing = True
         self.feed()
+        self.assertFalse(self.net.info()['devices'][0]['load_allowed'])
         self.assertEqual(self.load()[0], 409)
         self.player.deck.playing = False
         self.feed()
