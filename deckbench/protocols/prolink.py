@@ -297,6 +297,19 @@ class LinkDeck:
         if addr[0] != self.broadcast:                   # a broadcast comes back to the sockets that listen, a packet to one device does not
             self.net.monitor.feed(packet, self.address, addr[1], to=addr[0])
 
+    def presence(self, s, now, last_keep):
+        """The bench's presence on a real network while all its decks are off: keep-alives as observer PRESENCE, as
+        --observe sends, since players send their status only to devices that announce. Suspended while another
+        device has the number. Returns when the last keep-alive went."""
+        number = self.net.PRESENCE
+        conflict = any(d["online"] and d["number"] == number for d in self.net.monitor.snapshot())
+        self.net.presence_changed(self, not conflict)
+        if not conflict and now - last_keep >= 1.5:
+            self.send(s, startup.keepalive(b"deckbench", number, self.address, self.mac, self.net.peer_count() + 1),
+                      (self.broadcast, self.ports.announce))
+            return now
+        return last_keep
+
     def announce(self):
         s = self.net.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -326,8 +339,13 @@ class LinkDeck:
                 self.net.runtime.stopping.wait(0.1)
                 continue
             if not self.deck.enabled or self.deck.unplugged:
-                last_keep = last_status = 0.0
+                last_status = 0.0
                 self.online = False
+                if self.net.presence_link() is self:
+                    last_keep = self.presence(s, now, last_keep)
+                else:
+                    last_keep = 0.0
+                    self.net.presence_changed(self, False)
                 self.net.runtime.stopping.wait(0.1)
                 continue
             if not self.online:
@@ -839,6 +857,30 @@ class Prolink(Protocol):
             for link in self.decks.values():
                 link.name = profile["model"].encode()
         log("the decks are now %s" % profile["title"])
+
+    PRESENCE = 7                        # the number the bench announces with its decks off (LinkDeck.presence)
+
+    def presence_link(self):
+        """The deck that announces the bench's presence, or None: on a real network (not loopback), outside observer
+        mode, while no deck is on, from the lowest-numbered one that is plugged in."""
+        if self.observer or any(l.deck.enabled and not l.deck.unplugged for l in self.decks.values()):
+            return None
+        if any(l.number == self.PRESENCE for l in self.decks.values()):
+            return None
+        return next((l for _, l in sorted(self.decks.items()) if not l.deck.unplugged
+                     and not ipaddress.ip_address(l.address).is_loopback), None)
+
+    def presence_changed(self, link, on):
+        """Say once when the presence starts or stops."""
+        before = getattr(self, "presence_on", None)
+        if on and before is not link:
+            self.presence_on = link
+            log("announcing observer %d on %s so players send their status (no deck is on)" % (self.PRESENCE, link.address))
+            self.world.events.add("presence", number=self.PRESENCE, on=True)
+        elif not on and before is link:
+            self.presence_on = None
+            log("observer %d announcement stopped" % self.PRESENCE)
+            self.world.events.add("presence", number=self.PRESENCE, on=False)
 
     def peer_count(self, exclude=None, exclude_mixer=False):
         """The devices that are on the network, as the decks see it: the decks that are on and plugged in, the mixer if

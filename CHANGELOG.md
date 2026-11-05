@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- With every simulated deck off on a real network, the bench announces itself as observer 7, so players send it their
+  status: the cards' PLAY, SYNC and MASTER lamps and the master's beat follow them without a deck switched on.
 - Press PLAY/PAUSE and CUE on a CDJ-2000NXS2 too (experimental), in its own packet format, tried on a physical
   NXS2. It keeps fader start as well. The XDJ-1000MK2 is sent the same format, untried.
 - A player card under control has switches like a bench deck's: PLAY/PAUSE, CUE, SYNC and MASTER, lit from what
