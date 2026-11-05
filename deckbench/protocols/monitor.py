@@ -46,7 +46,8 @@ def classify(port, data, announce=50000, beat=50001, update=50002):
         return {0x28: "beat", 0x03: "on air", 0x02: "fader start", 0x26: "takeover request", 0x27: "takeover reply", 0x2A: "sync command",
                 0x0B: "position"}.get(t, "other")
     if port == update:
-        return {0x0A: "status", 0x29: "mixer status", 0x27: "takeover reply"}.get(t, "other")
+        return {0x0A: "status", 0x29: "mixer status", 0x27: "takeover reply",
+                0x19: "load track", 0x1A: "load acknowledgement"}.get(t, "other")
     return "other"
 
 

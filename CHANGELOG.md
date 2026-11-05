@@ -4,6 +4,12 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Request analyzed SD/USB tracks on stopped discovered players through an
+  armed, experimental remote-load form or API. Require an online source and
+  announced sender, and distinguish a sent request from a confirmed load.
+  Packet and loopback tests pass. Physical-player validation is pending.
+- Keep discovered-player cards within narrow phone screens.
+
 - Keep the network adapter's remember-choice checkbox beside its natural-width label.
 
 - Choose the backend's DJ network adapter from the browser Network panel.

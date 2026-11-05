@@ -10,6 +10,7 @@ const context = vm.createContext({
   devId: ip => ip, beatIndicators: () => null,
   act: url => calls.push(url),
   api: url => { calls.push(url); return Promise.resolve({}); }, toast: () => {},
+  buildPlayerLoad: () => null,
 });
 const script = fs.readFileSync(path.join(__dirname, "..", "deckbench", "ui", "app.js"), "utf8");
 vm.runInContext("function buildDevice(d) {" + script.split("function buildDevice(d) {")[1].split("function renderDevices()")[0], context);
