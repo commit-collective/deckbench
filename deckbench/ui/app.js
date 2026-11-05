@@ -415,7 +415,7 @@ function buildDevice(d) {
     h("div", {class: "facts"}),
     mixer ? null : h("details", {class: "player-control", hidden: true},
       h("summary", {}, "Player control"),
-      h("label", {class: "hint"}, h("input", {type: "checkbox", class: "player-arm",
+      h("label", {class: "arm"}, h("input", {type: "checkbox", class: "player-arm",
         onchange: (e) => act("api/player/" + d.ip + "/arm/" + (e.target.checked ? 1 : 0) + "?number=" + e.target.dataset.number)}),
         " Enable player control"),
       h("p", {class: "hint", "data-method": "fader"}, "Start only works at cue. Stop returns playback to cue and does nothing while paused."),
@@ -481,6 +481,13 @@ function renderDevices() {
         button.dataset.number = d.number;
         if (button.classList.contains("player-read")) button.title = d.metadata_reason || "Read the loaded track's title and artist";
         if (button.classList.contains('player-load-send')) button.disabled = button.disabled || !d.load_allowed;   // the bench's rule
+      }
+      /* loading needs player control too: its fields look as off as its button */
+      const locked = !d.transport_armed || !d.online || !S.connected, load = q("player-load");
+      if (load.classList.contains("locked") !== locked) {
+        load.classList.toggle("locked", locked);
+        for (const field of load.querySelectorAll("input, select")) field.disabled = locked;
+        load.querySelector("summary").title = locked ? "Enable player control first" : "";
       }
     }
     card.classList.toggle("online", d.online);
