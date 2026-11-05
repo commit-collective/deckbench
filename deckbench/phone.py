@@ -36,6 +36,7 @@ def interfaces():
         entries = [(x["InterfaceAlias"], x["IPAddress"], x["PrefixLength"]) for x in entries]
     else:
         entries = [(iface["ifname"], a["local"], a["prefixlen"]) for iface in data
+                   if "LOOPBACK" not in iface.get("flags", [])          # WSL puts a DNS address on lo (10.255.255.254)
                    for a in iface.get("addr_info", []) if a.get("family") == "inet"]
     return [(name, ipaddress.IPv4Interface("%s/%s" % (address, prefix))) for name, address, prefix in entries]
 
