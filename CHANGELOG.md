@@ -4,6 +4,9 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Real players' waveforms: the bench reads each player's track waveform and beat grid from the player that hosts it,
+  and the card draws it behind the strip's beats, as a bench deck's, with the whole track under it. Retrieval was
+  tried on a CDJ-2000NXS2. A database answer that leaves out an empty blob after a zero is now read correctly.
 - Player control and the reading of track info are settings for every player at once, both on by default. Player
   control is off with --observe. A player's card shows its switches straight away, without a box to tick on each card.
 - A quick tap of CUE on a real player is no longer lost: the bench keeps a release that comes early and holds every

@@ -115,6 +115,7 @@ Options (`python -m deckbench --help`):
     POST /api/player/<ip>/arm/<0|1>?number=<n>       arm one player while player_control is off (scripts, --observe)
     POST /api/player/<ip>/command/<command>?number=<n>   start, stop, sync-on, sync-off or master, requires arming
     POST /api/player/<ip>/metadata/refresh?number=<n>    read the loaded analyzed track's metadata, no arming required
+    GET  /api/player/<ip>/waveform    the waveform and beat grid of the player's track, once read (see below)
     POST /api/player/<ip>/load/<id>?number=<n>&source=<player>&slot=<2|3>    request an analyzed SD/USB track, requires arming
     POST /api/mixer/on/<0|1>          the mixer on or off. Also master/<0|1>, channel/<n>/fader/<0-100>, channel/<n>/fader_start/<0|1>,
                                       channel/<n>/command/<start|stop>
@@ -130,6 +131,27 @@ Options (`python -m deckbench --help`):
 and, while it plays, a `phase` ([time, beats into its bar, tempo]) to count the
 beats on from, and for each protocol what it knows of the other side.
 
+
+## Real players' waveforms
+
+While **Read track info by itself** is on, the bench reads the waveform of each player's analyzed SD or USB track
+from the player that hosts the media, which may not be the one playing it. One bounded, read-only session asks for
+the RGB overview, the RGB detail (150 values a second) and the beat grid, in the bench's own worker, as the
+announced player 1 to 4 it uses for track info. A few tracks are kept, by the source's identity, slot and track. One
+is dropped when its source leaves, or when no player has had it loaded for a minute. A failed read is tried again
+after a minute.
+
+Each player in the state has a small `waveform`: `key` and `state` (`ready`, `reading`, `waiting`, `failed` with a
+`reason`, `off`, or `none` with a `reason`). The data itself is only at `GET /api/player/<ip>/waveform`:
+`overview` (six bytes a column) and `detail` (a big-endian 16-bit value a sample, its height in bits 2 to 6) in
+base64, `rate` and `grid` (`[ms, bar, bpm * 100]` a beat).
+
+The card draws the detail behind the strip's beats and the overview under it, as a bench deck's waveform. Each beat
+is mapped to the track through the grid's own times, so a track whose tempo changes stays aligned. A CDJ-3000's
+precise position places it while paused. Older players give only their beat while paused, marked as an estimate.
+Retrieval and the grid's alignment were tried on a CDJ-2000NXS2 (1.84), for a track on its own USB and on another
+NXS2's. Live tracking, loops, seeks, the XDJ-1000MK2 and the CDJ-3000 are not yet tried, nor its three-band style,
+which is not asked for.
 
 ## Remote loading
 

@@ -252,6 +252,10 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                           {'error': 'Network setup is not enabled for this embedded bench'}))
             elif path == "/api/uploads":
                 self.send(200, json.dumps(upload_store.summary(folder)))
+            elif re.fullmatch(r"/api/player/[\d.]+/waveform", path):
+                answer = next((p.waveform_asset(path.split("/")[3]) for p in world.protocols
+                               if hasattr(p, "waveform_asset")), (404, {"error": "no link protocol here"}))
+                self.send(answer[0], json.dumps(answer[1]))
             elif re.fullmatch(r"/api/deck/\d+/waveform", path):
                 deck = world.decks.get(int(path.split("/")[3]))
                 track = deck.audio if deck else None

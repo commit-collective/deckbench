@@ -349,6 +349,36 @@ function waveOf(n, d) {
   return w ? Object.assign({offset: d.audio.offset, bpm: d.audio.bpm}, w) : null;
 }
 
+/* A real player's waveform, read by the bench from the player that hosts the track (api/player/IP/waveform), once it says it
+   is ready: by address, for the track it was read for. A new track drops the old one at once. */
+const realWaves = {};                   // address: {key, peaks, overview, beatTime, beatOf, bars, duration}, or {key, failed}
+function realWaveOf(d) {
+  const wf = d.waveform || {}, have = realWaves[d.ip];
+  if (have && have.key !== wf.key) delete realWaves[d.ip];
+  if (wf.state !== "ready" || transport.demo) return null;
+  if (!realWaves[d.ip]) {
+    realWaves[d.ip] = {key: wf.key, pending: true};
+    transport.fetch("api/player/" + d.ip + "/waveform")
+      .then((r) => { if (!r.ok) throw new Error("none"); return r.json(); })
+      .then((data) => { if (realWaves[d.ip] && realWaves[d.ip].key === data.key) realWaves[d.ip] = Strip.realWave(data); })
+      .catch(() => { if (realWaves[d.ip] && realWaves[d.ip].key === wf.key) realWaves[d.ip] = {key: wf.key, failed: true}; });
+  }
+  const w = realWaves[d.ip];
+  return w && w.peaks ? w : null;
+}
+
+/* A real player's strip: its beats as they came, with its waveform behind them when the bench has read it. Paused, the beats
+   around its place: its precise position (a CDJ-3000's), or else its beat, which is then marked as an estimate. */
+function devicePlan(d, wave, now) {
+  const st = d.status;
+  if (!wave || !st || st.play || st.track_beat == null) return {plan: Strip.layoutDevice(d.ip, d, now), place: null};
+  const place = Strip.trackPlace(d, wave, now + S.offset);
+  if (!place) return {plan: Strip.layoutDevice(d.ip, d, now), place: null};
+  const plan = Strip.layout({at: wave.beatOf(place.seconds), bpm: st.bpm || st.track_bpm || 120}, now, S.offset);
+  for (const t of plan.ticks) if (wave.bars[t.at] != null) t.beat = wave.bars[t.at];
+  return {plan, place};
+}
+
 function strips() {
   if (!S.state) return;
   const now = Date.now() / 1000;
@@ -360,8 +390,14 @@ function strips() {
   for (const d of devicesOf(S.state)) {
     const card = $(devId(d.ip)), canvas = card && card.querySelector(".strip");
     if (!canvas) continue;
-    const st = d.status;
-    Strip.draw(canvas, Strip.layoutDevice(d.ip, d, now), {bars: !(st && st.track_beat != null)});
+    const st = d.status, known = !!(st && st.track_beat != null), wave = known ? realWaveOf(d) : null;
+    const {plan, place} = devicePlan(d, wave, now);
+    Strip.draw(canvas, plan, {bars: !known, wave, label: place && place.estimated ? "paused, place estimated" : ""});
+    const overview = card.querySelector(".overview");
+    if (overview) {
+      if (overview.hidden !== !wave) overview.hidden = !wave;
+      if (wave) Strip.drawOverview(overview, wave, Strip.trackPlace(d, wave, now + S.offset));
+    }
   }
 }
 
@@ -420,6 +456,7 @@ function buildDevice(d) {
       beatIndicators(),
       h("div", {class: "lcd", "aria-label": "Tempo"}, h("b", {}, "--"), h("span", {}, "BPM"))),
     mixer ? null : h("canvas", {class: "strip", "aria-hidden": "true"}),
+    mixer ? null : h("canvas", {class: "overview", "aria-hidden": "true", hidden: true}),
     /* the player's own switches, as a bench deck's: pressed on the player once control is enabled, and lit from what it reports */
     /* the player's own switches, as a bench deck's: pressed on the player while player control is on (Settings), and lit
        from what it reports. A model that takes no presses has fader start's START and STOP instead */
