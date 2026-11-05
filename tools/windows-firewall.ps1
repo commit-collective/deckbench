@@ -90,9 +90,11 @@ if ($subnets -contains '0.0.0.0/0') {
 }
 $names = @($ruleNames[0])
 if ($IncludeMetadata) { $names += $ruleNames[1] }
+# Installing again replaces this script's own rules (they are known by their names), as a new adapter or subnet needs.
 foreach ($name in $names) {
-    if (Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue) {
-        throw "Rule $name already exists. Use -Action Show, or Remove before reinstalling"
+    if ((Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue) -and
+        $PSCmdlet.ShouldProcess($name, 'Replace the existing firewall rule')) {
+        Remove-NetFirewallRule -Name $name
     }
 }
 foreach ($name in $names) {
