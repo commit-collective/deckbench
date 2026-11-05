@@ -139,12 +139,15 @@ Use `-WhatIf` to preview installation. The rule persists across restarts.
 For metadata requests from physical players, add `-IncludeMetadata` when installing. This also allows TCP 1051 and
 12523 under the same restrictions. This is metadata access, not network audio or a virtual USB drive.
 Phone HTTP access is separate and is not opened by this script.
-Replace `Ethernet` with the name of your DJ interface. Name several to cover each with one rule. A program that
-bridges the DJ adapter (cdj3k-emu does) moves its address to a `Network Bridge` adapter while it runs, so name both,
-with the bridge in place:
+Replace `Ethernet` with the name of your DJ interface. Name several to cover each with one rule.
+
+A program that bridges the DJ adapter (cdj3k-emu does) moves its address to a `Network Bridge` adapter while it runs.
+The DJ adapter is then not an IP interface, which a rule cannot name, and the bridge comes and goes with the program.
+For one rule that covers both states, add `-AnyWired`: the rule applies to every wired adapter, still only for this
+Python, these ports and the DJ subnet. Name whichever adapter has the address at the time:
 
 ```powershell
-.\tools\windows-firewall.ps1 -Action Install -InterfaceAlias "Ethernet 2","Network Bridge"
+.\tools\windows-firewall.ps1 -Action Install -InterfaceAlias "Network Bridge" -AnyWired
 ```
 
 If PowerShell refuses to run the script ("running scripts is disabled"), run it once without changing the policy:

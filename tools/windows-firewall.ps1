@@ -7,11 +7,14 @@ Manage Deckbench rules on the computer connected to the DJ network.
 param(
     [ValidateSet('Install', 'Show', 'Remove')]
     [string]$Action = 'Show',
-    # One adapter or several ("Ethernet 2","Network Bridge"): the rule covers each. An adapter that is part of a network
-    # bridge (cdj3k-emu makes one) has no address of its own then: the bridge has it, so name both.
+    # The DJ adapter, or several. Their subnet limits where packets may come from. An adapter that is part of a network
+    # bridge (cdj3k-emu makes one) is not an IP interface then: name the bridge instead, or use -AnyWired.
     [string[]]$InterfaceAlias,
     [string]$Python,
-    [switch]$IncludeMetadata
+    [switch]$IncludeMetadata,
+    # The rule applies to every wired adapter instead of the named ones, still only for this Python, these ports and
+    # the named adapters' subnet. For a DJ adapter that comes and goes into a bridge: one rule covers both states.
+    [switch]$AnyWired
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,6 +27,7 @@ if ($Action -eq 'Show') {
             $rule | Format-Table Name, Enabled, Direction, Action, Profile
             $rule | Get-NetFirewallApplicationFilter | Format-Table Program
             $rule | Get-NetFirewallInterfaceFilter | Format-Table InterfaceAlias
+            $rule | Get-NetFirewallInterfaceTypeFilter | Format-Table InterfaceType
             $rule | Get-NetFirewallAddressFilter | Format-Table RemoteAddress
             $rule | Get-NetFirewallPortFilter | Format-Table Protocol, LocalPort
         }
@@ -61,6 +65,10 @@ foreach ($alias in $InterfaceAlias) {
     if (-not (Get-NetAdapter -Name $alias -IncludeHidden -ErrorAction SilentlyContinue)) {
         throw "No adapter named $alias. Get-NetAdapter lists them"
     }
+    # A firewall rule can only name an IP interface, which an adapter inside a network bridge is not.
+    if (-not $AnyWired -and -not (Get-NetIPInterface -InterfaceAlias $alias -AddressFamily IPv4 -ErrorAction SilentlyContinue)) {
+        throw "$alias is not an IP interface now (part of a network bridge?). Name the bridge, or add -AnyWired for one rule that covers both"
+    }
 }
 $addresses = @($InterfaceAlias | ForEach-Object {
     Get-NetIPAddress -InterfaceAlias $_ -AddressFamily IPv4 -ErrorAction SilentlyContinue } |
@@ -94,9 +102,11 @@ foreach ($name in $names) {
         $protocol = 'TCP'
         $ports = @('1051', '12523')
     }
-    if ($PSCmdlet.ShouldProcess("$Python on $($InterfaceAlias -join ', ') from $($subnets -join ', ')", "Allow $protocol $ports")) {
+    $scope = if ($AnyWired) { @{ InterfaceType = 'Wired' } } else { @{ InterfaceAlias = $InterfaceAlias } }
+    $where = if ($AnyWired) { 'any wired adapter' } else { $InterfaceAlias -join ', ' }
+    if ($PSCmdlet.ShouldProcess("$Python on $where from $($subnets -join ', ')", "Allow $protocol $ports")) {
         New-NetFirewallRule -Name $name -DisplayName $name -Group 'Deckbench' `
-            -Direction Inbound -Action Allow -Profile Any -InterfaceAlias $InterfaceAlias `
+            -Direction Inbound -Action Allow -Profile Any @scope `
             -Program $Python -Protocol $protocol -LocalPort $ports -RemoteAddress $subnets
     }
 }
