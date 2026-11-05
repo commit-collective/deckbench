@@ -1084,9 +1084,9 @@ class Prolink(Protocol):
 
     # How each model is started and stopped. Fader start is documented as unsupported on the CDJ-3000 and XDJ-XZ. The
     # CDJ-3000 takes button presses (protocols/transport.py) instead: seen on CDJ-3000 firmware, the 3000X untried. The
-    # CDJ-2000NXS2 takes them in its own format, and fader start too. Other models get only what was tried on them.
-    BUTTON_MODELS = ("CDJ-3000", "CDJ-3000X", "CDJ-2000NXS2")
-    SLOT_MODELS = ("CDJ-2000NXS2",)     # the little-endian format, whose controller slot is the player's number
+    # CDJ-2000NXS2 takes them in its own format, and fader start too. The XDJ-1000MK2 shares that format, untried.
+    BUTTON_MODELS = ("CDJ-3000", "CDJ-3000X", "CDJ-2000NXS2", "XDJ-1000MK2")
+    SLOT_MODELS = ("CDJ-2000NXS2", "XDJ-1000MK2")   # the little-endian format, whose slot is the player's number
     NO_FADER_START = ("CDJ-3000", "CDJ-3000X", "XDJ-XZ")
 
     @classmethod

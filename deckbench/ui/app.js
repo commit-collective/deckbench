@@ -440,7 +440,7 @@ function buildDevice(d) {
         " Enable player control"),
       h("p", {class: "hint"}, "Once enabled, the switches above press the player's own, and they light from what it reports."),
       h("p", {class: "hint", "data-method": "buttons", hidden: true},
-        "Experimental: PLAY/PAUSE toggles. CUE is held as long as you hold it. Tried on CDJ-3000 firmware and a CDJ-2000NXS2."),
+        "Experimental: PLAY/PAUSE toggles. CUE is held as long as you hold it. Tried on CDJ-3000 firmware and a CDJ-2000NXS2, not yet on an XDJ-1000MK2."),
       h("p", {class: "hint", "data-method": "fader"}, "Fader start: Start only works at cue. Stop returns playback to cue and does nothing while paused."),
       h("div", {class: "player-actions"}, ...[["start", "Start cued track"], ["stop", "Stop playing track"]].map(([command, label]) =>
         h("button", {class: "btn small", "data-command": command, "data-method": "fader", disabled: true, onclick: (e) => {
