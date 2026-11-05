@@ -29,6 +29,20 @@ function h(tag, attrs, ...kids) {
   return node;
 }
 
+/* The page is drawn again several times a second. Text written again, even the same, ends a selection in it, so a
+   reader could not select and copy. These change a node only when what it shows changed. */
+function setText(node, text) {
+  text = text == null ? "" : String(text);
+  if (node.textContent !== text) node.textContent = text;
+}
+function fill(node, ...kids) {
+  kids = kids.flat().filter((k) => k != null && k !== false && k !== "");
+  const key = kids.map((k) => typeof k === "string" ? k : k.outerHTML).join("\u0000");
+  if (node.dataset.fill === key) return;
+  node.dataset.fill = key;
+  node.replaceChildren(...kids);
+}
+
 const S = {state: null, offset: 0, events: [], paused: false, frozen: 0, hidden: new Set(), kinds: new Map(),
            scenario: null, connected: false, examples: []};
 
@@ -437,53 +451,39 @@ function renderDevices() {
     card.classList.toggle("online", d.online);
     card.classList.toggle("offline", !d.online);
     card.classList.toggle("off", false);
-    q("num").textContent = d.number == null ? "?" : d.number;
-    const model = q("model");
-    model.textContent = d.model || d.ip;
-    model.append(h("span", {class: "addr"}, d.ip));
+    setText(q("num"), d.number == null ? "?" : d.number);
+    fill(q("model"), d.model || d.ip, h("span", {class: "addr"}, d.ip));
     const track = q("track");
-    track.textContent = "";
-    if (d.kind === "mixer") track.textContent = "mixer";
-    else if (st) {
-      track.append(h("b", {}, st.state), st.rbid ? " \u00b7 player " + st.source + " \u00b7 " + (SLOTS[st.slot] || "slot " + st.slot) + " \u00b7 id " + st.rbid : "");
-    } else track.textContent = d.online ? "no status yet" : "gone quiet";
-    if (d.metadata && d.metadata.title) {
-      track.textContent = "";
-      track.append(h("b", {}, d.metadata.title), d.metadata.artist ? " \u00b7 " + d.metadata.artist : "");
-    }
-    q("identity").title = [d.model, d.ip].filter(Boolean).join(" · ") + "\n" + track.textContent + "\nClick or press Enter to expand";
+    if (d.metadata && d.metadata.title) fill(track, h("b", {}, d.metadata.title), d.metadata.artist ? " \u00b7 " + d.metadata.artist : "");
+    else if (d.kind === "mixer") fill(track, "mixer");
+    else if (st) fill(track, h("b", {}, st.state), st.rbid ? " \u00b7 player " + st.source + " \u00b7 " + (SLOTS[st.slot] || "slot " + st.slot) + " \u00b7 id " + st.rbid : "");
+    else fill(track, d.online ? "no status yet" : "gone quiet");
+    const tip = [d.model, d.ip].filter(Boolean).join(" · ") + "\n" + track.textContent + "\nClick or press Enter to expand";
+    if (q("identity").title !== tip) q("identity").title = tip;
     /* the tags are a column at the right of the header, the height of the number's box: the unit tag at the top and the state (side by side, wrapping onto
        a row under when there are too many for the width) at the bottom. The column is always there: a flag that comes or goes does not change the card's height */
-    const slot = q("unit-slot"), flags = q("flags");
-    slot.textContent = "";
-    if (d.unit && (S.state.adapters || []).some((a) => a.name === "djs1000-emu")) {
-      slot.append(h("span", {class: "tag unit"}, "UNIT UNDER TEST"));
-    }
-    flags.textContent = "";
-    if (!d.online) flags.append(h("span", {class: "tag offline"}, "OFFLINE"));
-    if (st && d.online) {
-      if (st.master) flags.append(h("span", {class: "tag master"}, "MASTER"));
-      if (st.sync) flags.append(h("span", {class: "tag sync"}, "SYNC"));
-      if (st.on_air) flags.append(h("span", {class: "tag air-tag"}, "ON AIR"));
-      if (st.loop) flags.append(h("span", {class: "tag loop"}, "LOOP"));
-    }
-    const facts = q("facts");
-    facts.textContent = "";
+    fill(q("unit-slot"), d.unit && (S.state.adapters || []).some((a) => a.name === "djs1000-emu") ? h("span", {class: "tag unit"}, "UNIT UNDER TEST") : null);
+    const live = st && d.online;
+    fill(q("flags"), !d.online ? h("span", {class: "tag offline"}, "OFFLINE") : null,
+         live && st.master ? h("span", {class: "tag master"}, "MASTER") : null,
+         live && st.sync ? h("span", {class: "tag sync"}, "SYNC") : null,
+         live && st.on_air ? h("span", {class: "tag air-tag"}, "ON AIR") : null,
+         live && st.loop ? h("span", {class: "tag loop"}, "LOOP") : null);
+    const facts = [];
     if (d.kind === "mixer") {
-      const airs = q("airs");
-      airs.textContent = "";
-      for (const [channel, on] of Object.entries(d.air || {})) airs.append(h("span", {class: "air" + (on ? " lit" : "")}, "CH " + channel));
-      if (!d.air) airs.append(h("span", {class: "hint"}, "no on-air report heard"));
-      if (d.fader) facts.append(h("span", {}, "fader start: " + Object.entries(d.fader).map(([p, c]) => "player " + p + " " + c).join(", ")));
+      const airs = Object.entries(d.air || {}).map(([channel, on]) => h("span", {class: "air" + (on ? " lit" : "")}, "CH " + channel));
+      fill(q("airs"), airs, d.air ? null : h("span", {class: "hint"}, "no on-air report heard"));
+      if (d.fader) facts.push(h("span", {}, "fader start: " + Object.entries(d.fader).map(([p, c]) => "player " + p + " " + c).join(", ")));
     } else {
       const bpm = st ? st.bpm : d.phase ? d.phase[2] : null;
-      q("lcd").firstChild.textContent = bpm != null && d.online ? bpm.toFixed(1) : "--";
-      if (st && st.pitch) facts.append(h("span", {}, "pitch " + (st.pitch > 0 ? "+" : "") + st.pitch + " %"));
-      if (d.firmware) facts.append(h("span", {}, "firmware " + d.firmware));
-      if (d.precise) facts.append(h("span", {}, "position " + (d.precise.position_ms / 1000).toFixed(3) + " s"));
+      setText(q("lcd").firstChild, bpm != null && d.online ? bpm.toFixed(1) : "--");
+      if (st && st.pitch) facts.push(h("span", {}, "pitch " + (st.pitch > 0 ? "+" : "") + st.pitch + " %"));
+      if (d.firmware) facts.push(h("span", {}, "firmware " + d.firmware));
+      if (d.precise) facts.push(h("span", {}, "position " + (d.precise.position_ms / 1000).toFixed(3) + " s"));
     }
-    if (d.peers != null) facts.append(h("span", {}, "knows " + d.peers + " device" + (d.peers === 1 ? "" : "s")));
-    if (d.mac) facts.append(h("span", {}, d.mac));
+    if (d.peers != null) facts.push(h("span", {}, "knows " + d.peers + " device" + (d.peers === 1 ? "" : "s")));
+    if (d.mac) facts.push(h("span", {}, d.mac));
+    fill(q("facts"), facts);
   }
   for (const card of Array.from(box.children)) if (!keep.has(card.id)) card.remove();
 }
@@ -501,24 +501,18 @@ function render() {
     card.classList.toggle("off", !d.on);
     card.classList.toggle("unplugged", !!d.unplugged);
 
-    const model = q("model");
-    model.textContent = d.model || d.name;
-    if (d.address) model.append(h("span", {class: "addr"}, d.address));
-    const track = q("track");
-    track.textContent = "";
+    fill(q("model"), d.model || d.name, d.address ? h("span", {class: "addr"}, d.address) : null);
     if (d.track) {
       const own = d.track_source === Number(n);
-      track.append(h("b", {}, d.track), " · " + (own ? "own database" : "deck " + d.track_source) + " · " +
-                   (SLOTS[d.track_slot] || "slot " + d.track_slot) + " · id " + d.track_rbid);
-    } else track.textContent = "no track";
-    const tags = q("tags");
-    tags.textContent = "";
-    if (d.on && d.loop) tags.append(h("span", {class: "tag loop"}, "LOOP " + d.loop));
-    if (d.unplugged) tags.append(h("span", {class: "tag cable"}, "UNPLUGGED"));
+      fill(q("track"), h("b", {}, d.track), " · " + (own ? "own database" : "deck " + d.track_source) + " · " +
+                       (SLOTS[d.track_slot] || "slot " + d.track_slot) + " · id " + d.track_rbid);
+    } else fill(q("track"), "no track");
     const mixer = mixerOf(s);
-    if (mixer && mixer.on && d.on) tags.append(h("span", {class: "tag " + (d.on_air ? "air-tag" : "off-air")}, d.on_air ? "ON AIR" : "OFF AIR"));
+    fill(q("tags"), d.on && d.loop ? h("span", {class: "tag loop"}, "LOOP " + d.loop) : null,
+         d.unplugged ? h("span", {class: "tag cable"}, "UNPLUGGED") : null,
+         mixer && mixer.on && d.on ? h("span", {class: "tag " + (d.on_air ? "air-tag" : "off-air")}, d.on_air ? "ON AIR" : "OFF AIR") : null);
 
-    q("lcd").firstChild.textContent = d.on ? d.bpm.toFixed(1) : "--";
+    setText(q("lcd").firstChild, d.on ? d.bpm.toFixed(1) : "--");
     const power = q("num");                  /* the number: the deck's on / off switch */
     if (power.tagName === "BUTTON") {
       const clash = !!unit && unit.number === Number(n) && !d.on;
@@ -530,7 +524,7 @@ function render() {
       const what = b.dataset.what;
       b.setAttribute("aria-pressed", String(!!d[what] && d.on));
       b.disabled = !d.on;
-      if (what === "play") b.textContent = d.play ? "PAUSE" : "PLAY";
+      if (what === "play") setText(b, d.play ? "PAUSE" : "PLAY");
     }
     const range = q("tempo-range"), num = q("tempo-num");
     if (active !== range) range.value = d.bpm;
@@ -539,7 +533,7 @@ function render() {
       b.setAttribute("aria-pressed", String(!!d.on && d.loop === Number(b.dataset.beats)));
       b.disabled = !d.on;
     }
-    q("unplug").textContent = d.unplugged ? "Plug in" : "Unplug";
+    setText(q("unplug"), d.unplugged ? "Plug in" : "Unplug");
     q("silence").disabled = !!d.unplugged;
   }
   renderChips();
@@ -547,7 +541,7 @@ function render() {
   renderSettings();
   renderMixer();
   renderDevices();
-  $("version").textContent = s.bench && s.bench.version ? (/^\d/.test(s.bench.version) ? "v" : "") + s.bench.version : "";
+  setText($("version"), s.bench && s.bench.version ? (/^\d/.test(s.bench.version) ? "v" : "") + s.bench.version : "");
   lamps();
 }
 
