@@ -288,10 +288,13 @@ validation. Use them only when changing the setup's tempo ownership is safe.
 
 Players send their full status (playing, SYNC, MASTER, the bar) only to devices that announce themselves. Beats are
 broadcast, so they come anyway. On a real network with every simulated deck off, the bench therefore announces itself
-as observer 7, the way `--observe` does, and the cards' lamps and the master's beat follow the players. It sends only
-keep-alives: no status, beats or database. Number 7 is outside the players' range, so it takes no deck's place. It
-stops when a deck is switched on, since that deck announces itself, and is suspended while another device uses 7.
-Older players answer Read track info only from a number 1 to 4, which this presence does not give.
+as an observer, the way `--observe` does, and the cards' lamps and the master's beat follow the players. It sends only
+keep-alives: no status, beats or database. It stops when a deck is switched on, since that deck announces itself.
+
+Its number is one from 1 to 4 that no device uses while **Read track info by itself** is on, since older players answer
+track info only from those (beat-link's virtual CDJ does the same). It moves to another free one if a player takes it,
+and on older players it can show as a number in use. With that setting off, or none free, it is 7, outside the players'
+range.
 
 ## Observe without a simulated deck
 
@@ -299,14 +302,15 @@ Older players answer Read track info only from a number 1 to 4, which this prese
 python -m deckbench --phone --observe --dj-interface "Ethernet 2"
 ```
 
-Use your platform's actual interface name. This announces observer number 7 so players can send their full status,
+Use your platform's actual interface name. This announces an observer so players can send their full status,
 but creates no playback cards, simulated mixer, database servers or outgoing beat/status stream. It is not passive
-sniffing. Choose another unused identity with `--observer-number` if needed. A detected number conflict suppresses
+sniffing. Its number is chosen as above, a free 1 to 4 while track info is read by itself, else 7. Give one with
+`--observer-number` if needed. A detected number conflict suppresses
 observer announcements and raises a network warning. Announcements resume and the warning clears when the conflict ends.
 
 **Read track info** queries the reported track's source player, not necessarily the player playing it. This is a
-bounded, read-only request, separate from arming controls. Older players require an announced unused number 1 to 4,
-so use `--observer-number 3` only when 3 is free, or use the normal bench with unused virtual player 3 enabled.
+bounded, read-only request, separate from player control. Older players require an announced unused number 1 to 4,
+which the bench's presence and `--observe` take by themselves while track info is read by itself.
 The query requires an analyzed track with a reported ID and an unambiguous online source. Missing artist or duration
 fields remain unknown. Network audio, remote loading and waveform downloads are not provided by this query.
 Firewall TCP rules for serving metadata are not needed for this outgoing query, though local security policies can

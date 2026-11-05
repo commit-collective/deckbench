@@ -71,7 +71,8 @@ def main(argv=None):
                     "Pro DJ Link: CDJs on 127.0.0.<number>, with a page and an API to drive them.")
     ap.add_argument("--version", action="version", version=__version__)
     ap.add_argument("--observe", action="store_true", help="announce a status observer without simulated playback decks")
-    ap.add_argument("--observer-number", type=int, default=7, help="observer identity, default 7 (metadata queries may need an unused 1 to 4)")
+    ap.add_argument("--observer-number", type=int, default=None,
+                    help="observer identity. By default a free 1 to 4 while track info is read by itself (older players answer only those), else 7")
     ap.add_argument("--decks", type=int, default=4, help="how many decks, numbered 1.. (default 4)")
     ap.add_argument("--numbers", metavar="N,N,...",
                     help="the decks' player numbers, instead of 1..DECKS")
@@ -202,13 +203,13 @@ def main(argv=None):
 
     numbers = [int(x) for x in a.numbers.split(",")] if a.numbers else list(range(1, a.decks + 1))
     if a.observe:
-        if not 1 <= a.observer_number <= 127:
+        if a.observer_number is not None and not 1 <= a.observer_number <= 127:
             ap.error("--observer-number must be 1 to 127")
         if a.on or a.init or a.mixer or a.profile or a.track:
             ap.error("--observe cannot start playback, mixer simulation, profiles or audio tracks")
-        if a.numbers and numbers != [a.observer_number]:
+        if a.numbers and numbers != [a.observer_number or 7]:
             ap.error("--observe uses --observer-number instead of --numbers")
-        numbers = [a.observer_number]
+        numbers = [a.observer_number or 7]
     if a.dj_interface:
         if a.bind or a.netmask:
             ap.error("--dj-interface cannot be combined with --bind or --netmask")
@@ -260,6 +261,7 @@ def main(argv=None):
                    addresses=addresses, broadcast=broadcast, refuse_db=a.refuse_db, strict=a.strict,
                    ports=Ports.shifted(a.port_shift), claim=a.claim, mixer_name=a.mixer or "DJM-900NXS2",
                    mixer_address=a.mixer_address, mixer_channels=a.mixer_channels, profile=a.profile, observer=a.observe,
+                   observer_auto=a.observe and a.observer_number is None,
                    target=a.target or ("DJS-" if any(spec.split(":")[0] == "djs1000-emu" for _, spec in adapters) else None))
     if a.capture:
         try:

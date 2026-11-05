@@ -41,6 +41,7 @@ import struct
 import threading
 import time
 import ipaddress
+import types
 
 from ..core import Protocol, log
 
@@ -298,10 +299,10 @@ class LinkDeck:
             self.net.monitor.feed(packet, self.address, addr[1], to=addr[0])
 
     def presence(self, s, now, last_keep):
-        """The bench's presence on a real network while all its decks are off: keep-alives as observer PRESENCE, as
-        --observe sends, since players send their status only to devices that announce. Suspended while another
-        device has the number. Returns when the last keep-alive went."""
-        number = self.net.PRESENCE
+        """The bench's presence on a real network while all its decks are off: keep-alives as an observer, as --observe
+        sends, since players send their status only to devices that announce. Its number is announced_number's.
+        Suspended while another device has it. Returns when the last keep-alive went."""
+        number = self.net.announced_number()
         conflict = any(d["online"] and d["number"] == number for d in self.net.monitor.snapshot())
         self.net.presence_changed(self, not conflict)
         if not conflict and now - last_keep >= 1.5:
@@ -320,9 +321,10 @@ class LinkDeck:
             now = time.time()
             if self.net.observer:
                 peers = self.net.monitor.snapshot()
-                conflict = any(d["online"] and d["number"] == self.number for d in peers)
+                number = self.net.announced_number() if self.net.observer_auto else self.number
+                conflict = any(d["online"] and d["number"] == number for d in peers)
                 if not conflict and now - last_keep >= 1.5:
-                    self.send(s, startup.keepalive(b"deckbench", self.number, self.address, self.mac,
+                    self.send(s, startup.keepalive(b"deckbench", number, self.address, self.mac,
                                                   self.net.peer_count() + 1), (self.broadcast, self.ports.announce))
                     last_keep = now
                 warning = "observer number conflict"
@@ -625,6 +627,7 @@ class Prolink(Protocol):
     def __init__(self, world, loaded=None, titles=None, model=None, status_length=None,
                  addresses=None, broadcast=BROADCAST, refuse_db=False, strict=False, ports=DEFAULT_PORTS,
                  claim=False, mixer_name=b"DJM-900NXS2", mixer_address=None, mixer_channels=4, profile=None, observer=False,
+                 observer_auto=False,
                  target="DJS-"):
         """world.decks must have the decks (core.Deck, by player number) already.
         loaded: {deck: (source player, slot, rekordbox id)}; titles: {source
@@ -649,6 +652,8 @@ class Prolink(Protocol):
         self.held_lock = threading.Lock()
         self.runtime = NetworkRuntime()
         self.observer = bool(observer)
+        self.observer_auto = bool(observer_auto)    # the observer's number is chosen (announced_number), not given
+        self.announced = None               # the number the presence or the auto observer announces now
         # the real players' controls and the reading of their track info, for every eligible player at once. Both on by
         # default, and control off for an observer, which is there to watch
         self.control_on, self.auto_info = not self.observer, True
@@ -865,12 +870,22 @@ class Prolink(Protocol):
 
     PRESENCE = 7                        # the number the bench announces with its decks off (LinkDeck.presence)
 
+    def announced_number(self):
+        """The number of the presence and of an observer without --observer-number. While track info is read by
+        itself, a number 1 to 4 that no device uses, kept while it stays free: older players answer metadata queries
+        only from those, as beat-link's virtual CDJ finds. Otherwise PRESENCE, outside the players' range."""
+        if not self.auto_info:
+            self.announced = self.PRESENCE
+            return self.PRESENCE
+        taken = {d["number"] for d in self.monitor.snapshot() if d["online"]}
+        if self.announced not in (1, 2, 3, 4) or self.announced in taken:
+            self.announced = next((n for n in (1, 2, 3, 4) if n not in taken), self.PRESENCE)
+        return self.announced
+
     def presence_link(self):
         """The deck that announces the bench's presence, or None: on a real network (not loopback), outside observer
         mode, while no deck is on, from the lowest-numbered one that is plugged in."""
         if self.observer or any(l.deck.enabled and not l.deck.unplugged for l in self.decks.values()):
-            return None
-        if any(l.number == self.PRESENCE for l in self.decks.values()):
             return None
         return next((l for _, l in sorted(self.decks.items()) if not l.deck.unplugged
                      and not ipaddress.ip_address(l.address).is_loopback), None)
@@ -880,12 +895,12 @@ class Prolink(Protocol):
         before = getattr(self, "presence_on", None)
         if on and before is not link:
             self.presence_on = link
-            log("announcing observer %d on %s so players send their status (no deck is on)" % (self.PRESENCE, link.address))
-            self.world.events.add("presence", number=self.PRESENCE, on=True)
+            log("announcing observer %d on %s so players send their status (no deck is on)" % (self.announced, link.address))
+            self.world.events.add("presence", number=self.announced, on=True)
         elif not on and before is link:
             self.presence_on = None
-            log("observer %d announcement stopped" % self.PRESENCE)
-            self.world.events.add("presence", number=self.PRESENCE, on=False)
+            log("observer announcement stopped")
+            self.world.events.add("presence", number=self.announced, on=False)
 
     def peer_count(self, exclude=None, exclude_mixer=False):
         """The devices that are on the network, as the decks see it: the decks that are on and plugged in, the mixer if
@@ -1107,6 +1122,13 @@ class Prolink(Protocol):
         occupied = {d["number"] for d in devices if d["online"]}
         sender = next((l for l in self.decks.values() if 1 <= l.number <= 4 and l.number not in occupied
                        and (l.deck.enabled or self.observer) and not l.deck.unplugged), None)
+        if self.observer:
+            announcer = next(iter(self.decks.values()), None) if self.observer_auto else None
+        else:
+            announcer = getattr(self, "presence_on", None)
+        if sender is None and announcer and self.announced in (1, 2, 3, 4) and self.announced not in occupied:
+            # the presence, or the observer, announced as a player 1 to 4 (announced_number)
+            sender = types.SimpleNamespace(address=announcer.address, number=self.announced, name=b"deckbench")
         if sender is None:
             return None, None, "enable an unused bench player 1 to 4, or use an observer in that range"
         return sender, peers[0], None
