@@ -649,9 +649,9 @@ class Prolink(Protocol):
         self.held_lock = threading.Lock()
         self.runtime = NetworkRuntime()
         self.observer = bool(observer)
-        # the real players' controls and the reading of their track info, for every eligible player at once. On by
-        # default, off for an observer, which is there to watch
-        self.control_on = self.auto_info = not self.observer
+        # the real players' controls and the reading of their track info, for every eligible player at once. Both on by
+        # default, and control off for an observer, which is there to watch
+        self.control_on, self.auto_info = not self.observer, True
         self.info_tried = {}                # metadata key: when the bench last read it by itself (auto_track_info)
         self.ports = ports
         self.claim = claim
