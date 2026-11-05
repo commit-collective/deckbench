@@ -7,7 +7,9 @@ Manage Deckbench rules on the computer connected to the DJ network.
 param(
     [ValidateSet('Install', 'Show', 'Remove')]
     [string]$Action = 'Show',
-    [string]$InterfaceAlias,
+    # One adapter or several ("Ethernet 2","Network Bridge"): the rule covers each. An adapter that is part of a network
+    # bridge (cdj3k-emu makes one) has no address of its own then: the bridge has it, so name both.
+    [string[]]$InterfaceAlias,
     [string]$Python,
     [switch]$IncludeMetadata
 )
@@ -53,9 +55,15 @@ if (-not $Python) {
     if ($LASTEXITCODE -ne 0) { throw 'Could not locate Python, specify -Python explicitly' }
 }
 $Python = (Resolve-Path -LiteralPath $Python).Path
-$addresses = @(Get-NetIPAddress -InterfaceAlias $InterfaceAlias -AddressFamily IPv4 |
+foreach ($alias in $InterfaceAlias) {
+    if (-not (Get-NetAdapter -Name $alias -IncludeHidden -ErrorAction SilentlyContinue)) {
+        throw "No adapter named $alias. Get-NetAdapter lists them"
+    }
+}
+$addresses = @($InterfaceAlias | ForEach-Object {
+    Get-NetIPAddress -InterfaceAlias $_ -AddressFamily IPv4 -ErrorAction SilentlyContinue } |
     Where-Object { $_.AddressState -eq 'Preferred' -and $_.IPAddress -ne '127.0.0.1' })
-if ($addresses.Count -eq 0) { throw 'The DJ adapter has no preferred IPv4 address' }
+if ($addresses.Count -eq 0) { throw 'None of the named adapters has a preferred IPv4 address' }
 $subnets = @($addresses | ForEach-Object {
     $bytes = [Net.IPAddress]::Parse($_.IPAddress).GetAddressBytes()
     $remaining = [int]$_.PrefixLength
@@ -67,8 +75,8 @@ $subnets = @($addresses | ForEach-Object {
     }
     '{0}/{1}' -f ([Net.IPAddress]::new($bytes)).ToString(), $_.PrefixLength
 } | Sort-Object -Unique)
-if ($subnets.Count -ne 1 -or $subnets[0] -eq '0.0.0.0/0') {
-    throw 'Use a DJ adapter with one IPv4 subnet'
+if ($subnets -contains '0.0.0.0/0') {
+    throw 'Use DJ adapters with a real IPv4 subnet'
 }
 $names = @($ruleNames[0])
 if ($IncludeMetadata) { $names += $ruleNames[1] }
@@ -84,9 +92,9 @@ foreach ($name in $names) {
         $protocol = 'TCP'
         $ports = @('1051', '12523')
     }
-    if ($PSCmdlet.ShouldProcess("$Python on $InterfaceAlias from $($subnets[0])", "Allow $protocol $ports")) {
+    if ($PSCmdlet.ShouldProcess("$Python on $($InterfaceAlias -join ', ') from $($subnets -join ', ')", "Allow $protocol $ports")) {
         New-NetFirewallRule -Name $name -DisplayName $name -Group 'Deckbench' `
             -Direction Inbound -Action Allow -Profile Any -InterfaceAlias $InterfaceAlias `
-            -Program $Python -Protocol $protocol -LocalPort $ports -RemoteAddress $subnets[0]
+            -Program $Python -Protocol $protocol -LocalPort $ports -RemoteAddress $subnets
     }
 }
