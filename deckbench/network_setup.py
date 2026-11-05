@@ -34,9 +34,13 @@ class NetworkSetup:
             for name, ip in phone.interfaces():
                 if ip.ip.is_loopback:
                     continue
-                row = interfaces.setdefault(name, {'name': name, 'addresses': [], 'default_route': False})
+                row = interfaces.setdefault(name, {'name': name, 'addresses': [], 'default_route': False, 'ready': True})
                 row['addresses'].append(str(ip))
                 row['default_route'] |= str(ip.ip) == route
+            for name, ip, state in phone.interfaces(waiting=True):  # listed, not usable: Windows has not made the address usable
+                if name not in interfaces:
+                    interfaces[name] = {'name': name, 'addresses': [str(ip)], 'default_route': False, 'ready': False,
+                                        'state': state}
         except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as exc:
             error = 'Could not list adapters: %s' % exc
         remembered = ''

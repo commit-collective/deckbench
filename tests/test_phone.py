@@ -34,12 +34,14 @@ class Pairing(unittest.TestCase):
 
     @mock.patch("deckbench.phone.subprocess.run")
     def test_network_info_is_read_only(self, run):
-        data = '[{"InterfaceAlias":"DJ USB","IPAddress":"169.254.1.2","PrefixLength":16}]'
+        data = ('[{"InterfaceAlias":"DJ USB","IPAddress":"169.254.1.2","PrefixLength":16,"State":"Preferred","Physical":true},'
+                '{"InterfaceAlias":"Cable out","IPAddress":"169.254.9.9","PrefixLength":16,"State":"Tentative","Physical":true}]')
         run.return_value = mock.Mock(returncode=0, stdout=data, stderr="")
         with mock.patch.object(phone.sys, "platform", "win32"), mock.patch.object(phone, "route_address", return_value=None):
             out = io.StringIO()
             self.assertEqual(phone.network_info(out), 0)
         self.assertIn("DJ USB: 169.254.1.2/16, mask 255.255.0.0", out.getvalue())
+        self.assertNotIn("Cable out", out.getvalue())          # an address Windows has not made usable is not offered
         self.assertEqual(run.call_args.args[0][0], "powershell")
 
     @mock.patch("deckbench.phone.socket.socket")
