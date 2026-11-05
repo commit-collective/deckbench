@@ -1028,6 +1028,9 @@ class Prolink(Protocol):
         for device in devices:
             key = self.metadata_key(device)
             device["metadata"] = metadata[key][1] if key in metadata else None
+            _, _, reason = self.metadata_context(device, devices)
+            device["metadata_available"] = reason is None
+            device["metadata_reason"] = reason or ""
         return {"unit": dict(self.unit) if self.unit["number"] else None, "settings": self.settings(),
                 "mixer": self.mixer.snapshot(), "devices": devices, "errors": list(self.runtime.errors)}
 
@@ -1039,21 +1042,32 @@ class Prolink(Protocol):
         status = device.get("status") or {}
         return self.control_identity(device) + tuple(status.get(k) for k in ("source", "slot", "rbid"))
 
-    def refresh_metadata(self, device):
-        from ..metadata import read_track_metadata
+    def metadata_context(self, device, devices=None):
+        """Use the same eligibility rule for the page and the actual query."""
         status = device.get("status") or {}
         if not status.get("rbid") or status.get("track_type") != 1:
-            return 400, {"error": "no loaded analyzed track reported by this player"}
-        peers = [d for d in self.monitor.snapshot() if d["online"] and d["number"] == status.get("source")]
+            return None, None, "no loaded analyzed track reported by this player"
+        if not device.get("online"):
+            return None, None, "player is offline"
+        devices = self.monitor.snapshot() if devices is None else devices
+        peers = [d for d in devices if d["online"] and d["number"] == status.get("source")]
         if len(peers) != 1:
-            return 400, {"error": "track source is missing or ambiguous"}
-        occupied = {d["number"] for d in self.monitor.snapshot() if d["online"]}
+            return None, None, "track source is missing or ambiguous"
+        occupied = {d["number"] for d in devices if d["online"]}
         sender = next((l for l in self.decks.values() if 1 <= l.number <= 4 and l.number not in occupied
                        and (l.deck.enabled or self.observer) and not l.deck.unplugged), None)
         if sender is None:
-            return 400, {"error": "metadata needs an announced unused player number 1 to 4"}
+            return None, None, "enable an unused bench player 1 to 4, or use an observer in that range"
+        return sender, peers[0], None
+
+    def refresh_metadata(self, device):
+        from ..metadata import read_track_metadata
+        sender, source, reason = self.metadata_context(device)
+        if reason:
+            return 400, {"error": reason}
+        status = device["status"]
         try:
-            metadata = read_track_metadata(peers[0]["ip"], sender.address, sender.number, status["slot"],
+            metadata = read_track_metadata(source["ip"], sender.address, sender.number, status["slot"],
                                            status["rbid"], self.ports.query)
         except (OSError, EOFError, ValueError) as error:
             return 400, {"error": "metadata query failed: %s" % error}

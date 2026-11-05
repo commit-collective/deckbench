@@ -144,6 +144,18 @@ button.num:disabled { cursor: default; opacity: .5; }
   font-size: 16px; background: transparent; color: var(--muted); border: 1px solid var(--line-2); }
 .deck.on .num { color: #0b0c0e; background: var(--on); border-color: var(--on); box-shadow: 0 0 10px -2px color-mix(in srgb, var(--on) var(--glow), transparent); }
 .deck-id { min-width: 0; flex: 1; }
+.device .identity { list-style: none; cursor: pointer; }
+.device .identity::-webkit-details-marker { display: none; }
+.device .identity:focus-visible { outline: 1px solid var(--text); outline-offset: 3px; }
+.device .identity .model, .device .identity .track { display: block; }
+/* Expanded: the text takes the header's width beside the number, the tags move under it, and the address is a line of its own */
+.device .deck-head:has(> .deck-id[open]) { flex-wrap: wrap; align-items: flex-start; }
+.device .deck-head:has(> .deck-id[open]) > .deck-id { flex: 1 1 calc(100% - 70px); }
+.device .deck-head:has(> .deck-id[open]) > .tags { flex: 1 1 100%; max-width: none; min-height: 0; align-items: flex-start; }
+.device .deck-head:has(> .deck-id[open]) .flags, .device .deck-head:has(> .deck-id[open]) .unit-slot { justify-content: flex-start; }
+.device .deck-head:has(> .deck-id[open]) .unit-slot:empty { display: none; }
+.device .deck-id[open] .model, .device .deck-id[open] .track { white-space: normal; overflow-wrap: break-word; }
+.device .deck-id[open] .model .addr { display: block; margin-left: 0; white-space: nowrap; }
 .model { font-weight: var(--fw-b); font-size: 15px; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model .addr { color: var(--muted); font: 400 11px var(--mono); margin-left: 8px; letter-spacing: 0; }
 .track { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -375,7 +375,8 @@ function buildDevice(d) {
   return h("article", {class: "deck device off", id: devId(d.ip), "aria-label": (d.model || "Device") + " on the link"},
     h("div", {class: "deck-head"},
       h("div", {class: "num", "aria-hidden": "true"}),
-      h("div", {class: "deck-id"}, h("div", {class: "model"}), h("div", {class: "track"})),
+      h("details", {class: "deck-id"}, h("summary", {class: "identity", title: "Show full player and track information"},
+        h("span", {class: "model"}), h("span", {class: "track"}))),
       h("div", {class: "tags"}, h("div", {class: "unit-slot"}), h("div", {class: "flags", "aria-label": "State"}))),
     mixer ? h("div", {class: "airs", "aria-label": "Channels on air"}) : h("div", {class: "live"},
       beatIndicators(),
@@ -425,10 +426,11 @@ function renderDevices() {
       arm.checked = !!d.transport_armed;
       arm.dataset.number = d.number;
       for (const button of control.querySelectorAll("button")) {
-        button.disabled = button.classList.contains("player-read") ? !!button.dataset.pending || !d.online || !st || !st.rbid || !S.connected :
+        button.disabled = button.classList.contains("player-read") ? !!button.dataset.pending || !d.metadata_available || !S.connected :
           !d.transport_armed || !d.online || !S.connected ||
             (["start", "stop"].includes(button.dataset.command) && d.fader_start_supported === false);
         button.dataset.number = d.number;
+        if (button.classList.contains("player-read")) button.title = d.metadata_reason || "Read the loaded track's title and artist";
         if (button.classList.contains('player-load-send')) button.disabled = button.disabled || !d.load_allowed;   // the bench's rule
       }
     }
@@ -449,6 +451,7 @@ function renderDevices() {
       track.textContent = "";
       track.append(h("b", {}, d.metadata.title), d.metadata.artist ? " \u00b7 " + d.metadata.artist : "");
     }
+    q("identity").title = [d.model, d.ip].filter(Boolean).join(" · ") + "\n" + track.textContent + "\nClick or press Enter to expand";
     /* the tags are a column at the right of the header, the height of the number's box: the unit tag at the top and the state (side by side, wrapping onto
        a row under when there are too many for the width) at the bottom. The column is always there: a flag that comes or goes does not change the card's height */
     const slot = q("unit-slot"), flags = q("flags");

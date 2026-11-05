@@ -51,6 +51,28 @@ class PlayerControl(unittest.TestCase):
         self.feed()
         self.assertIsNone(self.net.info()["devices"][0]["metadata"])
 
+    def test_metadata_availability_follows_sender_switch(self):
+        def state():
+            return self.net.info()["devices"][0]
+        self.assertFalse(state()["metadata_available"])
+        self.assertIn("enable", state()["metadata_reason"])
+        self.world.decks[3].enabled = True
+        self.assertTrue(state()["metadata_available"])
+        self.world.decks[3].enabled = False
+        self.assertFalse(state()["metadata_available"])
+        with patch("deckbench.metadata.read_track_metadata") as read:
+            self.assertEqual(self.call("metadata", "refresh")[0], 400)
+        read.assert_not_called()
+
+    def test_metadata_requires_analyzed_track_and_unambiguous_source(self):
+        self.world.decks[3].enabled = True
+        device = self.net.info()["devices"][0]
+        for changes, word in (({"track_type": 2}, "analyzed"), ({"source": 4}, "source")):
+            candidate = dict(device, status=dict(device["status"], **changes))
+            self.assertIn(word, self.net.metadata_context(candidate)[2])
+        self.world.decks[3].unplugged = True
+        self.assertFalse(self.net.info()["devices"][0]["metadata_available"])
+
     def test_unicast_targets_only_the_chosen_player(self):
         self.call("arm", "1")
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
