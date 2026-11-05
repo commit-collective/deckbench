@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Hold CUE on a CDJ-3000 from its card for as long as you hold the button, so it plays from the cue point.
+  The bench lets go by itself after 8 seconds, or when it stops.
 - Press PLAY/PAUSE and CUE on a CDJ-3000 or 3000X from its card (experimental), since it does not take fader
   start. Each player shows the start and stop its model takes. Tried on CDJ-3000 firmware in an emulator only.
 - Text on the cards can be selected and copied: the page no longer rewrites text that did not change.

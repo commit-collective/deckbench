@@ -365,6 +365,22 @@ function strips() {
   }
 }
 
+/* CUE held on real players: the bench presses it down and lets it go (api/player/IP/command/cue-down and cue-up). One down
+   and one up per hold, and an up as the page goes away. The bench also lets go by itself after a few seconds. */
+const heldCues = new Map();             // player address: its number, while CUE is held from this page
+function cueHold(d, button, down) {
+  if (down ? heldCues.has(d.ip) || button.disabled : !heldCues.has(d.ip)) return;
+  const number = down ? button.dataset.number : heldCues.get(d.ip);
+  if (down) heldCues.set(d.ip, number); else heldCues.delete(d.ip);
+  button.setAttribute("aria-pressed", String(down));
+  api("api/player/" + d.ip + "/command/cue-" + (down ? "down" : "up") + "?number=" + number).catch(() => {});
+}
+window.addEventListener("pagehide", () => {
+  if (transport.demo) return;
+  for (const [ip, number] of heldCues)
+    fetch(transport.url("api/player/" + ip + "/command/cue-up?number=" + number), {method: "POST", keepalive: true}).catch(() => {});
+});
+
 function buildPlayerLoad(d) {
   const field = (text, node) => h('label', {}, text, node);
   return h('details', {class: 'player-load'}, h('summary', {}, 'Load a linked track (experimental)'),
@@ -404,10 +420,19 @@ function buildDevice(d) {
         " Enable player control"),
       h("p", {class: "hint", "data-method": "fader"}, "Start only works at cue. Stop returns playback to cue and does nothing while paused."),
       h("p", {class: "hint", "data-method": "buttons", hidden: true},
-        "Experimental: PLAY/PAUSE and CUE are pressed as buttons, as the player's own are. PLAY/PAUSE toggles. Seen on CDJ-3000 firmware."),
+        "Experimental: PLAY/PAUSE and CUE are pressed as buttons, as the player's own are. PLAY/PAUSE toggles. CUE is held as long as you hold it. Seen on CDJ-3000 firmware."),
       h("div", {class: "player-actions"}, ...[["start", "Start cued track", "fader"], ["stop", "Stop playing track", "fader"],
         ["play-pause", "PLAY/PAUSE", "buttons"], ["cue", "CUE", "buttons"],
-        ["sync-on", "Sync on"], ["sync-off", "Sync off"], ["master", "Make master"]].map(([command, label, method]) =>
+        ["sync-on", "Sync on"], ["sync-off", "Sync off"], ["master", "Make master"]].map(([command, label, method]) => command === "cue" ?
+        /* CUE follows the finger, as the player's own: down while pressed, up when let go (the bench lets go by itself after a
+           few seconds if this page never says so) */
+        h("button", {class: "btn small", "data-command": command, "data-method": method, disabled: true, hidden: true,
+          title: "Hold to hold CUE on the player: at the cue point it plays while held",
+          onpointerdown: (e) => { e.currentTarget.setPointerCapture(e.pointerId); cueHold(d, e.currentTarget, true); },
+          onpointerup: (e) => cueHold(d, e.currentTarget, false),
+          onpointercancel: (e) => cueHold(d, e.currentTarget, false),
+          onkeydown: (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); cueHold(d, e.currentTarget, true); } },
+          onkeyup: (e) => { if (e.key === " " || e.key === "Enter") cueHold(d, e.currentTarget, false); }}, label) :
         h("button", {class: "btn small", "data-command": command, "data-method": method, disabled: true, hidden: method === "buttons", onclick: (e) => {
           api("api/player/" + d.ip + "/command/" + command + "?number=" + e.currentTarget.dataset.number)
             .then(() => toast(method === "buttons" ? "Press sent, not confirmed. Check the player." : "Command sent. Check the player's reported state.", "info"))
