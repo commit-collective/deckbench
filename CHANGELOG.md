@@ -14,8 +14,9 @@ Newest first. A release is a tagged commit.
 - A quick tap of CUE on a real player is no longer lost: the bench keeps a release that comes early and holds every
   press at least 0.1 s.
 - With every simulated deck off on a real network, the bench announces itself as an observer, so players send it their
-  status: the cards' PLAY, SYNC and MASTER lamps and the master's beat follow them without a deck switched on. It
-  announces as 7, outside the players' range.
+  status: the cards' PLAY, SYNC and MASTER lamps and the master's beat follow them without a deck switched on. While
+  it reads track info or waveforms by itself, it takes a free number 1 to 4, which older players answer, after
+  listening 5 seconds first, and so does --observe without --observer-number. Otherwise it is 7.
 - Press PLAY/PAUSE and CUE on a CDJ-2000NXS2 too (experimental), in its own packet format, tried on a physical
   NXS2. It keeps fader start as well. The XDJ-1000MK2 is sent the same format, untried.
 - A player card under control has switches like a bench deck's: PLAY/PAUSE, CUE, SYNC and MASTER, lit from what

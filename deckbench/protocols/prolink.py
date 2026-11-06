@@ -42,6 +42,7 @@ import threading
 import time
 import collections
 import ipaddress
+import types
 
 from ..core import Protocol, log
 
@@ -311,6 +312,8 @@ class LinkDeck:
         sends, since players send their status only to devices that announce. Its number is announced_number's.
         Suspended while another device has it. Returns when the last keep-alive went."""
         number = self.net.announced_number()
+        if number is None:                                          # still listening
+            return last_keep
         conflict = any(d["online"] and d["number"] == number for d in self.net.monitor.snapshot())
         self.net.presence_changed(self, not conflict)
         if not conflict and now - last_keep >= 1.5:
@@ -330,6 +333,9 @@ class LinkDeck:
             if self.net.observer:
                 peers = self.net.monitor.snapshot()
                 number = self.net.announced_number() if self.net.observer_auto else self.number
+                if number is None:                                  # still listening before it takes a number
+                    self.net.runtime.stopping.wait(0.1)
+                    continue
                 conflict = any(d["online"] and d["number"] == number for d in peers)
                 if not conflict and now - last_keep >= 1.5:
                     self.send(s, startup.keepalive(b"deckbench", number, self.address, self.mac,
@@ -662,6 +668,7 @@ class Prolink(Protocol):
         self.observer = bool(observer)
         self.observer_auto = bool(observer_auto)    # the observer's number is chosen (announced_number), not given
         self.announced = None               # the number the presence or the auto observer announces now
+        self.started = time.time()          # when its network started (start): announced_number listens first
         # the real players' controls and the reading of their track info, for every eligible player at once. Both on by
         # default, and control off for an observer, which is there to watch
         self.control_on, self.auto_info, self.auto_waves = not self.observer, bool(auto_track_info), bool(auto_waveforms)
@@ -770,6 +777,7 @@ class Prolink(Protocol):
             self.ready.clear()
             self._bound = 0
         self.check_ports()
+        self.started = time.time()
         # the listeners: each deck's UDP socket for what is sent to it and its two TCP servers, the sniffer and the fader listener
         self._expected = 2 if self.observer else 3 * len(self.decks) + 2
         for n, link in self.decks.items():
@@ -884,13 +892,25 @@ class Prolink(Protocol):
 
     PRESENCE = 7                        # the number the bench announces with its decks off (LinkDeck.presence)
 
+    LISTEN = 5.0                        # seconds the bench only listens after it starts, before it takes a number 1 to 4
+
     def announced_number(self):
-        """The number of the presence and of an observer without --observer-number: PRESENCE, outside the players'
-        range. A free number 1 to 4, which older players answer track info from, was tried: an XDJ-1000MK2 that was
-        player 1 went into emergency loop (and showed E-8306 NO FILE) at once, with a bench that announced another
-        number 1 to 4 and sent no status. As player 2 to 4 it did not, nor did a CDJ-2000NXS2 as player 1."""
-        self.announced = self.PRESENCE
-        return self.PRESENCE
+        """The number of the presence and of an observer without --observer-number, or None while it must say nothing.
+
+        While track info or waveforms are read by itself: a number 1 to 4 that no device uses, kept while it stays
+        free, since older players answer metadata queries only from those (beat-link's virtual CDJ does the same).
+        Only after LISTEN seconds of listening, as a player claims its number before it uses it: a bench that
+        announced at once took 1 before it had heard anyone, and an XDJ-1000MK2 that was player 1 dropped its track
+        (emergency loop while playing, eject while paused). Otherwise PRESENCE, outside the players' range."""
+        if not (self.auto_info or self.auto_waves):
+            self.announced = self.PRESENCE
+            return self.PRESENCE
+        if time.time() - self.started < self.LISTEN:
+            return None
+        taken = {d["number"] for d in self.monitor.snapshot() if d["online"]}
+        if self.announced not in (1, 2, 3, 4) or self.announced in taken:
+            self.announced = next((n for n in (1, 2, 3, 4) if n not in taken), self.PRESENCE)
+        return self.announced
 
     def presence_link(self):
         """The deck that announces the bench's presence, or None: on a real network (not loopback), outside observer
@@ -1134,6 +1154,13 @@ class Prolink(Protocol):
         occupied = {d["number"] for d in devices if d["online"]}
         sender = next((l for l in self.decks.values() if 1 <= l.number <= 4 and l.number not in occupied
                        and (l.deck.enabled or self.observer) and not l.deck.unplugged), None)
+        if self.observer:
+            announcer = next(iter(self.decks.values()), None) if self.observer_auto else None
+        else:
+            announcer = getattr(self, "presence_on", None)
+        if sender is None and announcer and self.announced in (1, 2, 3, 4) and self.announced not in occupied:
+            # the presence, or the observer, announced as a player 1 to 4 (announced_number)
+            sender = types.SimpleNamespace(address=announcer.address, number=self.announced, name=b"deckbench")
         if sender is None:
             return None, None, "enable an unused bench player 1 to 4, or use an observer in that range"
         return sender, peers[0], None

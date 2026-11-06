@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 """The bench announces itself on a real network while its decks are off, so players send it their status. While it
-reads track info by itself, it takes a free number 1 to 4, which older players answer metadata queries from."""
+reads track info or waveforms by itself, it takes a free number 1 to 4, which older players answer metadata queries
+from, but only after listening first: taken at once, it was a number a player had."""
 import unittest
 from unittest.mock import patch
 
@@ -22,6 +23,9 @@ class Presence(unittest.TestCase):
         for n, link in self.net.decks.items():
             link.address = "169.254.10.%d" % n
 
+    def listened(self):
+        self.net.started -= Prolink.LISTEN + 1
+
     def hear(self, name, number, ip):
         packet = startup.keepalive(name, number, ip, bytes((2, 0, 0, 0, 0, number)), 3)
         self.net.monitor.feed(packet, ip, self.net.ports.announce)
@@ -38,10 +42,33 @@ class Presence(unittest.TestCase):
         self.net.observer = True
         self.assertIsNone(self.net.presence_link())
 
-    def test_always_7_even_with_numbers_free(self):
-        # a free number 1 to 4 was tried, and an XDJ-1000MK2 went into emergency loop at once
+    def test_nothing_is_announced_before_it_has_listened(self):
+        # what put an XDJ-1000MK2 that was player 1 into emergency loop: the bench took 1 before it had heard it
+        self.real()
+        sent = []
+        link = self.net.decks[1]
+        link.send = lambda sock, packet, addr: sent.append(packet)
+        self.assertIsNone(self.net.announced_number())
+        self.assertEqual(link.presence(None, 100.0, 0.0), 0.0)
+        self.assertEqual(sent, [])
+        self.hear(b"XDJ-1000MK2", 1, "169.254.10.91")                   # heard while listening
+        self.listened()
+        link.presence(None, 200.0, 0.0)
+        self.assertEqual(sent[-1][0x24], 2)                             # never its number
+
+    def test_a_free_number_1_to_4_after_listening(self):
+        self.listened()
         self.hear(b"CDJ-2000NXS2", 1, "169.254.10.91")
-        self.net.auto_info = self.net.auto_waves = True
+        self.assertEqual(self.net.announced_number(), 2)
+        self.hear(b"CDJ-2000NXS2", 3, "169.254.10.93")
+        self.assertEqual(self.net.announced_number(), 2)                # kept while it stays free
+        self.hear(b"CDJ-2000NXS2", 2, "169.254.10.92")
+        self.assertEqual(self.net.announced_number(), 4)                # taken: the next free one
+        self.hear(b"CDJ-2000NXS2", 4, "169.254.10.94")
+        self.assertEqual(self.net.announced_number(), Prolink.PRESENCE) # none free
+
+    def test_7_at_once_while_nothing_is_read(self):
+        self.net.auto_info = self.net.auto_waves = False
         self.assertEqual(self.net.announced_number(), Prolink.PRESENCE)
 
     def test_its_keep_alives_are_the_benchs_own(self):
@@ -52,31 +79,36 @@ class Presence(unittest.TestCase):
                                   self.net.ports.announce)
         self.assertEqual([d for d in self.net.monitor.snapshot() if d["name"] == "deckbench"], [])
 
-    def test_a_device_with_its_number_suspends_it(self):
+    def test_a_device_with_its_number_moves_it(self):
         self.real()
+        self.listened()
         sent = []
         link = self.net.decks[1]
         link.send = lambda sock, packet, addr: sent.append(packet)
         link.presence(None, 100.0, 0.0)
-        self.assertEqual(sent[-1][0x24], Prolink.PRESENCE)
-        self.hear(b"CDJ-3000", Prolink.PRESENCE, "169.254.10.99")
-        self.assertEqual(link.presence(None, 200.0, 100.0), 100.0)     # nothing sent
-        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[-1][0x24], 1)
+        self.hear(b"CDJ-3000", 1, "169.254.10.99")
+        link.presence(None, 200.0, 100.0)
+        self.assertEqual(sent[-1][0x24], 2)
 
-    def test_track_info_still_needs_a_bench_player_1_to_4(self):
+    def test_track_info_is_asked_as_the_presence(self):
         self.real()
+        self.listened()
         other = World()
         other.decks[3] = Deck(other, 3, 124, "external")
         status = Prolink(other, profile="cdj-2000nxs2").decks[3].status()
         self.net.monitor.feed(status, "169.254.10.93", self.net.ports.update)
         device = next(d for d in self.net.monitor.snapshot() if d["number"] == 3)
+        self.assertIsNotNone(self.net.metadata_context(device)[2])     # no presence yet: no one to ask as
         link = self.net.decks[1]
         link.send = lambda sock, packet, addr: None
         link.presence(None, 100.0, 0.0)
-        self.assertIn("1 to 4", self.net.metadata_context(device)[2])
-        self.world.decks[1].enabled = True
-        sender = self.net.metadata_context(device)[0]
+        sender, source, reason = self.net.metadata_context(device)
+        self.assertIsNone(reason)
         self.assertEqual((sender.address, sender.number), (link.address, 1))
+        with patch("deckbench.metadata.read_track_metadata", return_value={"title": "T"}) as read:
+            self.assertEqual(self.net.refresh_metadata(device)[0], 200)
+        self.assertEqual(read.call_args.args[1:3], (link.address, 1))
 
 
 if __name__ == "__main__":
