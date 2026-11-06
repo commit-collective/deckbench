@@ -93,16 +93,22 @@ class Decoding(unittest.TestCase):
             with self.assertRaises(ValueError):
                 waveforms.decode_overview(broken)
 
-    def test_a_short_or_padded_answer_keeps_its_whole_columns_with_a_note(self):
+    def test_a_short_or_overlong_answer_keeps_its_whole_columns_with_a_note(self):
         samples = detail()
-        for data, used in ((samples[:-3], 598), (samples + b"\0\0\0", 600)):
+        for data, used in ((samples[:-3], 598), (samples + b"\0" * 8, 600)):
             notes = []
             self.assertEqual(len(waveforms.decode_detail(data, notes)), 2 * used)
             self.assertEqual(len(notes), 1)
             self.assertIn("says 600 columns", notes[0])
-        notes = []
-        waveforms.decode_detail(samples, notes)
-        self.assertEqual(notes, [])
+
+    def test_padding_to_four_bytes_is_no_mismatch(self):
+        # as an NXS2 answered: 28679 samples, its tag 57382 bytes long, the blob 57388 (two bytes over)
+        samples = envelope(b"PWV5", 2, b"\0\4" * 28679)
+        self.assertEqual(len(samples), 57386)
+        for extra in (b"", b"\0\0", b"\0\0\0"):
+            notes = []
+            self.assertEqual(len(waveforms.decode_detail(samples + extra, notes)), 2 * 28679)
+            self.assertEqual(notes, [])
         with self.assertRaises(ValueError):
             waveforms.decode_grid(grid([100, 100]))                                              # not increasing
         with self.assertRaises(ValueError):
