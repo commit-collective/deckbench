@@ -886,9 +886,9 @@ class Prolink(Protocol):
 
     def announced_number(self):
         """The number of the presence and of an observer without --observer-number: PRESENCE, outside the players'
-        range. A free number 1 to 4, which older players answer track info from, was tried: an XDJ-1000MK2 went into
-        emergency loop (and showed E-8306 NO FILE) at once, and players' SYNC stopped snapping to the master's grid,
-        with a bench that announced one and sent no status. A bench deck that is on, which sends status, does not."""
+        range. A free number 1 to 4, which older players answer track info from, was tried: an XDJ-1000MK2 that was
+        player 1 went into emergency loop (and showed E-8306 NO FILE) at once, with a bench that announced another
+        number 1 to 4 and sent no status. As player 2 to 4 it did not, nor did a CDJ-2000NXS2 as player 1."""
         self.announced = self.PRESENCE
         return self.PRESENCE
 
@@ -1160,7 +1160,6 @@ class Prolink(Protocol):
                         log("track info of %s not read: %s" % (device["ip"], error))
 
     WAVES = 8                           # waveforms kept: a few players' tracks and the ones before
-    WAVE_REFUSED = ("XDJ-1000MK2",)     # sources not asked: one went into emergency loop each time it was
 
     def wave_key(self, device):
         """(key, sender, source, None) for a player's track whose waveform can be read, or (None, None, None, why).
@@ -1171,8 +1170,6 @@ class Prolink(Protocol):
         status = device["status"]
         if status["slot"] not in (2, 3):
             return None, None, None, "waveforms are read for SD and USB tracks only"
-        if (source.get("name") or "").upper() in self.WAVE_REFUSED:
-            return None, None, None, "waveforms are not read from an %s: it went into emergency loop when asked" % source["name"]
         return (source["ip"], source["number"], source["mac"], status["slot"], status["rbid"], "rgb"), sender, source, None
 
     def read_waveforms(self):

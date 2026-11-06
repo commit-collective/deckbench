@@ -293,8 +293,8 @@ keep-alives: no status, beats or database. It stops when a deck is switched on, 
 
 Its number is 7, outside the players' range, and it is suspended while another device uses 7. A free number 1 to 4,
 which older players answer track info from, was tried and taken out: with a bench that announced one and sent no
-status, an XDJ-1000MK2 went into emergency loop (E-8306 NO FILE) at once, and the players' SYNC matched tempo without
-snapping to the master's grid. A bench deck that is switched on sends status like a player, and is the way to read
+status, an XDJ-1000MK2 that was player 1 went into emergency loop (E-8306 NO FILE) at once. As player 2 to 4 it did
+not, nor did a CDJ-2000NXS2 as player 1. A bench deck that is switched on sends status like a player, and is the way to read
 track info from older players.
 
 ## Observe without a simulated deck

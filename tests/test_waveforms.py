@@ -247,14 +247,12 @@ class Cache(unittest.TestCase):
         self.assertEqual(self.rounds(2, self.data()), [])
         self.assertEqual(self.device()["waveform"]["state"], "off")
 
-    def test_an_xdj_1000mk2_is_not_asked(self):
+    def test_an_xdj_1000mk2_is_asked_too(self):
         self.world.decks[3].enabled = True
-        self.net.auto_waves = True
         self.player.name = b"XDJ-1000MK2"
         self.net.monitor.devices.clear()
         self.feed()
-        self.assertEqual(self.rounds(2, self.data()), [])
-        self.assertIn("emergency loop", self.device()["waveform"]["reason"])
+        self.assertEqual(len(self.rounds(2, self.data())), 1)
 
 
 if __name__ == "__main__":
