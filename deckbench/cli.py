@@ -74,7 +74,7 @@ def main(argv=None):
     ap.add_argument("--no-track-info", action="store_true", help="start with Read track info by itself off")
     ap.add_argument("--no-waveforms", action="store_true", help="start with Read waveforms by itself off")
     ap.add_argument("--observer-number", type=int, default=None,
-                    help="observer identity. By default a free 1 to 4 while track info is read by itself (older players answer only those), else 7")
+                    help="observer identity, default 7 (metadata queries may need an unused 1 to 4)")
     ap.add_argument("--decks", type=int, default=4, help="how many decks, numbered 1.. (default 4)")
     ap.add_argument("--numbers", metavar="N,N,...",
                     help="the decks' player numbers, instead of 1..DECKS")

@@ -454,7 +454,7 @@ function buildDevice(d) {
     h("div", {class: "deck-head"},
       h("div", {class: "num", "aria-hidden": "true"}),
       h("details", {class: "deck-id"}, h("summary", {class: "identity", title: "Show full player and track information"},
-        h("span", {class: "model"}), h("span", {class: "track"}))),
+        h("span", {class: "model"}), h("span", {class: "track"}), h("span", {class: "track where", hidden: true}))),
       h("div", {class: "tags"}, h("div", {class: "unit-slot"}), h("div", {class: "flags", "aria-label": "State"}))),
     mixer ? h("div", {class: "airs", "aria-label": "Channels on air"}) : h("div", {class: "live"},
       beatIndicators(),
@@ -554,12 +554,18 @@ function renderDevices() {
     setText(q("num"), d.number == null ? "?" : d.number);
     fill(q("model"), d.model || d.ip, h("span", {class: "addr"}, d.ip));
     const track = q("track");
+    /* the track: its title once read, then always its state and where it is loaded from (source, slot, ID), as a
+       load asks for them */
     const ids = st && st.rbid ? " \u00b7 player " + st.source + " \u00b7 " + (SLOTS[st.slot] || "slot " + st.slot) + " \u00b7 id " + st.rbid : "";
-    if (d.metadata && d.metadata.title) fill(track, h("b", {}, d.metadata.title), d.metadata.artist ? " \u00b7 " + d.metadata.artist : "");
+    const where = q("where"), titled = !!(d.metadata && d.metadata.title && st);
+    if (titled) fill(track, h("b", {}, d.metadata.title), d.metadata.artist ? " \u00b7 " + d.metadata.artist : "");
     else if (d.kind === "mixer") fill(track, "mixer");
-    else if (st) fill(track, h("b", {}, st.state), st.rbid ? " \u00b7 player " + st.source + " \u00b7 " + (SLOTS[st.slot] || "slot " + st.slot) + " \u00b7 id " + st.rbid : "");
+    else if (st) fill(track, h("b", {}, st.state), ids);
     else fill(track, d.online ? "no status yet" : "gone quiet");
-    const tip = [d.model, d.ip].filter(Boolean).join(" · ") + "\n" + track.textContent + "\nClick or press Enter to expand";
+    if (titled) fill(where, st.state, ids); else fill(where);
+    if (where.hidden !== !titled) where.hidden = !titled;
+    const tip = [d.model, d.ip].filter(Boolean).join(" · ") + "\n" + track.textContent + (titled ? "\n" + where.textContent : "") +
+      "\nClick or press Enter to expand";
     if (q("identity").title !== tip) q("identity").title = tip;
     /* the tags are a column at the right of the header, the height of the number's box: the unit tag at the top and the state (side by side, wrapping onto
        a row under when there are too many for the width) at the bottom. The column is always there: a flag that comes or goes does not change the card's height */
@@ -578,8 +584,6 @@ function renderDevices() {
     } else {
       const bpm = st ? st.bpm : d.phase ? d.phase[2] : null;
       setText(q("lcd").firstChild, bpm != null && d.online ? bpm.toFixed(1) : "--");
-      /* the track's source, slot and ID, which a load asks for, under the title once it is read */
-      if (d.metadata && d.metadata.title && ids) facts.push(h("span", {}, ids.slice(3)));
       if (st && st.pitch) facts.push(h("span", {}, "pitch " + (st.pitch > 0 ? "+" : "") + st.pitch.toFixed(2) + " %"));
       if (d.firmware) facts.push(h("span", {}, "firmware " + d.firmware));
       if (d.precise) facts.push(h("span", {}, "position " + (d.precise.position_ms / 1000).toFixed(3) + " s"));

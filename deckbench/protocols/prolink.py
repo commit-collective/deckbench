@@ -42,7 +42,6 @@ import threading
 import time
 import collections
 import ipaddress
-import types
 
 from ..core import Protocol, log
 
@@ -886,16 +885,12 @@ class Prolink(Protocol):
     PRESENCE = 7                        # the number the bench announces with its decks off (LinkDeck.presence)
 
     def announced_number(self):
-        """The number of the presence and of an observer without --observer-number. While track info is read by
-        itself, a number 1 to 4 that no device uses, kept while it stays free: older players answer metadata queries
-        only from those, as beat-link's virtual CDJ finds. Otherwise PRESENCE, outside the players' range."""
-        if not (self.auto_info or self.auto_waves):
-            self.announced = self.PRESENCE
-            return self.PRESENCE
-        taken = {d["number"] for d in self.monitor.snapshot() if d["online"]}
-        if self.announced not in (1, 2, 3, 4) or self.announced in taken:
-            self.announced = next((n for n in (1, 2, 3, 4) if n not in taken), self.PRESENCE)
-        return self.announced
+        """The number of the presence and of an observer without --observer-number: PRESENCE, outside the players'
+        range. A free number 1 to 4, which older players answer track info from, was tried: an XDJ-1000MK2 went into
+        emergency loop (and showed E-8306 NO FILE) at once, and players' SYNC stopped snapping to the master's grid,
+        with a bench that announced one and sent no status. A bench deck that is on, which sends status, does not."""
+        self.announced = self.PRESENCE
+        return self.PRESENCE
 
     def presence_link(self):
         """The deck that announces the bench's presence, or None: on a real network (not loopback), outside observer
@@ -1139,13 +1134,6 @@ class Prolink(Protocol):
         occupied = {d["number"] for d in devices if d["online"]}
         sender = next((l for l in self.decks.values() if 1 <= l.number <= 4 and l.number not in occupied
                        and (l.deck.enabled or self.observer) and not l.deck.unplugged), None)
-        if self.observer:
-            announcer = next(iter(self.decks.values()), None) if self.observer_auto else None
-        else:
-            announcer = getattr(self, "presence_on", None)
-        if sender is None and announcer and self.announced in (1, 2, 3, 4) and self.announced not in occupied:
-            # the presence, or the observer, announced as a player 1 to 4 (announced_number)
-            sender = types.SimpleNamespace(address=announcer.address, number=self.announced, name=b"deckbench")
         if sender is None:
             return None, None, "enable an unused bench player 1 to 4, or use an observer in that range"
         return sender, peers[0], None
