@@ -36,8 +36,8 @@ Options (`python -m deckbench --help`):
 - `--no-track-info`, `--no-waveforms`: start with Read track info by itself, or Read waveforms by itself, off.
   Neither setting is kept from one run to the next, so these are how to have them off from the start.
 - `--observe`: announce an observer, with no simulated playback decks, beat packets or database servers.
-  `--observer-number N` selects its unused identity, default 7. Older players answer metadata queries only from
-  1 to 4, but an observer there sends no status, which upset an XDJ-1000MK2 (see real-network.md). This is an announced observer, not a silent packet capture
+  `--observer-number N` selects its unused identity, announced at once. Without it, the number is a free 1 to 4,
+  taken after 5 seconds of listening, while track info or waveforms are read by itself, and 7 otherwise. This is an announced observer, not a silent packet capture
 - `--on`: start them on (otherwise off, switch on from the page)
 - `--init DECK=play,sync,master,loopN`: start a deck on, playing, synced, the master, looping N beats
 - `--loaded DECK=SOURCE:SLOT:ID`, `--titles FILE`: the track a deck has loaded
