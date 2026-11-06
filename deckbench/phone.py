@@ -62,7 +62,9 @@ def dj_interface(name, count):
     if len({ip.network for ip in found}) != 1:
         raise ValueError("interface %s has multiple subnets, use --bind and --netmask explicitly" % name)
     if len({ip.ip for ip in found}) < count:
-        raise ValueError("interface %s has %d IPv4 addresses but %d decks need one each" % (name, len(found), count))
+        raise ValueError("interface %s has %d IPv4 addresses but %d decks need one each: on a real network each deck has "
+                         "its own address. Start fewer decks (--numbers 4 for one deck numbered 4, or --decks %d) or "
+                         "add addresses to the adapter" % (name, len(found), count, len(found)))
     return found[:count]
 
 
