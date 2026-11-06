@@ -554,7 +554,8 @@ function renderDevices() {
     setText(q("num"), d.number == null ? "?" : d.number);
     fill(q("model"), d.model || d.ip, h("span", {class: "addr"}, d.ip));
     const track = q("track");
-    if (d.metadata && d.metadata.title) fill(track, h("b", {}, d.metadata.title), d.metadata.artist ? " \u00b7 " + d.metadata.artist : "");
+    const ids = st && st.rbid ? " \u00b7 player " + st.source + " \u00b7 " + (SLOTS[st.slot] || "slot " + st.slot) + " \u00b7 id " + st.rbid : "";
+    if (d.metadata && d.metadata.title) fill(track, h("b", {}, d.metadata.title), d.metadata.artist ? " \u00b7 " + d.metadata.artist : "", ids);
     else if (d.kind === "mixer") fill(track, "mixer");
     else if (st) fill(track, h("b", {}, st.state), st.rbid ? " \u00b7 player " + st.source + " \u00b7 " + (SLOTS[st.slot] || "slot " + st.slot) + " \u00b7 id " + st.rbid : "");
     else fill(track, d.online ? "no status yet" : "gone quiet");
