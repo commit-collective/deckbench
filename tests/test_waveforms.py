@@ -89,9 +89,20 @@ class Decoding(unittest.TestCase):
                 waveforms.blob("overview", 0x2C04, 0x4F02, 0x4F02, bad)
         with self.assertRaises(waveforms.Unavailable):
             waveforms.blob("overview", 0x2C04, 0x4F02, 0x4000, good)
-        for broken in (data[:-6], data[:20], data.replace(b"PWV4", b"PWV6")):                   # truncated, other tag
+        for broken in (data[:20], data.replace(b"PWV4", b"PWV6")):                              # no header, other tag
             with self.assertRaises(ValueError):
                 waveforms.decode_overview(broken)
+
+    def test_a_short_or_padded_answer_keeps_its_whole_columns_with_a_note(self):
+        samples = detail()
+        for data, used in ((samples[:-3], 598), (samples + b"\0\0\0", 600)):
+            notes = []
+            self.assertEqual(len(waveforms.decode_detail(data, notes)), 2 * used)
+            self.assertEqual(len(notes), 1)
+            self.assertIn("says 600 columns", notes[0])
+        notes = []
+        waveforms.decode_detail(samples, notes)
+        self.assertEqual(notes, [])
         with self.assertRaises(ValueError):
             waveforms.decode_grid(grid([100, 100]))                                              # not increasing
         with self.assertRaises(ValueError):
@@ -164,9 +175,9 @@ class Session(unittest.TestCase):
         with self.assertRaises(waveforms.Unavailable):
             self.read(Server([(0x4F02, [("n", 0x2C04), ("n", 0), ("n", 0), ("b", b""), ("n", 0)])]))
 
-    def test_a_grid_past_the_waveform_is_refused(self):
-        with self.assertRaises(ValueError):
-            self.read(Server(good_answers(times=(50, 9000))))
+    def test_a_grid_past_a_short_detail_is_kept(self):
+        result = self.read(Server(good_answers(times=(50, 9000))))
+        self.assertEqual(len(result["grid"]), 2)
 
 
 class Cache(unittest.TestCase):
