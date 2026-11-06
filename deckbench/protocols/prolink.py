@@ -1130,7 +1130,34 @@ class Prolink(Protocol):
             if device["kind"] == "player":
                 device["waveform"] = self.wave_state(device)
         return {"unit": dict(self.unit) if self.unit["number"] else None, "settings": self.settings(),
-                "mixer": self.mixer.snapshot(), "devices": devices, "errors": list(self.runtime.errors)}
+                "mixer": self.mixer.snapshot(), "devices": devices, "errors": list(self.runtime.errors),
+                "presence": self.presence_info(devices)}
+
+    def presence_info(self, devices):
+        """How the bench is on the link when it has no deck on (the presence, or the observer), for the page: None when
+        its decks speak for it (one is on) or it is on the loopback. Else {state, number, address, why}: state is
+        "listening" (and seconds, before it takes a number 1 to 4), "on", or "silent" (another device has its number)."""
+        if self.observer:
+            link = next(iter(self.decks.values()), None)
+            fixed = not self.observer_auto
+        else:
+            link, fixed = self.presence_link(), False
+        if link is None:
+            return None
+        number = link.number if fixed else self.announced_number()
+        if number is None:
+            left = max(0.0, self.LISTEN - (time.time() - self.started))
+            return {"state": "listening", "seconds": round(left, 1), "address": link.address,
+                    "why": "listening before it takes a number 1 to 4 that no device uses"}
+        if fixed:
+            why = "the number given with --observer-number"
+        elif number in (1, 2, 3, 4):
+            why = "a free number 1 to 4, which older players answer track info and waveforms from"
+        else:
+            why = "outside the players' range: nothing is read by itself, or no number 1 to 4 is free"
+        taken = any(d["online"] and d["number"] == number for d in devices)
+        return {"state": "silent" if taken else "on", "number": number, "address": link.address,
+                "why": ("another device uses %d, so it says nothing" % number) if taken else why}
 
     @staticmethod
     def control_identity(device):
