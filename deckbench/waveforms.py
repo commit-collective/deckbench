@@ -1,16 +1,23 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 """Waveforms and beat grids of a real player's track, read from the player that hosts its media.
 
-Read-only, through the public dbserver protocol, in one bounded session (metadata.session): the RGB overview
-(PWV4), the RGB detail (PWV5) and the beat grid. Tried on a CDJ-2000NXS2 (firmware 1.84), for a track on its own
-USB and on a linked one. Other models and the three-band style of the CDJ-3000 are not asked for yet.
+Read-only, through the public dbserver protocol, in one bounded session (metadata.session): the overview, the detail
+and the beat grid. The RGB style (PWV4 and PWV5 of the track's EXT analysis) is asked first. A track that has none,
+as one analysed for older players can be, gets the original blue style instead, overview and detail each on its
+own. Both are turned into heights only, 0 to 100, which is all the bench draws. Tried on a CDJ-2000NXS2 (firmware
+1.84) for a track on its own USB and on a linked one, and answered by an XDJ-1000MK2. The three-band style of the
+CDJ-3000 is not asked for yet.
 """
 import struct
 
-OVERVIEW, DETAIL, GRID = 0x2C04, 0x2C04, 0x2204       # the requests
-EXT_REPLY, GRID_REPLY = 0x4F02, 0x4602                  # their answers
-RATE = 150                                              # detail samples a second
+EXT, EXT_REPLY = 0x2C04, 0x4F02                         # an analysis tag of the EXT file, and its answer
+PREVIEW, PREVIEW_REPLY = 0x2004, 0x4402                 # the blue overview
+BLUE_DETAIL, BLUE_DETAIL_REPLY = 0x2904, 0x4A02         # the blue detail
+GRID, GRID_REPLY = 0x2204, 0x4602
+MAIN, DATA = 1, 8                                       # menu contexts of the requests
+RATE = 150                                              # detail samples a second, in both styles
 LIMIT = 1024 * 1024                                     # bytes a blob may have (read_exact's cap too)
+BLUE_SKIP = 19                                          # bytes before the blue detail's samples, as served
 
 
 class Unavailable(ValueError):
@@ -22,13 +29,17 @@ def tag(text):
     return int.from_bytes(text.encode("ascii").ljust(4, b"\0"), "little")
 
 
+def rmst(number, menu, slot):
+    return number << 24 | menu << 16 | slot << 8 | 1
+
+
 def requests(number, slot, rbid):
-    """The three requests of a session, as (name, kind, arguments, answer)."""
-    def rmst(menu):
-        return number << 24 | menu << 16 | slot << 8 | 1
-    return [("overview", OVERVIEW, [("n", rmst(1)), ("n", rbid), ("n", tag("PWV4")), ("n", tag("EXT"))], EXT_REPLY),
-            ("detail", DETAIL, [("n", rmst(1)), ("n", rbid), ("n", tag("PWV5")), ("n", tag("EXT"))], EXT_REPLY),
-            ("grid", GRID, [("n", rmst(8)), ("n", rbid)], GRID_REPLY)]
+    """The requests of a session, as {name: (kind, arguments, answer)}: each style's overview and detail, and the grid."""
+    return {"rgb overview": (EXT, [("n", rmst(number, MAIN, slot)), ("n", rbid), ("n", tag("PWV4")), ("n", tag("EXT"))], EXT_REPLY),
+            "rgb detail": (EXT, [("n", rmst(number, MAIN, slot)), ("n", rbid), ("n", tag("PWV5")), ("n", tag("EXT"))], EXT_REPLY),
+            "blue overview": (PREVIEW, [("n", rmst(number, DATA, slot)), ("n", 1), ("n", rbid), ("n", 0)], PREVIEW_REPLY),
+            "blue detail": (BLUE_DETAIL, [("n", rmst(number, MAIN, slot)), ("n", rbid), ("n", 0)], BLUE_DETAIL_REPLY),
+            "grid": (GRID, [("n", rmst(number, DATA, slot)), ("n", rbid)], GRID_REPLY)}
 
 
 def blob(name, request, expected, kind, args):
@@ -79,6 +90,30 @@ def decode_detail(data, notes=None):
     return envelope(data, "PWV5", 2, (LIMIT - 28) // 2, notes)
 
 
+def rgb_heights(overview=None, detail=None):
+    """The heights, 0 to 100, of an RGB overview's columns (the highest of its three) or of its detail's samples."""
+    if overview is not None:
+        return bytes(round(max(overview[i + 3] & 127, overview[i + 4] & 127, overview[i + 5] & 127) * 100 / 127)
+                     for i in range(0, len(overview) - 5, 6))
+    return bytes(round((value >> 2 & 31) * 100 / 31) for (value,) in struct.iter_unpack(">H", detail))
+
+
+def blue_overview(data):
+    """The blue overview: 400 columns of two bytes, the height (0 to 31) and how white it is, then a tiny preview of
+    100 bytes. As heights, 0 to 100."""
+    if len(data) < 800:
+        raise ValueError("blue overview has %d bytes, not 900" % len(data))
+    return bytes(round((data[i] & 31) * 100 / 31) for i in range(0, 800, 2))
+
+
+def blue_detail(data):
+    """The blue detail: after BLUE_SKIP bytes, one byte a sample, RATE a second, its height in the five low bits (the
+    three high ones how white it is). As heights, 0 to 100."""
+    if len(data) <= BLUE_SKIP:
+        raise ValueError("blue detail has no samples")
+    return bytes(round((value & 31) * 100 / 31) for value in data[BLUE_SKIP:])
+
+
 def decode_grid(data):
     """The beats, from byte 20, 16 bytes each: their place in the bar (1 to 4), the tempo times 100 and the time in
     the track in milliseconds, little-endian. As [ms, bar, bpm * 100], the times only increasing."""
@@ -96,21 +131,30 @@ def decode_grid(data):
 
 def read_track_waveforms(address, source, number, slot, rbid, query_port=12523, timeout=10):
     """The overview, detail and beat grid of a track on the player at `address`, asked from `source` as player
-    `number` (1 to 4). Returns {"overview": bytes, "detail": bytes, "grid": [[ms, bar, bpm100]...]}. Raises
+    `number` (1 to 4). Returns {"overview": heights, "detail": heights (RATE a second), "grid": [[ms, bar, bpm100]...],
+    "style": {"overview": "rgb" or "blue", "detail": ...}, "notes": [...]}, heights being bytes of 0 to 100. Raises
     Unavailable, ValueError, OSError or TimeoutError."""
     from .metadata import session
+    from .protocols.prolink import message
     if slot not in (2, 3):
         raise Unavailable("waveforms are read for SD and USB tracks only")
-    found = {}
+    asked = requests(number, slot, rbid)
+    notes, found, style, txid = [], {}, {}, 0
     with session(address, source, number, query_port, timeout) as exchange:
-        for txid, (name, kind, args, answer) in enumerate(requests(number, slot, rbid), 1):
+        def ask(name):
+            nonlocal txid
+            txid += 1
+            kind, args, answer = asked[name]
             got, reply = exchange(txid, kind, args)
-            found[name] = blob(name, kind, answer, got, reply)
-        from .protocols.prolink import message
-        exchange.sock.sendall(message(len(found) + 1, 0x0100, []))     # the end of the session, as tested
-    notes = []
-    overview, detail = decode_overview(found["overview"], notes), decode_detail(found["detail"], notes)
-    grid = decode_grid(found["grid"])
+            return blob(name, kind, answer, got, reply)
+        for part, rgb, blue in (("overview", lambda d: rgb_heights(overview=decode_overview(d, notes)), blue_overview),
+                                ("detail", lambda d: rgb_heights(detail=decode_detail(d, notes)), blue_detail)):
+            try:
+                found[part], style[part] = rgb(ask("rgb " + part)), "rgb"
+            except Unavailable:                     # no colour analysis: the blue style, which every analysis has
+                found[part], style[part] = blue(ask("blue " + part)), "blue"
+        grid = decode_grid(ask("grid"))
+        exchange.sock.sendall(message(txid + 1, 0x0100, []))        # the end of the session, as tested
     if grid[-1][0] > 4 * 3600 * 1000:
         raise ValueError("beat grid is longer than four hours")
-    return {"overview": overview, "detail": detail, "grid": grid, "notes": notes}
+    return {"overview": found["overview"], "detail": found["detail"], "grid": grid, "style": style, "notes": notes}

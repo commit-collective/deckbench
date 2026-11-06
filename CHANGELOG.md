@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- A track with no colour waveform gets the original blue one, so tracks analysed for older players have a waveform
+  on their card too.
 - The status line says how the bench is on the link with its decks off: listening, the number it took, or silent
   while another device has it.
 - Read waveforms by itself is a setting apart from track info. `--no-track-info` and `--no-waveforms` start with
