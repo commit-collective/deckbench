@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Read waveforms by itself is a setting apart from track info. `--no-track-info` and `--no-waveforms` start with
+  either off. No waveform is read from an XDJ-1000MK2, which went into emergency loop when one was.
 - Real players' waveforms: the bench reads each player's track waveform and beat grid from the player that hosts it,
   and the card draws it behind the strip's beats, as a bench deck's, with the whole track under it. Retrieval was
   tried on a CDJ-2000NXS2. A database answer that leaves out an empty blob after a zero is now read correctly.

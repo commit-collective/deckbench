@@ -636,7 +636,7 @@ class Prolink(Protocol):
     def __init__(self, world, loaded=None, titles=None, model=None, status_length=None,
                  addresses=None, broadcast=BROADCAST, refuse_db=False, strict=False, ports=DEFAULT_PORTS,
                  claim=False, mixer_name=b"DJM-900NXS2", mixer_address=None, mixer_channels=4, profile=None, observer=False,
-                 observer_auto=False,
+                 observer_auto=False, auto_track_info=True, auto_waveforms=True,
                  target="DJS-"):
         """world.decks must have the decks (core.Deck, by player number) already.
         loaded: {deck: (source player, slot, rekordbox id)}; titles: {source
@@ -665,13 +665,12 @@ class Prolink(Protocol):
         self.announced = None               # the number the presence or the auto observer announces now
         # the real players' controls and the reading of their track info, for every eligible player at once. Both on by
         # default, and control off for an observer, which is there to watch
-        self.control_on, self.auto_info = not self.observer, True
+        self.control_on, self.auto_info, self.auto_waves = not self.observer, bool(auto_track_info), bool(auto_waveforms)
         self.info_tried = {}                # metadata key: when the bench last read it by itself (auto_track_info)
         # real players' waveforms (read_waveforms): by the source's identity, slot, track and style
         self.waves = collections.OrderedDict()  # key: {"data": {...}, "used": time}, the least used first
         self.wave_failed = {}               # key: (when, why) of the last read that failed, tried again after a minute
         self.wave_busy = None               # the key being read now
-        self.wave_seen = {}                 # key: when a player was first seen with it (read only after WAVE_SETTLE)
         self.wave_lock = threading.Lock()
         self.ports = ports
         self.claim = claim
@@ -890,7 +889,7 @@ class Prolink(Protocol):
         """The number of the presence and of an observer without --observer-number. While track info is read by
         itself, a number 1 to 4 that no device uses, kept while it stays free: older players answer metadata queries
         only from those, as beat-link's virtual CDJ finds. Otherwise PRESENCE, outside the players' range."""
-        if not self.auto_info:
+        if not (self.auto_info or self.auto_waves):
             self.announced = self.PRESENCE
             return self.PRESENCE
         taken = {d["number"] for d in self.monitor.snapshot() if d["online"]}
@@ -1173,8 +1172,7 @@ class Prolink(Protocol):
                         log("track info of %s not read: %s" % (device["ip"], error))
 
     WAVES = 8                           # waveforms kept: a few players' tracks and the ones before
-    WAVE_SETTLE = 5.0                   # seconds a track is loaded before its waveform is read: a player that has just
-                                        # loaded it is reading the same media itself
+    WAVE_REFUSED = ("XDJ-1000MK2",)     # sources not asked: one went into emergency loop each time it was
 
     def wave_key(self, device):
         """(key, sender, source, None) for a player's track whose waveform can be read, or (None, None, None, why).
@@ -1185,6 +1183,8 @@ class Prolink(Protocol):
         status = device["status"]
         if status["slot"] not in (2, 3):
             return None, None, None, "waveforms are read for SD and USB tracks only"
+        if (source.get("name") or "").upper() in self.WAVE_REFUSED:
+            return None, None, None, "waveforms are not read from an %s: it went into emergency loop when asked" % source["name"]
         return (source["ip"], source["number"], source["mac"], status["slot"], status["rbid"], "rgb"), sender, source, None
 
     def read_waveforms(self):
@@ -1208,10 +1208,8 @@ class Prolink(Protocol):
                     elif key[:3] not in sources or now - entry["used"] > 60:
                         del self.waves[key]
                 self.wave_failed = {k: v for k, v in self.wave_failed.items() if now - v[0] < 60}
-                self.wave_seen = {k: self.wave_seen.get(k, now) for k in wanted}
-                todo = [k for k in wanted if k not in self.waves and k not in self.wave_failed
-                        and now - self.wave_seen[k] >= self.WAVE_SETTLE]
-            if not self.auto_info or not todo:
+                todo = [k for k in wanted if k not in self.waves and k not in self.wave_failed]
+            if not self.auto_waves or not todo:
                 continue
             key = todo[0]
             sender, source = wanted[key]
@@ -1248,7 +1246,7 @@ class Prolink(Protocol):
                 return {"key": name, "state": "ready"}
             if key in self.wave_failed:
                 return {"key": name, "state": "failed", "reason": self.wave_failed[key][1]}
-        return {"key": name, "state": "reading" if self.wave_busy == key else ("waiting" if self.auto_info else "off")}
+        return {"key": name, "state": "reading" if self.wave_busy == key else ("waiting" if self.auto_waves else "off")}
 
     def waveform_asset(self, ip):
         """GET /api/player/IP/waveform: the waveform of the track the player has now, from the cache. (status, body)"""
@@ -1646,7 +1644,7 @@ class Prolink(Protocol):
         links = list(self.decks.values())
         return {"strict": any(l.strict for l in links), "refuse_db": any(l.refuse_db for l in links),
                 "claim": self.claim, "mixer": self.mixer.on, "profile": self.profile, "observer": self.observer,
-                "player_control": self.control_on, "auto_track_info": self.auto_info,
+                "player_control": self.control_on, "auto_track_info": self.auto_info, "auto_waveforms": self.auto_waves,
                 "model": links[0].name.decode() if len({l.name for l in links}) == 1 else ""}
 
     def set_option(self, name, value):
@@ -1666,15 +1664,17 @@ class Prolink(Protocol):
             self.claim = str(value) in ("1", "True")
             log("a deck that comes online %s" % ("claims its number first" if self.claim else "is there at once"))
             return True
-        if name in ("player_control", "auto_track_info") and value in ("0", "1", 0, 1, True, False):
+        if name in ("player_control", "auto_track_info", "auto_waveforms") and value in ("0", "1", 0, 1, True, False):
             on = str(value) in ("1", "True")
             if name == "player_control":
                 self.control_on = on
                 if not on:
                     self.player_controls.clear()
                     self.release_held_cues()
-            else:
+            elif name == "auto_track_info":
                 self.auto_info = on
+            else:
+                self.auto_waves = on
             log("%s %s" % (name.replace("_", " "), "on" if on else "off"))
             return True
         if name == "mixer" and value in ("0", "1", 0, 1, True, False):

@@ -71,6 +71,8 @@ def main(argv=None):
                     "Pro DJ Link: CDJs on 127.0.0.<number>, with a page and an API to drive them.")
     ap.add_argument("--version", action="version", version=__version__)
     ap.add_argument("--observe", action="store_true", help="announce a status observer without simulated playback decks")
+    ap.add_argument("--no-track-info", action="store_true", help="start with Read track info by itself off")
+    ap.add_argument("--no-waveforms", action="store_true", help="start with Read waveforms by itself off")
     ap.add_argument("--observer-number", type=int, default=None,
                     help="observer identity. By default a free 1 to 4 while track info is read by itself (older players answer only those), else 7")
     ap.add_argument("--decks", type=int, default=4, help="how many decks, numbered 1.. (default 4)")
@@ -262,6 +264,7 @@ def main(argv=None):
                    ports=Ports.shifted(a.port_shift), claim=a.claim, mixer_name=a.mixer or "DJM-900NXS2",
                    mixer_address=a.mixer_address, mixer_channels=a.mixer_channels, profile=a.profile, observer=a.observe,
                    observer_auto=a.observe and a.observer_number is None,
+                   auto_track_info=not a.no_track_info, auto_waveforms=not a.no_waveforms,
                    target=a.target or ("DJS-" if any(spec.split(":")[0] == "djs1000-emu" for _, spec in adapters) else None))
     if a.capture:
         try:
