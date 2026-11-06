@@ -11,7 +11,7 @@ import unittest
 import urllib.error
 import urllib.request
 
-from _ports import fresh
+from _ports import fresh, run_bench
 from deckbench.adapters import make
 from deckbench.adapters.djs1000_emu import Djs1000Emulator, lamp_level
 from deckbench.core import Deck, World
@@ -320,9 +320,7 @@ class Command(unittest.TestCase):
         path = os.path.join(tempfile.mkdtemp(), "s.json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump({"name": "x", "requires": ["adapter"], "steps": [{"at": 0, "do": "log", "text": "x"}]}, f)
-        out = subprocess.run([sys.executable, "-m", "deckbench", "--numbers", "2", "--http-port", "-1", "--port-shift",
-                              str(fresh().shift), "--scenario", path, "--then-exit"], capture_output=True, text=True,
-                             timeout=30, cwd=ROOT)
+        out = run_bench(["--numbers", "2", "--http-port", "-1", "--scenario", path, "--then-exit"], timeout=30, cwd=ROOT)
         self.assertEqual(out.returncode, 3, out.stdout + out.stderr)
         self.assertIn("skipped", out.stderr)
 
@@ -333,9 +331,7 @@ class Command(unittest.TestCase):
         for name, data in scenarios:
             with open(os.path.join(folder, name), "w", encoding="utf-8") as f:
                 json.dump(data, f)
-        return subprocess.run([sys.executable, "-m", "deckbench", "--numbers", "2", "--http-port", "-1", "--port-shift",
-                               str(fresh().shift), "--scenario", folder, "--then-exit"], capture_output=True, text=True,
-                              timeout=60, cwd=ROOT)
+        return run_bench(["--numbers", "2", "--http-port", "-1", "--scenario", folder, "--then-exit"], timeout=60, cwd=ROOT)
 
     def test_a_folder_is_a_suite(self):
         ok = {"name": "fine", "steps": [{"at": 0, "do": "log", "text": "x"}]}
@@ -350,6 +346,17 @@ class Command(unittest.TestCase):
         self.assertEqual(out.returncode, 1, out.stderr)
         self.assertIn("3 scenarios: 1 passed, 1 failed, 1 skipped", out.stderr)
         self.assertIn("on is False (wanted True)", out.stderr)
+
+    def test_a_run_on_a_taken_port_is_made_again_on_another_range(self):
+        from unittest import mock
+        busy = subprocess.CompletedProcess([], 2, "", "deckbench: UDP 60301 on 127.0.0.2: in use\n"
+                                           "--port-shift moves every port of the decks, for a bench beside it or for the tests.")
+        done = subprocess.CompletedProcess([], 0, "", "")
+        with mock.patch("subprocess.run", side_effect=[busy, done]) as run:
+            self.assertIs(run_bench(["--then-exit"]), done)
+        shifts = [call.args[0][call.args[0].index("--port-shift") + 1] for call in run.call_args_list]
+        self.assertEqual(len(shifts), 2)
+        self.assertNotEqual(shifts[0], shifts[1])
 
 
 if __name__ == "__main__":
