@@ -48,3 +48,17 @@ def fresh():
 
 
 Prolink.start = _start_again_on_a_taken_port
+
+
+def run_bench(args, **kwargs):
+    """A bench run as its own process (python -m deckbench args), on a range of its own. It cannot take another range
+    by itself as one in this process does, so a run that exits because a port of its range was taken (exit 2 and the
+    busy port's line: Windows hands out ports of the range to any socket that binds without one) is made again on
+    another range."""
+    import subprocess
+    import sys
+    for attempt in range(5):
+        out = subprocess.run([sys.executable, "-m", "deckbench"] + list(args) + ["--port-shift", str(fresh().shift)],
+                             capture_output=True, text=True, **kwargs)
+        if not (out.returncode == 2 and "--port-shift moves every port" in out.stderr) or attempt == 4:
+            return out
