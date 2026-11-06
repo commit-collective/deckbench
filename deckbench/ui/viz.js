@@ -275,15 +275,12 @@ const Strip = (() => {
 
   /* A real player's track, from the bench's api/player/IP/waveform: its detail as peaks (0 to 100, RATE a second), its overview
    * as heights, and its beat grid, which maps a beat of the track (counted from 0, as a player's ticks are) to its second, the
-   * beats' own times between them and the last interval past the ends. The colours the players draw are left out: the strip
-   * is drawn as a bench deck's is. */
+   * beats' own times between them and the last interval past the ends. The players' colours are not sent: the strip is drawn
+   * as a bench deck's is. */
   v.realWave = (data) => {
-    const bytes = (text) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
-    const detail = bytes(data.detail), over = bytes(data.overview);
-    const peaks = [];
-    for (let i = 0; i + 1 < detail.length; i += 2) peaks.push((((detail[i] << 8) | detail[i + 1]) >> 2 & 31) * 100 / 31);
-    const overview = [];
-    for (let i = 0; i + 5 < over.length; i += 6) overview.push(Math.max(over[i + 3] & 127, over[i + 4] & 127, over[i + 5] & 127) * 100 / 127);
+    /* the bench sends heights only, 0 to 100, a byte each, whatever the player's style (RGB or the older blue) */
+    const bytes = (text) => Array.from(atob(text), (c) => c.charCodeAt(0));
+    const peaks = bytes(data.detail), overview = bytes(data.overview);
     const times = data.grid.map((beat) => beat[0] / 1000), bars = data.grid.map((beat) => beat[1]), n = times.length;
     const step = (i) => n > 1 ? times[Math.min(Math.max(i, 0), n - 2) + 1] - times[Math.min(Math.max(i, 0), n - 2)] : 0.5;
     const beatTime = (b) => {

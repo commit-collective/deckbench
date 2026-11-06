@@ -138,15 +138,16 @@ beats on from, and for each protocol what it knows of the other side.
 
 While **Read waveforms by itself** is on, the bench reads the waveform of each player's analyzed SD or USB track
 from the player that hosts the media, which may not be the one playing it. One bounded, read-only session asks for
-the RGB overview, the RGB detail (150 values a second) and the beat grid, in the bench's own worker, as the
+the overview, the detail (150 values a second) and the beat grid, in the bench's own worker, as the
 announced player 1 to 4 it uses for track info. A few tracks are kept, by the source's identity, slot and track. One
 is dropped when its source leaves, or when no player has had it loaded for a minute. A failed read is tried again
 after a minute.
 
 Each player in the state has a small `waveform`: `key` and `state` (`ready`, `reading`, `waiting`, `failed` with a
 `reason`, `off`, or `none` with a `reason`). The data itself is only at `GET /api/player/<ip>/waveform`:
-`overview` (six bytes a column) and `detail` (a big-endian 16-bit value a sample, its height in bits 2 to 6) in
-base64, `rate` and `grid` (`[ms, bar, bpm * 100]` a beat).
+`overview` and `detail` as heights, a byte each from 0 to 100, in base64, `rate`, `style` (`rgb` or `blue` for each)
+and `grid` (`[ms, bar, bpm * 100]` a beat). The RGB style is asked first. A track with none, as one analysed for
+older players can be, gets the original blue style, the overview and the detail each on its own.
 
 The card draws the detail behind the strip's beats and the overview under it, as a bench deck's waveform. Each beat
 is mapped to the track through the grid's own times, so a track whose tempo changes stays aligned. A CDJ-3000's

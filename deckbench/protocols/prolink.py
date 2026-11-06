@@ -1224,7 +1224,7 @@ class Prolink(Protocol):
         status = device["status"]
         if status["slot"] not in (2, 3):
             return None, None, None, "waveforms are read for SD and USB tracks only"
-        return (source["ip"], source["number"], source["mac"], status["slot"], status["rbid"], "rgb"), sender, source, None
+        return (source["ip"], source["number"], source["mac"], status["slot"], status["rbid"], "waveform"), sender, source, None
 
     def read_waveforms(self):
         """Reads the waveform of each player's track by itself (auto_track_info), one at a time, outside the network
@@ -1272,7 +1272,8 @@ class Prolink(Protocol):
                 while len(self.waves) > self.WAVES:
                     self.waves.popitem(last=False)
             self.world.events.add("waveform_read", source=key[1], slot=key[3], rbid=key[4],
-                                  beats=len(data["grid"]), seconds=round(len(data["detail"]) / 2 / 150, 1))
+                                  beats=len(data["grid"]), seconds=round(len(data["detail"]) / 150, 1),
+                                  style=data["style"])
 
     def wave_state(self, device):
         """What the page is told of a player's waveform: its key and whether it is ready, being read or failed."""
@@ -1299,7 +1300,7 @@ class Prolink(Protocol):
         if not entry:
             return 404, {"error": reason or "the waveform has not been read"}
         data = entry["data"]
-        return 200, {"key": ":".join(str(part) for part in key), "rate": 150,
+        return 200, {"key": ":".join(str(part) for part in key), "rate": 150, "style": data["style"],
                      "overview": base64.b64encode(data["overview"]).decode(),
                      "detail": base64.b64encode(data["detail"]).decode(), "grid": data["grid"]}
 

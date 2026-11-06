@@ -224,9 +224,9 @@ check("nothing heard, nothing drawn", Strip.layoutDevice("c", {status: null}, 5)
   sandbox.atob = atob;
   const b64 = (bytes) => Buffer.from(bytes).toString("base64");
   const detail = [];
-  for (let i = 0; i < 1500; i++) detail.push(0, (i % 32) << 2);           // ten seconds at 150 a second
+  for (let i = 0; i < 1500; i++) detail.push(i % 101);                      // ten seconds at 150 a second, heights 0 to 100
   const over = [];
-  for (let i = 0; i < 1200; i++) over.push(0, 0, 0, 127, 10, 20);
+  for (let i = 0; i < 1200; i++) over.push(100);
   const grid = [[1000, 1, 12000], [1500, 2, 12000], [2000, 3, 12000], [3000, 4, 6000], [4000, 1, 6000]];
   const wave = Strip.realWave({key: "k", rate: 150, detail: b64(detail), overview: b64(over), grid});
   check("the detail's heights", wave.peaks.length === 1500 && Math.abs(wave.duration - 10) < 1e-9);

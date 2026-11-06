@@ -58,9 +58,9 @@ class Decoding(unittest.TestCase):
     def test_tags_are_ascii_read_backwards(self):
         self.assertEqual(waveforms.tag("PWV4"), int.from_bytes(b"PWV4", "little"))
         self.assertEqual(waveforms.tag("EXT"), int.from_bytes(b"EXT\0", "little"))
-        name, kind, args, reply = waveforms.requests(3, 3, 805)[0]
+        kind, args, reply = waveforms.requests(3, 3, 805)["rgb overview"]
         self.assertEqual((kind, reply, args[0]), (0x2C04, 0x4F02, ("n", 3 << 24 | 1 << 16 | 3 << 8 | 1)))
-        self.assertEqual(waveforms.requests(3, 2, 805)[2][2][0], ("n", 3 << 24 | 8 << 16 | 2 << 8 | 1))
+        self.assertEqual(waveforms.requests(3, 2, 805)["grid"][1][0], ("n", 3 << 24 | 8 << 16 | 2 << 8 | 1))
 
     def test_an_empty_blob_after_a_zero_is_left_out(self):
         data = answer(5, 0x4F02, [("n", 0x2C04), ("n", 0), ("n", 0), ("b", b""), ("n", 0)])
@@ -169,17 +169,36 @@ class Session(unittest.TestCase):
     def test_one_session_reads_all_three(self):
         server = Server(good_answers())
         result = self.read(server)
-        self.assertEqual((len(result["overview"]), len(result["detail"]) // 2, len(result["grid"])), (7200, 600, 4))
+        self.assertEqual((len(result["overview"]), len(result["detail"]), len(result["grid"])), (1200, 600, 4))
+        self.assertEqual(result["style"], {"overview": "rgb", "detail": "rgb"})
+        self.assertEqual(max(result["detail"]), 100)                     # heights, 0 to 100
         self.assertEqual([kind for kind, _ in server.requests], [0x2C04, 0x2C04, 0x2204])
         self.assertEqual(server.requests[1][1][2], ("n", waveforms.tag("PWV5")))
+
+    def test_a_track_without_colour_gets_the_blue_style(self):
+        none = (0x4F02, [("n", 0x2C04), ("n", 0), ("n", 0), ("b", b""), ("n", 0)])
+        preview = bytes(v for i in range(400) for v in (i % 32, 7)) + b"\0" * 100
+        blue = b"\xff" * waveforms.BLUE_SKIP + bytes(0xE0 | (i % 32) for i in range(300))     # high bits: whiteness
+        g = grid([50, 550])
+        server = Server([none, (0x4402, [("n", 0x2004), ("n", 0), ("n", len(preview)), ("b", preview)]),
+                         none, (0x4A02, [("n", 0x2904), ("n", 0), ("n", len(blue)), ("b", blue)]),
+                         (0x4602, [("n", 0x2204), ("n", 0), ("n", len(g)), ("b", g), ("n", 0)])])
+        result = self.read(server)
+        self.assertEqual(result["style"], {"overview": "blue", "detail": "blue"})
+        self.assertEqual((len(result["overview"]), len(result["detail"])), (400, 300))
+        self.assertEqual((result["overview"][31], result["detail"][31], result["detail"][32]), (100, 100, 0))
+        self.assertEqual([kind for kind, _ in server.requests], [0x2C04, 0x2004, 0x2C04, 0x2904, 0x2204])
+        self.assertEqual(server.requests[1][1], [("n", 3 << 24 | 8 << 16 | 3 << 8 | 1), ("n", 1), ("n", 805), ("n", 0)])
+        self.assertEqual(server.requests[3][1], [("n", 3 << 24 | 1 << 16 | 3 << 8 | 1), ("n", 805), ("n", 0)])
 
     def test_a_wrong_transaction_is_refused(self):
         with self.assertRaises(ValueError):
             self.read(Server(good_answers(), txids=[1, 9, 3]))
 
     def test_no_waveform_for_the_track(self):
+        none = (0x4F02, [("n", 0x2C04), ("n", 0), ("n", 0), ("b", b""), ("n", 0)])
         with self.assertRaises(waveforms.Unavailable):
-            self.read(Server([(0x4F02, [("n", 0x2C04), ("n", 0), ("n", 0), ("b", b""), ("n", 0)])]))
+            self.read(Server([none, (0x4402, [("n", 0x2004), ("n", 0), ("n", 0), ("b", b"")])]))
 
     def test_a_grid_past_a_short_detail_is_kept(self):
         result = self.read(Server(good_answers(times=(50, 9000))))
@@ -208,7 +227,8 @@ class Cache(unittest.TestCase):
         return reads
 
     def data(self):
-        return {"overview": b"\0" * 12, "detail": b"\0" * 300, "grid": [[100, 1, 12000]]}
+        return {"overview": b"\0" * 12, "detail": b"\0" * 300, "grid": [[100, 1, 12000]],
+                "style": {"overview": "rgb", "detail": "rgb"}}
 
     def device(self):
         return self.net.info()["devices"][0]
