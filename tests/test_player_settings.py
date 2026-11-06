@@ -20,6 +20,22 @@ class Settings(unittest.TestCase):
         settings = Prolink(World(), ports=fresh(), observer=True).settings()
         self.assertEqual((settings["player_control"], settings["auto_track_info"]), (False, True))
 
+    def test_track_info_and_waveforms_can_start_off(self):
+        settings = Prolink(World(), ports=fresh(), auto_track_info=False, auto_waveforms=False).settings()
+        self.assertEqual((settings["auto_track_info"], settings["auto_waveforms"]), (False, False))
+        self.assertTrue(Prolink(World(), ports=fresh()).settings()["auto_waveforms"])
+
+    @patch("deckbench.cli.idle_sleep", side_effect=KeyboardInterrupt)
+    @patch("deckbench.cli.Prolink")
+    def test_the_command_line_turns_them_off_from_the_start(self, prolink, sleep):
+        from deckbench.cli import main
+        self.assertEqual(main(["--no-track-info", "--no-waveforms", "--http-port", "-1"]), 0)
+        self.assertEqual((prolink.call_args.kwargs["auto_track_info"], prolink.call_args.kwargs["auto_waveforms"]),
+                         (False, False))
+        main(["--http-port", "-1"])
+        self.assertEqual((prolink.call_args.kwargs["auto_track_info"], prolink.call_args.kwargs["auto_waveforms"]),
+                         (True, True))
+
     def test_player_control_arms_every_eligible_player(self):
         device = lambda: self.net.info()["devices"][0]
         self.assertFalse(device()["transport_armed"])

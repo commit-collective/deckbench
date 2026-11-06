@@ -186,15 +186,7 @@ class Cache(unittest.TestCase):
 
     def setUp(self):
         controls.PlayerControl.setUp(self)
-        self.net.WAVE_SETTLE = 0                            # read at once: the wait has its own test
-
-    def test_a_track_just_loaded_is_left_to_settle(self):
-        self.world.decks[3].enabled = True
-        self.net.auto_info = True
-        self.net.WAVE_SETTLE = 5.0
-        self.assertEqual(self.rounds(2, self.data()), [])
-        with patch("deckbench.protocols.prolink.time.time", return_value=__import__("time").time() + 6):
-            self.assertEqual(len(self.rounds(1, self.data())), 1)
+        self.net.auto_waves = True
 
     def rounds(self, n, result):
         reads = []
@@ -248,11 +240,21 @@ class Cache(unittest.TestCase):
         self.assertEqual(len(self.net.waves), 0)
 
     def test_nothing_is_read_without_a_number_to_ask_as_or_with_the_setting_off(self):
-        self.net.auto_info = True
+        self.net.auto_info = self.net.auto_waves = True
         self.assertEqual(self.rounds(2, self.data()), [])          # no bench player 1 to 4 on
         self.world.decks[3].enabled = True
-        self.net.auto_info = False
+        self.net.set_option("auto_waveforms", "0")
         self.assertEqual(self.rounds(2, self.data()), [])
+        self.assertEqual(self.device()["waveform"]["state"], "off")
+
+    def test_an_xdj_1000mk2_is_not_asked(self):
+        self.world.decks[3].enabled = True
+        self.net.auto_waves = True
+        self.player.name = b"XDJ-1000MK2"
+        self.net.monitor.devices.clear()
+        self.feed()
+        self.assertEqual(self.rounds(2, self.data()), [])
+        self.assertIn("emergency loop", self.device()["waveform"]["reason"])
 
 
 if __name__ == "__main__":

@@ -555,7 +555,7 @@ function renderDevices() {
     fill(q("model"), d.model || d.ip, h("span", {class: "addr"}, d.ip));
     const track = q("track");
     const ids = st && st.rbid ? " \u00b7 player " + st.source + " \u00b7 " + (SLOTS[st.slot] || "slot " + st.slot) + " \u00b7 id " + st.rbid : "";
-    if (d.metadata && d.metadata.title) fill(track, h("b", {}, d.metadata.title), d.metadata.artist ? " \u00b7 " + d.metadata.artist : "", ids);
+    if (d.metadata && d.metadata.title) fill(track, h("b", {}, d.metadata.title), d.metadata.artist ? " \u00b7 " + d.metadata.artist : "");
     else if (d.kind === "mixer") fill(track, "mixer");
     else if (st) fill(track, h("b", {}, st.state), st.rbid ? " \u00b7 player " + st.source + " \u00b7 " + (SLOTS[st.slot] || "slot " + st.slot) + " \u00b7 id " + st.rbid : "");
     else fill(track, d.online ? "no status yet" : "gone quiet");
@@ -578,6 +578,8 @@ function renderDevices() {
     } else {
       const bpm = st ? st.bpm : d.phase ? d.phase[2] : null;
       setText(q("lcd").firstChild, bpm != null && d.online ? bpm.toFixed(1) : "--");
+      /* the track's source, slot and ID, which a load asks for, under the title once it is read */
+      if (d.metadata && d.metadata.title && ids) facts.push(h("span", {}, ids.slice(3)));
       if (st && st.pitch) facts.push(h("span", {}, "pitch " + (st.pitch > 0 ? "+" : "") + st.pitch.toFixed(2) + " %"));
       if (d.firmware) facts.push(h("span", {}, "firmware " + d.firmware));
       if (d.precise) facts.push(h("span", {}, "position " + (d.precise.position_ms / 1000).toFixed(3) + " s"));
@@ -895,7 +897,7 @@ function renderNetwork() {
 
 /* ---- settings ---- */
 
-for (const name of ["strict", "refuse_db", "claim", "player_control", "auto_track_info"]) {
+for (const name of ["strict", "refuse_db", "claim", "player_control", "auto_track_info", "auto_waveforms"]) {
   $(name).addEventListener("click", () => act("api/settings/" + name + "/" + ($(name).getAttribute("aria-checked") === "true" ? 0 : 1)));
 }
 $("profile").addEventListener("change", (e) => act("api/settings/profile/" + (e.target.value || "default")));
@@ -904,7 +906,7 @@ $("model").addEventListener("keydown", (e) => { if (e.key === "Enter") $("models
 
 function renderSettings() {
   const s = S.state, set = settingsOf(s), b = s.bench || {};
-  for (const name of ["strict", "refuse_db", "claim", "player_control", "auto_track_info"]) $(name).setAttribute("aria-checked", String(!!set[name]));
+  for (const name of ["strict", "refuse_db", "claim", "player_control", "auto_track_info", "auto_waveforms"]) $(name).setAttribute("aria-checked", String(!!set[name]));
   if (document.activeElement !== $("model")) $("model").value = set.model || "";
   const profile = $("profile"), titles = b.profiles || {};
   if (profile.options.length !== Object.keys(titles).length + 1) {

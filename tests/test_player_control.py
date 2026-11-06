@@ -19,7 +19,7 @@ class PlayerControl(unittest.TestCase):
         self.world = World()
         self.world.decks[3] = Deck(self.world, 3, 128, "bench")
         self.net = Prolink(self.world, ports=fresh())
-        self.net.control_on = self.net.auto_info = False    # these tests arm each player, as the API still can
+        self.net.control_on = self.net.auto_info = self.net.auto_waves = False    # these tests arm each player
         other = World()
         other.decks[2] = Deck(other, 2, 124, "external")
         self.player = Prolink(other, profile="cdj-2000nxs2").decks[2]

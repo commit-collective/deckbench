@@ -33,6 +33,8 @@ IPv4 addresses, not proof of a cable, firewall permission or reachable players.
 Options (`python -m deckbench --help`):
 
 - `--decks N` or `--numbers N,N,...`: the players (default 1 to 4)
+- `--no-track-info`, `--no-waveforms`: start with Read track info by itself, or Read waveforms by itself, off.
+  Neither setting is kept from one run to the next, so these are how to have them off from the start.
 - `--observe`: announce an observer, with no simulated playback decks, beat packets or database servers.
   `--observer-number N` selects its unused identity. By default it is a free number 1 to 4 while track info is
   read by itself, which older players require for metadata queries, and 7 otherwise. This is an announced observer, not a silent packet capture
@@ -134,7 +136,7 @@ beats on from, and for each protocol what it knows of the other side.
 
 ## Real players' waveforms
 
-While **Read track info by itself** is on, the bench reads the waveform of each player's analyzed SD or USB track
+While **Read waveforms by itself** is on, the bench reads the waveform of each player's analyzed SD or USB track
 from the player that hosts the media, which may not be the one playing it. One bounded, read-only session asks for
 the RGB overview, the RGB detail (150 values a second) and the beat grid, in the bench's own worker, as the
 announced player 1 to 4 it uses for track info. A few tracks are kept, by the source's identity, slot and track. One
@@ -150,8 +152,9 @@ The card draws the detail behind the strip's beats and the overview under it, as
 is mapped to the track through the grid's own times, so a track whose tempo changes stays aligned. A CDJ-3000's
 precise position places it while paused. Older players give only their beat while paused, marked as an estimate.
 Retrieval and the grid's alignment were tried on a CDJ-2000NXS2 (1.84), for a track on its own USB and on another
-NXS2's. Live tracking, loops, seeks, the XDJ-1000MK2 and the CDJ-3000 are not yet tried, nor its three-band style,
-which is not asked for.
+NXS2's. An XDJ-1000MK2 went into emergency loop each time the bench read a waveform from it, with the answer
+complete, so the bench does not ask one. Live tracking, loops, seeks and the CDJ-3000 are not yet tried on
+hardware, nor its three-band style, which is not asked for.
 
 ## Remote loading
 
