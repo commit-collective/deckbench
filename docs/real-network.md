@@ -298,6 +298,10 @@ announces nothing, as a player claims its number before using it. Announced at o
 anyone: an XDJ-1000MK2 that was player 1 dropped its track, in emergency loop (E-8306 NO FILE) while playing and
 ejected while paused. With both settings off, or no number free, it is 7, outside the players' range, at once.
 
+The status line at the top of the page says which: **listening** and the seconds left, **on the link as player 2**
+(or **number 7**), or **number 2 in use, silent** while another device has it. Its tooltip says why that number. The
+state has it as `protocols.prolink.presence`.
+
 ## Observe without a simulated deck
 
 ```sh

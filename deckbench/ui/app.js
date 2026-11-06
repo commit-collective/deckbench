@@ -142,6 +142,14 @@ function renderChips() {
     : chip("no unit heard yet", "warn"));
   const set = settingsOf(s), info = s.bench || {};
   if (set.observer) box.append(chip("observer", null));
+  /* how the bench is on the link with no deck on: what number it claimed, or that it is still listening */
+  const presence = s.protocols && s.protocols.prolink && s.protocols.prolink.presence;
+  if (presence) {
+    const tip = "The bench on the link at " + presence.address + ": " + presence.why;
+    if (presence.state === "listening") box.append(chip("listening " + Math.ceil(presence.seconds) + " s", "warn", null, tip));
+    else if (presence.state === "silent") box.append(chip("number " + presence.number + " in use, silent", "warn", null, tip));
+    else box.append(chip(presence.number <= 4 ? "player " + presence.number : "number " + presence.number, "ok", "on the link as ", tip));
+  }
   const errors = s.protocols && s.protocols.prolink && s.protocols.prolink.errors || [];
   if (errors.length) box.append(chip("network warning", "warn", null, errors.join("\n")));
   if (set.strict) box.append(chip("strict decks"));

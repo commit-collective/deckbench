@@ -67,6 +67,22 @@ class Presence(unittest.TestCase):
         self.hear(b"CDJ-2000NXS2", 4, "169.254.10.94")
         self.assertEqual(self.net.announced_number(), Prolink.PRESENCE) # none free
 
+    def test_the_page_is_told_what_number_it_has(self):
+        self.assertIsNone(self.net.info()["presence"])                  # loopback: nothing to say
+        self.real()
+        presence = self.net.info()["presence"]
+        self.assertEqual(presence["state"], "listening")
+        self.assertLessEqual(presence["seconds"], Prolink.LISTEN)
+        self.listened()
+        self.hear(b"CDJ-2000NXS2", 1, "169.254.10.91")
+        presence = self.net.info()["presence"]
+        self.assertEqual((presence["state"], presence["number"], presence["address"]), ("on", 2, "169.254.10.1"))
+        self.hear(b"CDJ-3000", 7, "169.254.10.97")
+        self.net.auto_info = self.net.auto_waves = False
+        self.assertEqual(self.net.info()["presence"]["state"], "silent")
+        self.world.decks[1].enabled = True
+        self.assertIsNone(self.net.info()["presence"])                  # a deck on speaks for the bench
+
     def test_7_at_once_while_nothing_is_read(self):
         self.net.auto_info = self.net.auto_waves = False
         self.assertEqual(self.net.announced_number(), Prolink.PRESENCE)
