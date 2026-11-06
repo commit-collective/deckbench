@@ -671,6 +671,7 @@ class Prolink(Protocol):
         self.waves = collections.OrderedDict()  # key: {"data": {...}, "used": time}, the least used first
         self.wave_failed = {}               # key: (when, why) of the last read that failed, tried again after a minute
         self.wave_busy = None               # the key being read now
+        self.wave_seen = {}                 # key: when a player was first seen with it (read only after WAVE_SETTLE)
         self.wave_lock = threading.Lock()
         self.ports = ports
         self.claim = claim
@@ -1172,6 +1173,8 @@ class Prolink(Protocol):
                         log("track info of %s not read: %s" % (device["ip"], error))
 
     WAVES = 8                           # waveforms kept: a few players' tracks and the ones before
+    WAVE_SETTLE = 5.0                   # seconds a track is loaded before its waveform is read: a player that has just
+                                        # loaded it is reading the same media itself
 
     def wave_key(self, device):
         """(key, sender, source, None) for a player's track whose waveform can be read, or (None, None, None, why).
@@ -1205,7 +1208,9 @@ class Prolink(Protocol):
                     elif key[:3] not in sources or now - entry["used"] > 60:
                         del self.waves[key]
                 self.wave_failed = {k: v for k, v in self.wave_failed.items() if now - v[0] < 60}
-                todo = [k for k in wanted if k not in self.waves and k not in self.wave_failed]
+                self.wave_seen = {k: self.wave_seen.get(k, now) for k in wanted}
+                todo = [k for k in wanted if k not in self.waves and k not in self.wave_failed
+                        and now - self.wave_seen[k] >= self.WAVE_SETTLE]
             if not self.auto_info or not todo:
                 continue
             key = todo[0]

@@ -182,8 +182,19 @@ class Session(unittest.TestCase):
 
 class Cache(unittest.TestCase):
     """The bench's side: which track, read once, by itself, dropped when its source goes or the track changes."""
-    setUp = controls.PlayerControl.setUp
     feed = controls.PlayerControl.feed
+
+    def setUp(self):
+        controls.PlayerControl.setUp(self)
+        self.net.WAVE_SETTLE = 0                            # read at once: the wait has its own test
+
+    def test_a_track_just_loaded_is_left_to_settle(self):
+        self.world.decks[3].enabled = True
+        self.net.auto_info = True
+        self.net.WAVE_SETTLE = 5.0
+        self.assertEqual(self.rounds(2, self.data()), [])
+        with patch("deckbench.protocols.prolink.time.time", return_value=__import__("time").time() + 6):
+            self.assertEqual(len(self.rounds(1, self.data())), 1)
 
     def rounds(self, n, result):
         reads = []
