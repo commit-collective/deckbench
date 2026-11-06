@@ -49,16 +49,18 @@ def blob(name, request, expected, kind, args):
 
 def envelope(data, name, width, most, notes=None):
     """The columns of a PWV4 or PWV5 answer: after a four-byte prefix, the tag and its 24-byte header (its length,
-    its total length, the bytes of a column, their count, four more bytes), then the columns. A blob that has fewer
-    or more bytes than its count says gives the whole columns it has, and a note in `notes` says so with the
-    numbers: a player was seen to answer a detail that does not match its header."""
+    its total length, the bytes of a column, their count, four more bytes), then the columns. A blob may end with up
+    to three bytes of padding: an NXS2 was seen to round a detail up to a multiple of four. A blob that has fewer
+    columns than its count says, or more than padding past them, gives the whole columns it has, and a note in
+    `notes` says so with the numbers."""
     if len(data) < 28 or data[4:8] != name.encode():
         raise ValueError("not a %s answer" % name)
     header, total, size, count = struct.unpack_from(">IIII", data, 8)
     if header != 24 or size != width or not 0 < count <= most:
         raise ValueError("%s has unexpected dimensions (header %d, column %d bytes, %d columns)" % (name, header, size, count))
     have = (len(data) - 28) // width
-    if total != 24 + width * count or have != count:
+    padded = total == 24 + width * count and 0 <= len(data) - (4 + total) <= 3
+    if not padded:
         if notes is not None:
             notes.append("%s says %d columns (tag length %d) and has %d bytes, %d columns used"
                          % (name, count, total, len(data), min(have, count)))
