@@ -378,12 +378,25 @@ function realWaveOf(d) {
 /* A real player's strip, with its waveform once the bench has read it. A precise position (a CDJ-3000's, many a second)
    places it at every frame, playing or not. Without one, the beats as they came while it plays, and its beat while it is
    paused, which is then marked as an estimate. */
+const beatSeen = {};                    // address: {beat, t}: when the page saw a player's reported beat change (bench time)
+
 function devicePlan(d, wave, now) {
   const st = d.status, moving = () => ({plan: Strip.layoutDevice(d.ip, d, now), place: null});
-  if (!wave || !st || st.track_beat == null) return moving();
-  const place = Strip.trackPlace(d, wave, now + S.offset);
+  if (!st || st.track_beat == null) return moving();
   /* without a precise position, moving while its beats come: a beat in the last two, whatever its play flag says */
   const beating = d.phase && d.phase[2] > 0 && now + S.offset - d.phase[0] < 2 * 60 / d.phase[2];
+  /* playing with no beat packets, as while CUE is held (cue playing): from the moment its reported beat changed, at its
+     tempo, so the strip runs on and does not step once a beat */
+  const seen = beatSeen[d.ip];
+  if (!seen || seen.beat !== st.track_beat - 1) beatSeen[d.ip] = {beat: st.track_beat - 1, t: now + S.offset};
+  if ((st.play || st.state === "cue playing") && !beating && !(d.precise && wave)) {
+    const {beat, t} = beatSeen[d.ip], bpm = st.bpm || st.track_bpm || 120;
+    const plan = Strip.layout({phase: [t, beat, bpm], loop: 0, loop_from: 0}, now, S.offset);
+    if (wave) for (const tick of plan.ticks) if (wave.bars[tick.at] != null) tick.beat = wave.bars[tick.at];
+    return {plan, place: null};
+  }
+  if (!wave) return moving();
+  const place = Strip.trackPlace(d, wave, now + S.offset);
   if (!place || (place.estimated && (st.play || beating))) return moving();
   const plan = Strip.layout({at: wave.beatOf(place.seconds), bpm: st.bpm || st.track_bpm || 120}, now, S.offset);
   for (const t of plan.ticks) if (wave.bars[t.at] != null) t.beat = wave.bars[t.at];
@@ -477,7 +490,7 @@ function buildDevice(d) {
         onclick: (e) => playerCommand(d, e.currentTarget, "play-pause")}, "PLAY/PAUSE"),
       /* CUE follows the finger, as the player's own: down while pressed, up when let go (the bench lets go by itself after a
          few seconds if this page never says so) */
-      h("button", {class: "sw", "data-command": "cue", "data-method": "buttons", "aria-pressed": "false",
+      h("button", {class: "sw", "data-command": "cue", "data-method": "buttons", "aria-pressed": "false", oncontextmenu: (e) => e.preventDefault(),
         onpointerdown: (e) => { e.currentTarget.setPointerCapture(e.pointerId); cueHold(d, e.currentTarget, true); },
         onpointerup: (e) => cueHold(d, e.currentTarget, false),
         onpointercancel: (e) => cueHold(d, e.currentTarget, false),
