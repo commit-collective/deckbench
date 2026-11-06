@@ -152,8 +152,7 @@ The card draws the detail behind the strip's beats and the overview under it, as
 is mapped to the track through the grid's own times, so a track whose tempo changes stays aligned. A CDJ-3000's
 precise position places it while paused. Older players give only their beat while paused, marked as an estimate.
 Retrieval and the grid's alignment were tried on a CDJ-2000NXS2 (1.84), for a track on its own USB and on another
-NXS2's. An XDJ-1000MK2 went into emergency loop each time the bench read a waveform from it, with the answer
-complete, so the bench does not ask one. Live tracking, loops, seeks and the CDJ-3000 are not yet tried on
+NXS2's, and an XDJ-1000MK2 has answered. Live tracking, loops, seeks and the CDJ-3000 are not yet tried on
 hardware, nor its three-band style, which is not asked for.
 
 ## Remote loading
