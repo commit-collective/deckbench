@@ -367,15 +367,19 @@ function realWaveOf(d) {
   return w && w.peaks ? w : null;
 }
 
-/* A real player's strip: its beats as they came, with its waveform behind them when the bench has read it. Paused, the beats
-   around its place: its precise position (a CDJ-3000's), or else its beat, which is then marked as an estimate. */
+/* A real player's strip, with its waveform once the bench has read it. A precise position (a CDJ-3000's, many a second)
+   places it at every frame, playing or not. Without one, the beats as they came while it plays, and its beat while it is
+   paused, which is then marked as an estimate. */
 function devicePlan(d, wave, now) {
-  const st = d.status;
-  if (!wave || !st || st.play || st.track_beat == null) return {plan: Strip.layoutDevice(d.ip, d, now), place: null};
+  const st = d.status, moving = () => ({plan: Strip.layoutDevice(d.ip, d, now), place: null});
+  if (!wave || !st || st.track_beat == null) return moving();
   const place = Strip.trackPlace(d, wave, now + S.offset);
-  if (!place) return {plan: Strip.layoutDevice(d.ip, d, now), place: null};
+  /* without a precise position, moving while its beats come: a beat in the last two, whatever its play flag says */
+  const beating = d.phase && d.phase[2] > 0 && now + S.offset - d.phase[0] < 2 * 60 / d.phase[2];
+  if (!place || (place.estimated && (st.play || beating))) return moving();
   const plan = Strip.layout({at: wave.beatOf(place.seconds), bpm: st.bpm || st.track_bpm || 120}, now, S.offset);
   for (const t of plan.ticks) if (wave.bars[t.at] != null) t.beat = wave.bars[t.at];
+  plan.stopped = !st.play;
   return {plan, place};
 }
 

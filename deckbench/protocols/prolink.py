@@ -1223,6 +1223,8 @@ class Prolink(Protocol):
             # kept only if its source is still the one asked: the same address, number and MAC, online
             if key[:3] not in {(d["ip"], d["number"], d["mac"]) for d in self.monitor.snapshot() if d["online"]}:
                 continue
+            for note in data.pop("notes", []):
+                log("waveform of %s on %s: %s" % (key[4], key[0], note))
             with self.wave_lock:
                 self.waves[key] = {"data": data, "used": time.time()}
                 while len(self.waves) > self.WAVES:

@@ -47,27 +47,34 @@ def blob(name, request, expected, kind, args):
     return args[3][1]
 
 
-def envelope(data, name, width, most):
-    """The columns of a PWV4 or PWV5 answer: after a four-byte prefix, the tag, its header length (24), its total
-    length, the bytes of a column and their count, all checked against the blob's size."""
+def envelope(data, name, width, most, notes=None):
+    """The columns of a PWV4 or PWV5 answer: after a four-byte prefix, the tag and its 24-byte header (its length,
+    its total length, the bytes of a column, their count, four more bytes), then the columns. A blob that has fewer
+    or more bytes than its count says gives the whole columns it has, and a note in `notes` says so with the
+    numbers: a player was seen to answer a detail that does not match its header."""
     if len(data) < 28 or data[4:8] != name.encode():
         raise ValueError("not a %s answer" % name)
     header, total, size, count = struct.unpack_from(">IIII", data, 8)
     if header != 24 or size != width or not 0 < count <= most:
-        raise ValueError("%s has unexpected dimensions" % name)
-    if total != 24 + width * count or len(data) != 4 + total:
-        raise ValueError("%s size mismatch" % name)
-    return data[28:]
+        raise ValueError("%s has unexpected dimensions (header %d, column %d bytes, %d columns)" % (name, header, size, count))
+    have = (len(data) - 28) // width
+    if total != 24 + width * count or have != count:
+        if notes is not None:
+            notes.append("%s says %d columns (tag length %d) and has %d bytes, %d columns used"
+                         % (name, count, total, len(data), min(have, count)))
+        if not min(have, count):
+            raise ValueError("%s has no columns" % name)
+    return data[28:28 + width * min(have, count)]
 
 
-def decode_overview(data):
+def decode_overview(data, notes=None):
     """1200 (or so) columns of six bytes: bytes 3 to 5 are its red, green and blue heights, 0 to 127."""
-    return envelope(data, "PWV4", 6, 4096)
+    return envelope(data, "PWV4", 6, 4096, notes)
 
 
-def decode_detail(data):
+def decode_detail(data, notes=None):
     """Packed 16-bit samples, big-endian, RATE a second: bits 13-15 red, 10-12 blue, 7-9 green, 2-6 the height."""
-    return envelope(data, "PWV5", 2, (LIMIT - 28) // 2)
+    return envelope(data, "PWV5", 2, (LIMIT - 28) // 2, notes)
 
 
 def decode_grid(data):
@@ -99,7 +106,9 @@ def read_track_waveforms(address, source, number, slot, rbid, query_port=12523, 
             found[name] = blob(name, kind, answer, got, reply)
         from .protocols.prolink import message
         exchange.sock.sendall(message(len(found) + 1, 0x0100, []))     # the end of the session, as tested
-    overview, detail, grid = decode_overview(found["overview"]), decode_detail(found["detail"]), decode_grid(found["grid"])
-    if grid[-1][0] > len(detail) // 2 * 1000 / RATE + 1000:
-        raise ValueError("beat grid runs past the waveform")
-    return {"overview": overview, "detail": detail, "grid": grid}
+    notes = []
+    overview, detail = decode_overview(found["overview"], notes), decode_detail(found["detail"], notes)
+    grid = decode_grid(found["grid"])
+    if grid[-1][0] > 4 * 3600 * 1000:
+        raise ValueError("beat grid is longer than four hours")
+    return {"overview": overview, "detail": detail, "grid": grid, "notes": notes}
