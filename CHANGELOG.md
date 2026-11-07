@@ -6,9 +6,11 @@ Newest first. A release is a tagged commit.
 
 - CUE held from the page lasts as long as the finger: the page keeps it held each second, and the bench lets go
   3 seconds after the page stops. Before, it let go after 8 seconds whatever the finger did.
-- PLAY/PAUSE pressed while CUE is held plays on once CUE is let go, as on the player (untried on hardware).
-- A real player's strip shows the track's beats and waveform before PLAY from its first seconds, where it was empty
-  on the left until the beats filled it.
+- Hold CUE and let go on PLAY/PAUSE to play on, as on the player: CUE keeps the finger or the mouse until it is let
+  go, and PLAY/PAUSE is marked as a place to let go while CUE is held (untried on hardware).
+- A real player's strip shows the track's beats and waveform before PLAY from its first seconds, also right after
+  a pause or a jump to the cue, where it was empty on the left until the beats filled it.
+- While CUE is held, the card's beat lamps and the master's follow the strip, as the player sends no beats then.
 - A stopped real player's waveform sits on the beat it waits on, not one beat before: a player at a cue reports
   the beat before it. While CUE is held, its strip runs on smoothly between the player's status updates.
 - The bench follows where an older player stops and where its CUE-button cue is: a pause is placed from the beats it

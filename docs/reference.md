@@ -214,9 +214,12 @@ held: `cue-down` connects and presses it, `cue-up` lets go and disconnects. The
 card's CUE switch does this while you hold it. `cue-up` is never refused. While
 the finger stays down the page sends `cue-hold` each second, which presses nothing.
 A CUE that nobody keeps for 3 seconds is let go by the bench (a page that went away),
-and so is one held when the bench stops or reconnects. PLAY/PAUSE pressed while CUE
-is held goes through the same connection, so the player plays on once CUE is let
-go, as with its own buttons (untried on hardware).
+and so is one held when the bench stops or reconnects. CUE keeps the finger or the
+mouse wherever it goes until it is let go. Let go on the card's PLAY/PAUSE, marked
+while CUE is held, and PLAY/PAUSE is pressed first through the same connection,
+while CUE is still down, so the player plays on, as with its own buttons (untried
+on hardware). While CUE is held the player sends no beats, so the card's beat lamps
+follow the strip's estimate.
 
 ## Package layout
 

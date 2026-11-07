@@ -203,6 +203,11 @@ button.num:disabled { cursor: default; opacity: .5; }
 :root[data-style="classic"] .sw[aria-pressed="true"] { border-color: var(--lamp); }
 .sw[data-what=cue] { --lamp: var(--master); } .sw[data-what=play] { --lamp: var(--play); }
 .sw[data-what=sync] { --lamp: var(--sync); } .sw[data-what=master] { --lamp: var(--master); }
+/* CUE keeps the finger wherever it goes (no scrolling from it), and PLAY/PAUSE shows it can be let go on */
+.player-switches .sw[data-command=cue] { touch-action: none; }
+.sw.drop-ready { border-style: dashed; border-color: var(--play); color: var(--text); }
+.sw.drop-over { border-style: solid; border-color: var(--play); color: var(--text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--play) 45%, transparent); }
 .sw:disabled { opacity: .35; cursor: default; }
 
 .row { display: flex; align-items: center; gap: 8px; min-height: 30px; }

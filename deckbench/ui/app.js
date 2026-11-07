@@ -303,16 +303,27 @@ function beatOf(d) {
   return Strip.beatOf(d, Date.now() / 1000, S.offset);
 }
 
+/* A player as the lamps take it. Held on CUE (cue playing), it sends no beats: its beat is the strip's (cueRun), in the
+   bar its status gives. */
+function lampsOf(d) {
+  const st = d.status, seen = beatSeen[d.ip];
+  if (d.phase || !d.online || !st || st.state !== "cue playing" || !st.bar || !seen || !seen.running) return d;
+  const bpm = st.bpm || st.track_bpm || 120;
+  return Object.assign({}, d, {phase: [seen.t, seen.at, bpm], bar_phase: [seen.t, st.bar - 1 + seen.at - seen.beat, bpm]});
+}
+
 function lamps() {
   if (!S.state) return;
-  const master = Strip.master(S.state), masterBeat = master ? beatOf(master) : 0;
+  const master = Strip.master(S.state) ||
+    devicesOf(S.state).map(lampsOf).find((d) => d.online && d.status && d.status.master && d.phase) || null;
+  const masterBeat = master ? beatOf(master) : 0;
   for (const row of document.querySelectorAll(".master-beats")) {
     const label = master ? "Master player " + master.number + ", beat " + masterBeat : "No master beat available";
     row.title = label;
     row.setAttribute("aria-label", label);
     row.querySelectorAll("i").forEach((square, k) => square.classList.toggle("lit", masterBeat === k + 1));
   }
-  for (const d of devicesOf(S.state)) {
+  for (const d of devicesOf(S.state).map(lampsOf)) {
     const card = $(devId(d.ip));
     if (!card || d.kind === "mixer") continue;
     const now = d.online && d.phase ? beatOf(d) : 0;
@@ -454,7 +465,7 @@ function strips() {
 const heldCues = new Map();             // player address: its number, while CUE is held from this page
 const cuePresses = new Map();           // player address: the cue-down on its way, which a cue-up waits for
 const cueKeeps = new Map();             // player address: the timer that says each second CUE is still held
-function cueHold(d, button, down) {
+function cueHold(d, button, down, play = null) {
   if (down ? heldCues.has(d.ip) || button.disabled : !heldCues.has(d.ip)) return;
   const number = down ? button.dataset.number : heldCues.get(d.ip);
   if (down) heldCues.set(d.ip, number); else heldCues.delete(d.ip);
@@ -464,9 +475,27 @@ function cueHold(d, button, down) {
     api("api/player/" + d.ip + "/command/cue-hold?number=" + number).catch(() => {}), 1000));
   button.setAttribute("aria-pressed", String(down));
   const send = () => api("api/player/" + d.ip + "/command/cue-" + (down ? "down" : "up") + "?number=" + number).catch(() => {});
-  /* a quick tap: the up goes after the down was answered, so it cannot overtake it */
+  /* a quick tap: the up goes after the down was answered, so it cannot overtake it. Let go on PLAY/PAUSE: it is pressed
+     first, while CUE is still down, as on the player, which then plays on */
+  const pressPlay = () => play && api("api/player/" + d.ip + "/command/play-pause?number=" + play.dataset.number).catch(() => {});
   if (down) cuePresses.set(d.ip, send());
-  else (cuePresses.get(d.ip) || Promise.resolve()).then(send);
+  else (cuePresses.get(d.ip) || Promise.resolve()).then(pressPlay).then(send);
+}
+
+/* CUE keeps the pointer (a finger or the mouse) until it is let go, wherever it goes. While it is held, the card's
+   PLAY/PAUSE is marked as a place to let go on, and lit when the pointer is over it */
+const playOf = (cue) => cue.closest(".player-switches").querySelector('[data-command="play-pause"]');
+function cueOver(cue, e) {
+  const play = playOf(cue), at = document.elementFromPoint(e.clientX, e.clientY);
+  const over = !!play && !play.disabled && !play.hidden && !!at && play.contains(at);
+  if (play) play.classList.toggle("drop-over", over);
+  return over ? play : null;
+}
+function cueLetGo(d, cue, e) {
+  const play = e && heldCues.has(d.ip) ? cueOver(cue, e) : null;
+  const target = playOf(cue);
+  if (target) target.classList.remove("drop-ready", "drop-over");
+  cueHold(d, cue, false, play);
 }
 window.addEventListener("pagehide", () => {
   if (transport.demo) return;
@@ -517,11 +546,18 @@ function buildDevice(d) {
       h("button", {class: "sw", "data-command": "play-pause", "data-method": "buttons", "aria-pressed": "false",
         onclick: (e) => playerCommand(d, e.currentTarget, "play-pause")}, "PLAY/PAUSE"),
       /* CUE follows the finger, as the player's own: down while pressed, up when let go (the bench lets go by itself if
-         this page stops saying it is held). PLAY/PAUSE pressed meanwhile plays on once CUE is let go, as on the player */
+         this page stops saying it is held). Let go on PLAY/PAUSE, it presses PLAY first and the player plays on */
       h("button", {class: "sw", "data-command": "cue", "data-method": "buttons", "aria-pressed": "false", oncontextmenu: (e) => e.preventDefault(),
-        onpointerdown: (e) => { e.currentTarget.setPointerCapture(e.pointerId); cueHold(d, e.currentTarget, true); },
-        onpointerup: (e) => cueHold(d, e.currentTarget, false),
-        onpointercancel: (e) => cueHold(d, e.currentTarget, false),
+        onpointerdown: (e) => {
+          const cue = e.currentTarget;
+          cue.setPointerCapture(e.pointerId);
+          cueHold(d, cue, true);
+          const play = playOf(cue);
+          if (play && heldCues.has(d.ip) && !play.disabled) play.classList.add("drop-ready");
+        },
+        onpointermove: (e) => { if (heldCues.has(d.ip)) cueOver(e.currentTarget, e); },
+        onpointerup: (e) => cueLetGo(d, e.currentTarget, e),
+        onpointercancel: (e) => cueLetGo(d, e.currentTarget, null),
         onkeydown: (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); cueHold(d, e.currentTarget, true); } },
         onkeyup: (e) => { if (e.key === " " || e.key === "Enter") cueHold(d, e.currentTarget, false); }}, "CUE"),
       h("button", {class: "sw", "data-command": "start", "data-method": "fader", "aria-pressed": "false", hidden: true,

@@ -99,6 +99,13 @@ const Strip = (() => {
       if (history.length) bounds.checked = history[history.length - 1].t;
     }
     if (!list.length) return {ticks: [], stopped: true, loop: 0, looping};
+    /* not looping, only its beats since it last started: beats from before a pause or a jump (CUE, a seek) are not the
+       past of where it plays now */
+    if (!looping) {
+      let i = list.length - 1;
+      while (i > 0 && list[i].pos === list[i - 1].pos + 1 && list[i].t - list[i - 1].t < 1.5 * 60 / list[i - 1].bpm) i--;
+      list.splice(0, i);
+    }
     const ticks = [];
     const {from, length} = bounds;
     /* before the first beat it was told of, as since PLAY: the track's beats before it, at its tempo, so the strip's past

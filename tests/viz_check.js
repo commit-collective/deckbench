@@ -83,6 +83,11 @@ const started = Strip.layoutDevice("started", {status: {loop: false, track_beat:
 check("the beats before PLAY are drawn", started.length >= 4 && started.map((t) => t.at).slice(-4).join() === "37,38,39,40"
   && near(started[started.length - 2].dt, -0.6), started.map((t) => [t.at, t.dt]));
 
+// played again soon after a jump back (CUE, then PLAY): the past is the new place's, not the beats before the jump
+for (const [t, pos] of [[300, 60], [300.5, 61], [301, 62], [302, 10]]) Strip.observe("jumped", [t + offset, pos, 120], offset);
+const jumped = Strip.layoutDevice("jumped", {status: {loop: false, track_beat: 11}}, 302.1).ticks.filter((t) => t.dt < 0);
+check("the past after a jump is the new place's", jumped.length >= 5 && jumped.every((t, i) => t.at === 10 - (jumped.length - 1 - i)), jumped.map((t) => t.at));
+
 // An eight-beat loop outlasts the visible history. Its tint must survive at every beat, including the wrap.
 const longLoop = {status: {loop: true, source: 1, slot: 3, rbid: 10}};
 for (let k = 0; k <= 24; k++) {
