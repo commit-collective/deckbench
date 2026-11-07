@@ -155,6 +155,38 @@ class Buttons(unittest.TestCase):
             self.assertEqual(self.received(receiver, 2), [transport.packet(0, 21).hex(), TESTED["disconnect"]])
         self.assertEqual(self.net.held, {})
 
+    def test_a_hold_the_page_keeps_lasts(self):
+        self.as_model(b"CDJ-3000")
+        self.call("arm", "1")
+        self.net.HOLD_LIMIT = 0.4
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
+            receiver.bind((self.ip, self.net.ports.beat))
+            receiver.settimeout(0.3)
+            self.assertEqual(self.call("command", "cue-down")[0], 202)
+            receiver.settimeout(2)
+            self.received(receiver, 2)
+            receiver.settimeout(0.3)
+            for _ in range(4):                                       # 1.2 s, three times the limit, kept each 0.3 s
+                self.assertEqual(self.call("command", "cue-hold"), (200, {"held": True}))
+                with self.assertRaises(socket.timeout):
+                    receiver.recv(2048)
+            self.assertEqual(self.call("command", "cue-up"), (200, {"released": True}))
+            self.assertEqual(self.call("command", "cue-hold"), (200, {"held": False}))  # late: presses nothing
+        self.assertEqual(self.net.held, {})
+
+    def test_play_while_cue_is_held_goes_through_the_hold(self):
+        self.as_model(b"CDJ-3000")
+        self.call("arm", "1")
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
+            receiver.bind((self.ip, self.net.ports.beat))
+            receiver.settimeout(2)
+            self.assertEqual(self.call("command", "cue-down")[0], 202)
+            self.received(receiver, 2)
+            self.assertEqual(self.call("command", "play-pause")[0], 202)
+            self.assertEqual(self.received(receiver, 2), [TESTED["play-pause down"], TESTED["play-pause up"]])
+            self.assertEqual(self.call("command", "cue-up"), (200, {"released": True}))
+            self.assertEqual(self.received(receiver, 2), [transport.packet(0, 21).hex(), TESTED["disconnect"]])
+
     def test_stopping_the_bench_lets_go(self):
         self.as_model(b"CDJ-3000")
         self.call("arm", "1")

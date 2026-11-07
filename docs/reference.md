@@ -211,9 +211,12 @@ refused with the right one named. Hot cues and loops are not implemented.
 
 CUE can also be held, as on the player, where it plays from the cue point while
 held: `cue-down` connects and presses it, `cue-up` lets go and disconnects. The
-card's CUE switch does this while you hold it. `cue-up` is never refused. A CUE
-held 8 seconds is let go by the bench (a page that went away), and so is one
-held when the bench stops or reconnects.
+card's CUE switch does this while you hold it. `cue-up` is never refused. While
+the finger stays down the page sends `cue-hold` each second, which presses nothing.
+A CUE that nobody keeps for 3 seconds is let go by the bench (a page that went away),
+and so is one held when the bench stops or reconnects. PLAY/PAUSE pressed while CUE
+is held goes through the same connection, so the player plays on once CUE is let
+go, as with its own buttons (untried on hardware).
 
 ## Package layout
 

@@ -1376,11 +1376,12 @@ class Prolink(Protocol):
             return 409, 'a recent stopped-player status is required before loading'
         return None
 
-    HOLD_LIMIT = 8.0                    # seconds: a CUE held longer is let go by the bench (a page that went away)
+    HOLD_LIMIT = 3.0                    # seconds: a CUE the page stops keeping (cue-hold) is let go (a page that went away)
 
     def hold_player_cue(self, device, down):
         """CUE held down until cue-up, as a finger holds the player's own: at the cue point it plays while held. A page
-        that never says cue-up (closed, offline) is covered by a watchdog, which lets go after HOLD_LIMIT. A cue-up
+        that never says cue-up (closed, offline) is covered by a watchdog, which lets go HOLD_LIMIT after the last
+        cue-hold the page sends while the finger stays down, so a hold lasts as long as the finger. A cue-up
         that comes while the press is still on its way is kept, and every press lasts at least transport.HOLD, so a
         quick tap is one the player sees."""
         ip = device["ip"]
@@ -1409,8 +1410,7 @@ class Prolink(Protocol):
             with self.held_lock:
                 self.held.pop(ip, None)
             return 400, {"error": "could not send the button press: %s" % error}
-        watchdog = threading.Timer(self.HOLD_LIMIT, self.release_held_cue, (ip, "the page did not let go"))
-        watchdog.daemon = True
+        watchdog = self.cue_watchdog(ip)
         with self.held_lock:
             held.update(sock=sock, send=send, watchdog=watchdog, since=time.monotonic())
             let_go = held["let_go"]
@@ -1420,6 +1420,23 @@ class Prolink(Protocol):
             return 202, {"sent": True, "confirmed": False, "held": False}
         watchdog.start()
         return 202, {"sent": True, "confirmed": False, "held": True, "limit": self.HOLD_LIMIT}
+
+    def cue_watchdog(self, ip):
+        watchdog = threading.Timer(self.HOLD_LIMIT, self.release_held_cue, (ip, "the page stopped keeping it held"))
+        watchdog.daemon = True
+        return watchdog
+
+    def keep_held_cue(self, ip):
+        """The page still holds CUE (cue-hold): the watchdog starts again. Never presses anything: a keep that arrives
+        after the cue-up finds nothing held."""
+        with self.held_lock:
+            held = self.held.get(ip)
+            if not held or held["sock"] is None:
+                return 200, {"held": bool(held)}
+            held["watchdog"].cancel()
+            held["watchdog"] = self.cue_watchdog(ip)
+            held["watchdog"].start()
+        return 200, {"held": True}
 
     def release_held_cue(self, ip, why=None):
         """Let go of a held CUE (cue-up, the watchdog, the bench stopping). True if one was held or on its way."""
@@ -1454,7 +1471,7 @@ class Prolink(Protocol):
         """One press of PLAY/PAUSE or CUE on a player that takes them (experimental, see protocols/transport.py),
         sent from an address of the bench's own and its UDP 50001, as tested, in the player's format."""
         if device["ip"] in self.held:
-            return 409, {"error": "CUE is held on this player: let it go first"}
+            return self.press_while_cue_held(device, button)
         online = [d for d in self.monitor.snapshot() if d["online"]]
         if any(d["number"] == transport.CONTROLLER for d in online):
             return 409, {"error": "a device on the link already uses controller number %d" % transport.CONTROLLER}
@@ -1470,6 +1487,25 @@ class Prolink(Protocol):
         except OSError as error:
             return 400, {"error": "could not send the button press: %s" % error}
         self.world.events.add("player_button", deck=device["number"], ip=device["ip"], button=button)
+        return 202, {"sent": True, "confirmed": False}
+
+    def press_while_cue_held(self, device, button):
+        """PLAY/PAUSE pressed while CUE is held, as on the player: it plays on once CUE is let go. Sent through the held
+        connection, so the player sees both buttons from one controller."""
+        if button != "play-pause":
+            return 409, {"error": "CUE is held on this player: let it go first"}
+        with self.held_lock:
+            held = self.held.get(device["ip"])
+            send, slot = (held["send"], held["slot"]) if held else (None, None)
+        if send is None:
+            return 409, {"error": "CUE is still being pressed: try again"}
+        try:
+            send(transport.packet(0, transport.BUTTONS[button], True, slot))
+            self.runtime.stopping.wait(transport.HOLD)
+            send(transport.packet(0, transport.BUTTONS[button], False, slot))
+        except OSError as error:
+            return 400, {"error": "could not send the button press: %s" % error}
+        self.world.events.add("player_button", deck=device["number"], ip=device["ip"], button=button, cue_held=True)
         return 202, {"sent": True, "confirmed": False}
 
     def load_player_track(self, device, track, query):
@@ -1533,10 +1569,14 @@ class Prolink(Protocol):
                 return 403, {'error': 'switch Player control on in Settings first'}
             return self.load_player_track(device, parts[3], query)
         command = parts[3]
-        if command not in ("start", "stop", "play-pause", "cue", "cue-down", "cue-up", "sync-on", "sync-off", "master"):
-            return 400, {"error": "a command is start, stop, play-pause, cue, cue-down, cue-up, sync-on, sync-off or master"}
+        if command not in ("start", "stop", "play-pause", "cue", "cue-down", "cue-hold", "cue-up", "sync-on", "sync-off",
+                           "master"):
+            return 400, {"error": "a command is start, stop, play-pause, cue, cue-down, cue-hold, cue-up, sync-on, "
+                                  "sync-off or master"}
         if command == "cue-up":                 # always allowed: letting go must never be refused
             return self.hold_player_cue(device, False)
+        if command == "cue-hold":               # only keeps a hold going, never presses
+            return self.keep_held_cue(device["ip"])
         if command in ("start", "stop") and not device["fader_start_supported"]:
             return 400, {"error": "this player does not support fader start" +
                          (", use play-pause and cue" if device["transport_method"] == "buttons" else "")}

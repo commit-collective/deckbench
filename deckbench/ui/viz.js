@@ -101,6 +101,14 @@ const Strip = (() => {
     if (!list.length) return {ticks: [], stopped: true, loop: 0, looping};
     const ticks = [];
     const {from, length} = bounds;
+    /* before the first beat it was told of, as since PLAY: the track's beats before it, at its tempo, so the strip's past
+       is not empty for its first seconds */
+    const first = list[0];
+    if (status && status.track_beat != null && !looping) {
+      const r = first.bpm / 60;
+      for (let n = Math.ceil((first.t - (now - BEHIND - 1)) * r); n >= 1; n--)
+        ticks.push({dt: first.t - n / r - now, at: first.pos - n, beat: ((first.bar - 1 - n) % 4 + 4) % 4 + 1, inLoop: false, wrap: false});
+    }
     const loopPlace = (pos) => looping && from != null && length > 0 && pos >= from + length
       ? from + ((pos - from) % length) : pos;
     list.forEach((e) => {

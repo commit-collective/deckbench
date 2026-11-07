@@ -77,6 +77,12 @@ const future = plan.ticks.filter((t) => t.dt > 0.01).map((t) => t.at);
 check("and it goes on going back, as it has", future.slice(0, 6).join() === "18,19,16,17,18,19", future.slice(0, 6));
 check("the future is on its tempo", near(plan.ticks.filter((t) => t.dt > 0.01)[0].dt, 102.5 + 0.5 - nowDev + 0 - 0, 0.6));
 
+// just started: the track's beats before the first one told of, so the past is not empty
+Strip.observe("started", [200 + offset, 40, 120], offset);
+const started = Strip.layoutDevice("started", {status: {loop: false, track_beat: 41}}, 200.1).ticks.filter((t) => t.dt < 0);
+check("the beats before PLAY are drawn", started.length >= 4 && started.map((t) => t.at).slice(-4).join() === "37,38,39,40"
+  && near(started[started.length - 2].dt, -0.6), started.map((t) => [t.at, t.dt]));
+
 // An eight-beat loop outlasts the visible history. Its tint must survive at every beat, including the wrap.
 const longLoop = {status: {loop: true, source: 1, slot: 3, rbid: 10}};
 for (let k = 0; k <= 24; k++) {

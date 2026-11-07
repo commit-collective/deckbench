@@ -449,13 +449,19 @@ function strips() {
 }
 
 /* CUE held on real players: the bench presses it down and lets it go (api/player/IP/command/cue-down and cue-up). One down
-   and one up per hold, and an up as the page goes away. The bench also lets go by itself after a few seconds. */
+   and one up per hold, and an up as the page goes away. While the finger stays down the page says so each second
+   (cue-hold): the bench lets go by itself a few seconds after the last, so a page that went away leaves nothing held. */
 const heldCues = new Map();             // player address: its number, while CUE is held from this page
 const cuePresses = new Map();           // player address: the cue-down on its way, which a cue-up waits for
+const cueKeeps = new Map();             // player address: the timer that says each second CUE is still held
 function cueHold(d, button, down) {
   if (down ? heldCues.has(d.ip) || button.disabled : !heldCues.has(d.ip)) return;
   const number = down ? button.dataset.number : heldCues.get(d.ip);
   if (down) heldCues.set(d.ip, number); else heldCues.delete(d.ip);
+  clearInterval(cueKeeps.get(d.ip));
+  cueKeeps.delete(d.ip);
+  if (down) cueKeeps.set(d.ip, setInterval(() =>
+    api("api/player/" + d.ip + "/command/cue-hold?number=" + number).catch(() => {}), 1000));
   button.setAttribute("aria-pressed", String(down));
   const send = () => api("api/player/" + d.ip + "/command/cue-" + (down ? "down" : "up") + "?number=" + number).catch(() => {});
   /* a quick tap: the up goes after the down was answered, so it cannot overtake it */
@@ -510,8 +516,8 @@ function buildDevice(d) {
     mixer ? null : h("div", {class: "switches player-switches", role: "group", "aria-label": "Player switches", hidden: true},
       h("button", {class: "sw", "data-command": "play-pause", "data-method": "buttons", "aria-pressed": "false",
         onclick: (e) => playerCommand(d, e.currentTarget, "play-pause")}, "PLAY/PAUSE"),
-      /* CUE follows the finger, as the player's own: down while pressed, up when let go (the bench lets go by itself after a
-         few seconds if this page never says so) */
+      /* CUE follows the finger, as the player's own: down while pressed, up when let go (the bench lets go by itself if
+         this page stops saying it is held). PLAY/PAUSE pressed meanwhile plays on once CUE is let go, as on the player */
       h("button", {class: "sw", "data-command": "cue", "data-method": "buttons", "aria-pressed": "false", oncontextmenu: (e) => e.preventDefault(),
         onpointerdown: (e) => { e.currentTarget.setPointerCapture(e.pointerId); cueHold(d, e.currentTarget, true); },
         onpointerup: (e) => cueHold(d, e.currentTarget, false),
