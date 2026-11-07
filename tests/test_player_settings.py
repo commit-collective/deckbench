@@ -63,5 +63,19 @@ class Settings(unittest.TestCase):
         self.assertEqual(self.net.info()["devices"][0]["metadata"]["title"], "T")
 
 
+class TrackInfoKept(unittest.TestCase):
+    def test_a_loaded_tracks_info_stays_and_another_goes(self):
+        net = Prolink(World(), ports=fresh())
+        player = {"ip": "10.0.0.2", "number": 2, "name": "CDJ-2000NXS2", "mac": "00:00:00:00:00:02", "kind": "player",
+                  "online": True, "status": {"source": 2, "slot": 3, "rbid": 41}}
+        gone = dict(player, status={"source": 2, "slot": 3, "rbid": 40})
+        net.track_metadata = {net.metadata_key(player): (0.0, {"title": "Loaded"}),
+                              net.metadata_key(gone): (0.0, {"title": "Unloaded"})}   # both read long ago
+        with patch.object(net, "control_devices", return_value=[player]):
+            info = net.info()
+        self.assertEqual(info["devices"][0]["metadata"], {"title": "Loaded"})
+        self.assertEqual(list(net.track_metadata), [net.metadata_key(player)])
+
+
 if __name__ == "__main__":
     unittest.main()

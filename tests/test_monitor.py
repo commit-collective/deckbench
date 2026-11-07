@@ -86,6 +86,27 @@ class PhaseParsing(unittest.TestCase):
             self.assertEqual(device["phase"][1], bar - 1.0)
 
 
+    def test_a_player_held_on_cue_keeps_its_beats(self):
+        """Held on CUE it reports cue playing with its play flag off, and still sends its beats: they stay shown."""
+        world = world_of(5)
+        net = Prolink(world)
+        monitor = net.monitor
+        link = net.decks[5]
+        world.decks[5].playing = True
+        device = monitor.device("127.0.0.9", 100.0, False)
+        for tick in range(3):
+            now = 100.0 + tick * 0.5
+            monitor.beat(device, link.beat(float(tick)), now)
+            status = bytearray(link.status())
+            status[0x7B] = 7                                         # cue playing
+            status[0x89] &= ~0x40                                    # play flag off
+            monitor.status(device, status, now + 0.1)
+        found = next(d for d in monitor.snapshot(now + 0.2) if d["ip"] == "127.0.0.9")
+        self.assertEqual(found["status"]["state"], "cue playing")
+        self.assertFalse(found["status"]["play"])
+        self.assertIsNotNone(found["phase"])
+
+
 class Heard(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

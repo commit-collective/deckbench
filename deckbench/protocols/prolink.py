@@ -1118,8 +1118,11 @@ class Prolink(Protocol):
     def info(self):
         devices = self.control_devices()
         now = time.time()
+        # a loaded track's info stays while it is loaded, so its title does not go and come back as it is read again
+        loaded = {self.metadata_key(device) for device in devices}
         with self._metadata_lock:
-            self.track_metadata = {key: value for key, value in self.track_metadata.items() if now - value[0] < 60}
+            self.track_metadata = {key: (now, value[1]) if key in loaded else value
+                                   for key, value in self.track_metadata.items() if key in loaded or now - value[0] < 60}
             metadata = dict(self.track_metadata)
         for device in devices:
             key = self.metadata_key(device)
@@ -1194,7 +1197,7 @@ class Prolink(Protocol):
 
     def read_track_info(self):
         """Reads each player's track info by itself when its track changes (auto_track_info), as Read track info
-        does. One that failed is tried again after 30 seconds, and one that worked when it leaves the cache."""
+        does. One that failed is tried again after 30 seconds. One that worked stays while its track is loaded."""
         while not self.runtime.stopping.wait(1.0):
             if not self.auto_info:
                 continue

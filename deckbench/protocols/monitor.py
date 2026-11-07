@@ -415,14 +415,16 @@ class Monitor:
                 if profile["model"].upper() == d["name"].upper():
                     model = profile["title"]
             st = d["status"] if d["status"] and now - d["status"]["seen"] < 8 else None
+            # held on CUE (cue playing) it sends its beats with its play flag off: it moves all the same
+            moving = bool(st and (st["play"] or st["state"] in MOVING))
             live_phase = (d["phase"] and now - d["phase_seen"] < 2.0
-                          and (st is None or st["play"] or d.get("beat_since_status", False)))
+                          and (st is None or moving or d.get("beat_since_status", False)))
             item = {"ip": d["ip"], "name": d["name"], "model": model, "number": d["number"], "kind": d["kind"] or "device", "unit": d["unit"],
                     "online": now - d["seen"] < 8, "mac": d["mac"], "peers": d["peers"], "firmware": d["firmware"],
                     "status": {k: v for k, v in st.items() if k != "seen"} if st else None,
                     "phase": d["phase"] if live_phase else None,
                     "bar_phase": d.get("bar_phase") if live_phase else None,
-                    "at": d["at"] if not (st and st["play"]) else None,
+                    "at": d["at"] if not moving else None,
                     "held": d.get("held") if st else None, "cue": d.get("cue") if st else None,
                     "precise": dict({k: v for k, v in d["precise"].items() if k != "seen"}, at=d["precise"]["seen"])
                                if d.get("precise") and now - d["precise"]["seen"] < 2 else None,

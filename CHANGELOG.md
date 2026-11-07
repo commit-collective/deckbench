@@ -4,6 +4,9 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- A player held on CUE sends its beats with its play flag off. The bench hid them at each status, so the strip
+  switched between the beats and an estimate and the beat lamps flashed. They now stay, as while it plays.
+- A loaded track's title no longer disappears for a moment every minute: its track info stays while it is loaded.
 - CUE held from the page lasts as long as the finger: the page keeps it held each second, and the bench lets go
   3 seconds after the page stops. Before, it let go after 8 seconds whatever the finger did.
 - Hold CUE and let go on PLAY/PAUSE to play on, as on the player: CUE keeps the finger or the mouse until it is let

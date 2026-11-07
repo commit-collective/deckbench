@@ -421,7 +421,7 @@ function devicePlan(d, wave, now) {
   const beating = d.phase && d.phase[2] > 0 && now + S.offset - d.phase[0] < 2 * 60 / d.phase[2];
   /* playing with no beat packets, as while CUE is held (cue playing): from the moment its reported beat changed, at its
      tempo, so the strip runs on and does not step once a beat */
-  const running = (st.play || st.state === "cue playing") && !beating && !(d.precise && wave);
+  const running = Strip.moving(st) && !beating && !(d.precise && wave);
   const seen = cueRun(d, st, running, now + S.offset);
   if (running) {
     const plan = Strip.layout({phase: [seen.t, seen.at, st.bpm || st.track_bpm || 120], loop: 0, loop_from: 0}, now, S.offset);
@@ -430,7 +430,7 @@ function devicePlan(d, wave, now) {
   }
   if (!wave) return moving();
   const place = Strip.trackPlace(d, wave, now + S.offset);
-  if (!place || (place.estimated && (st.play || beating))) return moving();
+  if (!place || (place.estimated && (Strip.moving(st) || beating))) return moving();
   const plan = Strip.layout({at: wave.beatOf(place.seconds), bpm: st.bpm || st.track_bpm || 120}, now, S.offset);
   for (const t of plan.ticks) if (wave.bars[t.at] != null) t.beat = wave.bars[t.at];
   plan.stopped = !st.play;
