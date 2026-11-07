@@ -6,6 +6,8 @@ Newest first. A release is a tagged commit.
 
 - A stopped real player's waveform sits on the beat it waits on, not one beat before: a player at a cue reports
   the beat before it. While CUE is held, its strip runs on smoothly between the player's status updates.
+- The bench follows where an older player stops and where its CUE-button cue is: a pause is placed from the beats it
+  played, and a return to the cue or a held CUE starts there. Anything it did not see makes it forget.
 - A track with no colour waveform gets the original blue one, so tracks analysed for older players have a waveform
   on their card too.
 - The status line says how the bench is on the link with its decks off: listening, the number it took, or silent

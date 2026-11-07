@@ -385,12 +385,14 @@ const beatSeen = {};
 /* Where such a player is: run on at its tempo from the anchor, and move it only when the reports rule it out. The bench
    says when a reported beat changed (status.beat_window: after the last status with the old beat, before the first with
    the new): the strip is kept where that puts it, so it neither steps on each status nor jumps by the status interval.
-   Started from a stop, it starts from the beat after the reported one, as a stopped strip is drawn. */
+   Started from a stop (CUE held), it starts from the cue the bench followed, else from the beat after the reported one,
+   as a stopped strip is drawn. */
 function cueRun(d, st, running, now) {
   const b = st.track_beat - 1, rate = (st.bpm || st.track_bpm || 120) / 60;
   let seen = beatSeen[d.ip];
   if (!seen || !running || !seen.running) {
-    const from = running && seen && !seen.running && !st.play ? b + 1 : b;
+    const cue = d.cue != null && d.cue >= b - 0.001 && d.cue <= b + 1.001 ? d.cue : b + 1;
+    const from = running && seen && !seen.running && st.state === "cue playing" ? cue : b;
     return beatSeen[d.ip] = {beat: b, t: now, at: from, running};
   }
   let at = seen.at + (now - seen.t) * rate;

@@ -151,7 +151,12 @@ older players can be, gets the original blue style, the overview and the detail 
 
 The card draws the detail behind the strip's beats and the overview under it, as a bench deck's waveform. Each beat
 is mapped to the track through the grid's own times, so a track whose tempo changes stays aligned. A CDJ-3000's
-precise position places it while paused. Older players give only their beat while paused, marked as an estimate.
+precise position places it while paused. Older players give only the beat they have passed, and their cue, set with
+CUE, cannot be read. So the bench follows them: a pause while playing is placed from the beats it played, CUE on a
+paused player sets the cue there (on the nearest beat when the reported beat allows it, as quantize does), and a
+return to the cue or a held CUE starts from it. Whatever it did not see, a jog or needle move, another track, a gap in
+the status or a beat that disagrees, makes it forget, and the card falls back to the beat after the reported one,
+marked as an estimate.
 Retrieval and the grid's alignment were tried on a CDJ-2000NXS2 (1.84), for a track on its own USB and on another
 NXS2's, and an XDJ-1000MK2 has answered. Live tracking, loops, seeks and the CDJ-3000 are not yet tried on
 hardware, nor its three-band style, which is not asked for.

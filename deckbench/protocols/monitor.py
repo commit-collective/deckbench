@@ -34,6 +34,50 @@ def text(data, start, end):
     return data[start:end].split(b"\0")[0].decode("latin-1", "replace").strip()
 
 
+MOVING = ("playing", "looping", "cue playing", "cue scratching")
+
+
+def follow_stop(d, previous, st, now):
+    """Where a stopped player waits and where its cue is, as beats of the track counted from 0 (d["held"], d["cue"]),
+    from what the bench saw it do. An older player reports only the beat it has passed, and its cue, set with CUE, is
+    nowhere to read. A pause while playing is placed from the beats it played, CUE on a paused player sets the cue
+    there (on the nearest beat, as quantize does, when the reported beat allows it), and a return to the cue lands on it.
+    Anything the bench did not see, a gap in its status, another track, a reported beat that disagrees, leaves either
+    unknown: the page then falls back to the beat."""
+    key = (st["source"], st["slot"], st["rbid"])
+    if (not previous or now - previous.get("seen", 0) > 1.5 or d.get("cue_track") != key
+            or st["track_beat"] is None):
+        d["held"] = d["cue"] = None
+    d["cue_track"] = key
+    if st["track_beat"] is None:
+        return
+    r = st["track_beat"] - 1
+    agrees = lambda at: at is not None and r - 0.001 <= at <= r + 1.001     # a cue a hair before beat k reports k - 1
+    state, before = st["state"], previous.get("state") if previous else None
+    if state in MOVING:
+        d["held"] = None
+        return
+    held = None
+    phase = d.get("phase")
+    if before in ("playing", "looping") and state == "paused" and phase and phase[2] > 0 \
+            and now - phase[0] < 4 * 60 / phase[2]:
+        # it stopped between the last status that said playing and this one
+        stop = (previous["seen"] + now) / 2
+        held = phase[1] + (stop - phase[0]) * phase[2] / 60
+        held = min(max(held, r), r + 1) if abs(held - (r + 0.5)) < 1 else None
+    elif state == "cued" and before == "paused":
+        p = d.get("held")
+        if p is not None:
+            held = next((at for at in (float(round(p)), p) if agrees(at)), None)
+    elif state == "cued" and before != "cued":
+        held = d.get("cue")
+    elif state == before:
+        held = d.get("held")
+    d["held"] = held if agrees(held) else None
+    if state == "cued":
+        d["cue"] = d["held"]
+
+
 def classify(port, data, announce=50000, beat=50001, update=50002):
     """The kind of packet that this is (a short word), by the port it was heard on and its type byte."""
     if len(data) < 0x0B or data[:10] != startup.MAGIC:
@@ -304,6 +348,7 @@ class Monitor:
         if d["ours"]:
             d["status"] = st
         else:
+            follow_stop(d, previous, st, now)
             with self.net.world.lock:
                 # Preserve position through a tempo update without aligning
                 # local followers to their master on an unrelated status.
@@ -378,6 +423,7 @@ class Monitor:
                     "phase": d["phase"] if live_phase else None,
                     "bar_phase": d.get("bar_phase") if live_phase else None,
                     "at": d["at"] if not (st and st["play"]) else None,
+                    "held": d.get("held") if st else None, "cue": d.get("cue") if st else None,
                     "precise": dict({k: v for k, v in d["precise"].items() if k != "seen"}, at=d["precise"]["seen"])
                                if d.get("precise") and now - d["precise"]["seen"] < 2 else None,
                     "air": d["air"] if d["air"] and now - d["air_seen"] < 8 else None,

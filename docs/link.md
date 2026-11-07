@@ -11,7 +11,8 @@ that sends its keep-alives from its network address and its statuses from the lo
 8 seconds is offline, and one that has been silent for 60 seconds is dropped.
 
 `GET /api/state` has them in `protocols.prolink.devices`. Each has `name`, `model`, `number`, `ip`, `kind`, `unit` (a legacy
-DJS-1000 marker), `online`, `status`, `phase` (only while it plays), `at` (only while it does not), `air` and `fader`.
+DJS-1000 marker), `online`, `status`, `phase` (only while it plays), `at` (only while it does not), `held` and `cue` (where a stopped player
+waits and where its cue is, in beats from 0, when the bench followed it there, else null), `air` and `fader`.
 
 A physical DJS-1000 appears as a regular player. The "UNIT UNDER TEST" badge and the dedicated header chip are shown
 only when the DJS emulator test adapter is explicitly configured. The existing `unit` API field remains compatible.

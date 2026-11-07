@@ -40,7 +40,9 @@ Implement protocol facts independently and check the license before reusing any 
 
 - Automatically fetch metadata on track changes, with caching, failure backoff and a manual refresh option
 - Guarded remote track loading from an existing player library, with explicit source, slot and track ID
-- Browse and richer metadata, then real beat grids, cues and waveforms
+- Browse and richer metadata
+- Read a track's stored cues (memory and hot cues, the cue list): snap a stopped player to the cue it sits on, as
+  Beat Link does, and mark the cues on the strip
 - Mixer-assigned player numbers and robust multi-address conflict recovery
 - macOS hardware and local-software interoperability validation
 - NFS audio serving only as a separate, explicitly reviewed project
