@@ -295,6 +295,12 @@ class Monitor:
               "source": data[0x28], "slot": data[0x29], "track_type": data[0x2A], "rbid": struct.unpack(">I", data[0x2C:0x30])[0],
               "sync_counter": struct.unpack(">I", data[0x84:0x88])[0], "handoff": data[0x9F], "seen": now}
         previous = d.get("status") or {}
+        # When its beat changed: after the last status with the old beat, before this one. A page that runs a player
+        # with no beat packets (cue playing) keeps its strip within that, where it would step on each status
+        if previous.get("track_beat") is not None and st["track_beat"] != previous.get("track_beat"):
+            st["beat_window"] = [previous["seen"], now]
+        else:
+            st["beat_window"] = previous.get("beat_window")
         if d["ours"]:
             d["status"] = st
         else:

@@ -236,13 +236,13 @@ check("nothing heard, nothing drawn", Strip.layoutDevice("c", {status: null}, 5)
   check("past the ends, the last interval", near(wave.beatTime(5), 5.0) && near(wave.beatTime(-1), 0.5));
   check("the inverse", [0, 0.5, 2.5, 3.25, 4.5].every((b) => near(wave.beatOf(wave.beatTime(b)), b)));
 
-  // where it is: a CDJ-3000's precise position, else the last beat and the tempo since (an estimate), paused only the beat
+  // where it is: a CDJ-3000's precise position, else the last beat and the tempo since (an estimate), paused the beat it waits on
   const precise = Strip.trackPlace({status: {play: true}, precise: {at: 100, position_ms: 2000, pitch: 10}}, wave, 100.5);
   check("precise position, at its pitch", near(precise.seconds, 2.55) && !precise.estimated, precise);
   const stale = Strip.trackPlace({status: {play: true, track_beat: 2}, precise: {at: 90, position_ms: 2000}, phase: [100, 1, 120]}, wave, 100.25);
   check("else from the beat, estimated", near(stale.seconds, wave.beatTime(1.5)) && stale.estimated, stale);
   const paused = Strip.trackPlace({status: {play: false, track_beat: 3}}, wave, 100);
-  check("paused: its beat", near(paused.seconds, 2.0) && paused.estimated);
+  check("paused: the beat after the reported one, where it waits", near(paused.seconds, 3.0) && paused.estimated);
   check("nothing known", Strip.trackPlace({status: null}, wave, 100) === null);
 
   // a bench deck's waveform is drawn as it was: one tempo, linear over each run of beats

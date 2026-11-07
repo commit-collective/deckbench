@@ -378,7 +378,28 @@ function realWaveOf(d) {
 /* A real player's strip, with its waveform once the bench has read it. A precise position (a CDJ-3000's, many a second)
    places it at every frame, playing or not. Without one, the beats as they came while it plays, and its beat while it is
    paused, which is then marked as an estimate. */
-const beatSeen = {};                    // address: {beat, t}: when the page saw a player's reported beat change (bench time)
+/* address: the strip of a player that plays with no beat packets (cue playing): {beat, t, at, running}, its reported
+   beat and an anchor (beat `at` at bench time t) */
+const beatSeen = {};
+
+/* Where such a player is: run on at its tempo from the anchor, and move it only when the reports rule it out. The bench
+   says when a reported beat changed (status.beat_window: after the last status with the old beat, before the first with
+   the new): the strip is kept where that puts it, so it neither steps on each status nor jumps by the status interval.
+   Started from a stop, it starts from the beat after the reported one, as a stopped strip is drawn. */
+function cueRun(d, st, running, now) {
+  const b = st.track_beat - 1, rate = (st.bpm || st.track_bpm || 120) / 60;
+  let seen = beatSeen[d.ip];
+  if (!seen || !running || !seen.running) {
+    const from = running && seen && !seen.running && !st.play ? b + 1 : b;
+    return beatSeen[d.ip] = {beat: b, t: now, at: from, running};
+  }
+  let at = seen.at + (now - seen.t) * rate;
+  const win = st.beat_window;
+  if (b === seen.beat + 1 && win) at = Math.min(Math.max(at, b + (now - win[1]) * rate), b + (now - win[0]) * rate);
+  else if (b !== seen.beat) at = b;
+  else at = Math.min(at, b + 1);
+  return Object.assign(seen, {beat: b, t: now, at});
+}
 
 function devicePlan(d, wave, now) {
   const st = d.status, moving = () => ({plan: Strip.layoutDevice(d.ip, d, now), place: null});
@@ -387,11 +408,10 @@ function devicePlan(d, wave, now) {
   const beating = d.phase && d.phase[2] > 0 && now + S.offset - d.phase[0] < 2 * 60 / d.phase[2];
   /* playing with no beat packets, as while CUE is held (cue playing): from the moment its reported beat changed, at its
      tempo, so the strip runs on and does not step once a beat */
-  const seen = beatSeen[d.ip];
-  if (!seen || seen.beat !== st.track_beat - 1) beatSeen[d.ip] = {beat: st.track_beat - 1, t: now + S.offset};
-  if ((st.play || st.state === "cue playing") && !beating && !(d.precise && wave)) {
-    const {beat, t} = beatSeen[d.ip], bpm = st.bpm || st.track_bpm || 120;
-    const plan = Strip.layout({phase: [t, beat, bpm], loop: 0, loop_from: 0}, now, S.offset);
+  const running = (st.play || st.state === "cue playing") && !beating && !(d.precise && wave);
+  const seen = cueRun(d, st, running, now + S.offset);
+  if (running) {
+    const plan = Strip.layout({phase: [seen.t, seen.at, st.bpm || st.track_bpm || 120], loop: 0, loop_from: 0}, now, S.offset);
     if (wave) for (const tick of plan.ticks) if (wave.bars[tick.at] != null) tick.beat = wave.bars[tick.at];
     return {plan, place: null};
   }
