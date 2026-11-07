@@ -43,6 +43,8 @@ Implement protocol facts independently and check the license before reusing any 
 - Browse and richer metadata
 - Read a track's stored cues (memory and hot cues, the cue list): snap a stopped player to the cue it sits on, as
   Beat Link does, and mark the cues on the strip
+- Control a real player's tempo from the page, for instance with the bench as tempo master and the players synced to
+  it, and offer most of the player control a show tool such as TC Supply's ShowKontrol does
 - Mixer-assigned player numbers and robust multi-address conflict recovery
 - macOS hardware and local-software interoperability validation
 - NFS audio serving only as a separate, explicitly reviewed project

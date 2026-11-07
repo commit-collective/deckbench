@@ -402,9 +402,12 @@ function cueRun(d, st, running, now) {
   const b = st.track_beat - 1, rate = (st.bpm || st.track_bpm || 120) / 60;
   let seen = beatSeen[d.ip];
   if (!seen || !running || !seen.running) {
-    const cue = d.cue != null && d.cue >= b - 0.001 && d.cue <= b + 1.001 ? d.cue : b + 1;
-    const from = running && seen && !seen.running && st.state === "cue playing" ? cue : b;
-    return beatSeen[d.ip] = {beat: b, t: now, at: from, running};
+    /* from a stop, PLAY or CUE held: where it stood (as the bench followed it), else its cue, else the beat after the
+       reported one, as the stopped strip was drawn, so the strip starts where it was and not a beat behind */
+    const near = (at) => at != null && at >= b - 0.001 && at <= b + 1.001;
+    const start = [seen && seen.stood, st.state === "cue playing" ? d.cue : null].find(near);
+    const from = running && seen && !seen.running ? (start != null ? start : b + 1) : b;
+    return beatSeen[d.ip] = {beat: b, t: now, at: from, running, stood: running ? null : d.held};
   }
   let at = seen.at + (now - seen.t) * rate;
   const win = st.beat_window;

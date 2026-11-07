@@ -73,6 +73,8 @@ def main(argv=None):
     ap.add_argument("--observe", action="store_true", help="announce a status observer without simulated playback decks")
     ap.add_argument("--no-track-info", action="store_true", help="start with Read track info by itself off")
     ap.add_argument("--no-waveforms", action="store_true", help="start with Read waveforms by itself off")
+    ap.add_argument("--press-settle", type=float, default=None, metavar="SECONDS",
+                    help="wait between connecting to a player and pressing its button (default 0.25, as first tested)")
     ap.add_argument("--observer-number", type=int, default=None,
                     help="observer identity, announced at once. By default a free 1 to 4 after 5 s of listening while track info or waveforms are read by itself, else 7")
     ap.add_argument("--decks", type=int, default=4, help="how many decks, numbered 1.. (default 4)")
@@ -203,6 +205,11 @@ def main(argv=None):
         if phone.SITE not in a.allow_origin:
             a.allow_origin.append(phone.SITE)
 
+    if a.press_settle is not None:
+        if not 0 <= a.press_settle <= 2:
+            ap.error("--press-settle must be 0 to 2 seconds")
+        from .protocols import transport
+        transport.SETTLE = a.press_settle
     numbers = [int(x) for x in a.numbers.split(",")] if a.numbers else list(range(1, a.decks + 1))
     if a.observe:
         if a.observer_number is not None and not 1 <= a.observer_number <= 127:

@@ -345,6 +345,10 @@ class Monitor:
             st["beat_window"] = [previous["seen"], now]
         else:
             st["beat_window"] = previous.get("beat_window")
+        # started from a stop: a beat from before it (the previous play or CUE hold) is not where it is now
+        if (previous.get("state") not in MOVING and st["state"] in MOVING and d.get("phase")
+                and d["phase"][0] < previous.get("seen", 0)):
+            d["phase"] = d["bar_phase"] = None
         if d["ours"]:
             d["status"] = st
         else:
