@@ -61,6 +61,7 @@ class Share(unittest.TestCase):
         self.assertEqual(body["addresses"][0], {"name": "", "address": self.address, "default": True})
         status, body, _ = call(self.base + "api/share/on?address=" + self.address, "POST")
         self.assertEqual((status, body["on"], body["address"]), (200, True, self.address))
+        self.assertEqual(call(self.base + "api/state")[1]["bench"]["phone"]["address"], self.address)
         self.addCleanup(lambda: call(self.base + "api/share/off", "POST"))
         token = body["direct"].rpartition("#token=")[2]
         self.assertIn("token=" + token, body["url"])
@@ -91,6 +92,7 @@ class Share(unittest.TestCase):
         self.assertEqual((status, body["on"], body["fixed"], body["address"]), (200, True, True, "10.0.0.2"))
         self.assertEqual(call(self.base + "api/share/on", "POST")[0], 409)
         self.assertEqual(call(self.base + "api/share/off", "POST")[0], 409)
+        self.assertTrue(call(self.base + "api/state")[1]["bench"]["phone"]["fixed"])   # what lights the Phone button
 
 
 if __name__ == "__main__":

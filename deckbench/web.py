@@ -626,6 +626,8 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
     def set_phone_link(url, direct, address, port_):
         with share_lock:
             share.update(fixed=True, url=url, direct=direct, address=address, port=port_)
+        world.info["phone"] = {"address": address, "port": port_, "fixed": True}     # the page lights its Phone button
+        world.changed()
 
     server = Server((host, port), Handler)
     server.token, server.allowed, server.shared, server.closed = token, allowed, False, False

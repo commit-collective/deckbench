@@ -909,6 +909,7 @@ function render() {
   renderSettings();
   renderMixer();
   renderDevices();
+  if (!$("phone").hidden) $("phone").setAttribute("aria-pressed", String(!!(s.bench && s.bench.phone)));   /* shared with phones */
   setText($("version"), s.bench && s.bench.version ? (/^\d/.test(s.bench.version) ? "v" : "") + s.bench.version : "");
   lamps();
 }

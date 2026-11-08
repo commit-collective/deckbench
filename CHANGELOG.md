@@ -4,6 +4,9 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- The Phone button is lit whenever the bench is shared with phones, from the start with `--phone` too. It was lit only
+  once its dialog had been opened.
+
 - A bench deck's CUE works as a real player's on the page: held, it plays from the cue point, and let go on PLAY
   it plays on (PLAY pressed while CUE is held plays on, as on a CDJ). Both kinds of deck say PLAY or PAUSE by what
   the deck does, and PLAY while CUE is held.
