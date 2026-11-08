@@ -66,6 +66,14 @@ state.protocols.prolink.mixer.on = true;
 check("the bench's own mixer does", keys() === "1", keys());
 state.protocols.prolink.devices[0].status.on_air = true;
 check("a real player on air is still not heard", keys() === "1", keys());
+
+// the metronome follows the tempo master: a bench deck that plays, else a real player that says it is the master
+check("no master, no metronome", Sound.masterBeats(state) === null);
+state.protocols.prolink.devices[0].status = {play: true, master: true};
+check("a real master's beats, by its bar", Sound.masterBeats(state).phase.join() === "0,0,124", Sound.masterBeats(state));
+state.decks[1].master = true; state.decks[1].bar_shift = 2;
+check("a bench deck that is the master comes first, on its grid", Sound.masterBeats(state).phase[2] === 120 && Sound.masterBeats(state).bar_shift === 2);
+state.decks[1].master = false; state.protocols.prolink.devices[0].status = {play: true};
 beats = Sound.beats({phase: [1000, 10.0, 120], loop: 0, loop_from: 0}, 0, 0.6, 1000);
 check("a beat knows its place in the track", beats[0].at === 10 && beats[1].at === 11, beats.map((b) => b.at));
 beats = Sound.beats(looped, 0, 4.2, 1000);
@@ -103,10 +111,12 @@ check("the voices are not the same", new Set(made).size === 4, made.map((m) => m
 {
   const started = [];
   const prm = () => ({value: 1, sets: [], setValueAtTime(v, t) { this.sets.push(["set", v, t]); },
-                      linearRampToValueAtTime(v, t) { this.sets.push(["ramp", v, t]); }, cancelScheduledValues() {}});
+                      linearRampToValueAtTime(v, t) { this.sets.push(["ramp", v, t]); }, exponentialRampToValueAtTime() {}, cancelScheduledValues() {}});
   const fake = {state: "running", currentTime: 10, destination: {},
     createBufferSource: () => { const n = {playbackRate: prm(), connect() {}, disconnect() {}, start(at, from) { started.push({at, from, n}); }, stop(t) { n.stopped = t; }}; return n; },
-    createGain: () => ({gain: prm(), connect() {}, disconnect() {}}), createStereoPanner: () => ({pan: prm(), connect() {}, disconnect() {}})};
+    createGain: () => ({gain: prm(), connect() {}, disconnect() {}}), createStereoPanner: () => ({pan: prm(), connect() {}, disconnect() {}}),
+    createOscillator: () => ({frequency: prm(), connect() {}, start() {}, stop() {}}),
+    createBiquadFilter: () => ({frequency: prm(), connect() {}})};
   Sound.ctx = fake; Sound.master = {};
   Sound.buffers["2/x.wav/30"] = {duration: 30};
   const fd = {on: true, play: true, phase: [1000, 4.0, 100], loop: 0, loop_from: 0, on_air: true, audio: {file: "x.wav", bpm: 100, offset: 0.5, seconds: 30}};
@@ -124,7 +134,18 @@ check("the voices are not the same", new Set(made).size === 4, made.map((m) => m
   Sound.tick();
   check("a jump starts it at the new place, fading over", started.length === 2 && near(started[1].from, 0.5 + 20 * 0.6, 0.01) &&
         near(started[0].n.stopped, 10 + 0.017, 1e-9), started.map((x) => [x.from, x.n.stopped]));
-  Sound.files = {}; Sound.ctx = null; Sound.master = null; delete sandbox.S;
+  // the metronome: the master's next beat, a click
+  Sound.files = {}; Sound.last = {};
+  sandbox.S.state = {decks: {1: {on: true, play: true, master: true, phase: [1005, 3.95, 120], loop: 0, loop_from: 0}}, protocols: {}};
+  Sound.metronome = false;
+  Sound.tick();
+  const before = Sound.clicks, voices = Sound.played;
+  Sound.last = {};
+  Sound.metronome = true;
+  Sound.tick();
+  check("the metronome clicks on the master's beat", Sound.clicks === before + 1 && Sound.played === voices + 1, [Sound.clicks, before]);
+  Sound.metronome = false;
+  Sound.files = {}; Sound.last = {}; Sound.ctx = null; Sound.master = null; delete sandbox.S;
 }
 
 // a browser with no Web Audio says so

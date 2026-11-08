@@ -67,7 +67,8 @@ faders do not carry their sound. A browser starts sound only after a click, so i
 It is for hearing the decks. The stream above is what a device under test is fed.
 
 Real players are not heard in Listen: their music comes out of the mixer, and a beat made up for them would only stand
-in its way. A bench deck that plays a real player's track plays that track's audio (docs/reference.md). Check the
+in its way. The **Metronome** in the Sound settings clicks on each beat of the tempo master instead, a bench deck or a
+real player, higher on the first beat of the bar. A bench deck that plays a real player's track plays that track's audio (docs/reference.md). Check the
 bench's mixer and the phone's media volume if a bench deck that plays is silent.
 A suspended browser audio context is reported rather than shown as listening successfully.
 

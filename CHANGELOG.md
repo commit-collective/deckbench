@@ -5,7 +5,8 @@ Newest first. A release is a tagged commit.
 ## Unreleased
 
 - Listen plays only the bench's decks. A real player was heard as a beat made up for it, which only stood in the way of
-  its own music, out of the mixer. The Sound settings keep the volume.
+  its own music, out of the mixer. The Sound settings keep the volume, and a Metronome switch: while Listen is on, a
+  click on each beat of the tempo master, a bench deck or a real player, higher on the first beat of the bar.
 
 - The Phone button is lit whenever the bench is shared with phones, from the start with `--phone` too. It was lit only
   once its dialog had been opened.

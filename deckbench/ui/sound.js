@@ -6,8 +6,8 @@
 
 const Sound = (() => {
   const LOOKAHEAD = 0.18;                     /* seconds of beats scheduled ahead of the clock */
-  const s = {ctx: null, on: false, timer: null, last: {}, played: 0,   /* played: how many beats were sounded (for a check) */
-             volume: 0.4,
+  const s = {ctx: null, on: false, timer: null, last: {}, played: 0, clicks: 0,   /* played: how many beats were sounded (for a check) */
+             volume: 0.4, metronome: false,
              files: {}, buffers: {}};   /* files: the sound file each deck plays now; buffers: the files got from the bench, by deck and name */
 
   /* The beats of a deck between two moments (seconds, the page's clock), as {k, time, beat}: k counts the beats of the deck's
@@ -59,6 +59,17 @@ const Sound = (() => {
     const mixer = prolink && prolink.mixer, own = !!(mixer && mixer.on);
     for (const [n, d] of Object.entries(state.decks)) if (s.audible(d, own)) out.push({key: n, number: Number(n), deck: d});
     return out;
+  };
+
+  /* What the metronome follows: the tempo master's beats, a bench deck's (on its grid) or a real player's (its bar as it
+   * reports it), as `beats` takes them. null when no master plays. */
+  s.masterBeats = (state) => {
+    for (const d of Object.values(state.decks || {})) {
+      if (d.on && d.master && d.play && d.phase && !d.unplugged) return {phase: d.phase, loop: d.loop, loop_from: d.loop_from, bar_shift: d.bar_shift};
+    }
+    const prolink = state.protocols && state.protocols.prolink;
+    const real = ((prolink && prolink.devices) || []).find((d) => d.online && d.status && d.status.master && (d.bar_phase || d.phase));
+    return real ? {phase: real.bar_phase || real.phase, loop: 0, loop_from: 0} : null;
   };
 
   /* -- the voices -- */
@@ -157,6 +168,12 @@ const Sound = (() => {
     },
   ];
 
+  /* the metronome's click, in the middle, higher on the first beat of the bar */
+  function click(at, beat) {
+    tone(s.ctx, s.master, at, "square", beat === 1 ? 1760 : 1175, beat === 1 ? 0.22 : 0.14, 0.03, 6000);
+    s.clicks++;
+  }
+
   /* A beat of a deck, in its voice. Each deck has its own place in the stereo field. */
   function play(deck, number, beat, at, half) {
     const ctx = s.ctx, pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
@@ -242,26 +259,31 @@ const Sound = (() => {
     if (!state || !s.ctx || s.ctx.state !== "running") return;
     const now = Date.now() / 1000, offset = S.offset;
     const clock = s.ctx.currentTime - now;      /* the page's clock to the audio clock */
-    const heard = s.sources(state), keys = new Set(heard.map((x) => x.key));
+    const heard = s.sources(state), keys = new Set(heard.map((x) => x.key).concat("metronome"));
     for (const key of Object.keys(s.last)) if (!keys.has(key)) delete s.last[key];
     for (const key of Object.keys(s.files)) {
       const d = (heard.find((x) => x.key === key) || {}).deck;
       if (!d || !d.audio) stopFile(key);                                /* it stopped, or went back to its drums */
     }
-    for (const {key, number, deck: d} of heard) {
-      if (d.audio) { playFile(key, number, d, now, offset); continue; }
+    /* the beats of the coming moment not yet sounded: each once, a new phase counting on from here and not the beats that were */
+    const schedule = (key, d, sound) => {
       const sig = d.phase.join(","), last = s.last[key];
       const beats = s.beats(d, now, now + LOOKAHEAD, offset);
-      if (!last || last.sig !== sig) {          /* a new phase: from here on, not the beats that were */
-        s.last[key] = {sig, k: Math.floor(d.phase[1] + (now + offset - d.phase[0]) * d.phase[2] / 60)};
-      }
+      if (!last || last.sig !== sig) s.last[key] = {sig, k: Math.floor(d.phase[1] + (now + offset - d.phase[0]) * d.phase[2] / 60)};
       const seen = s.last[key];
       for (const b of beats) {
         if (b.k <= seen.k) continue;
         seen.k = b.k;
-        play(d, number, b.beat, Math.max(s.ctx.currentTime, b.time + clock), b.half);
+        sound(b, Math.max(s.ctx.currentTime, b.time + clock));
       }
+    };
+    for (const {key, number, deck: d} of heard) {
+      if (d.audio) { playFile(key, number, d, now, offset); continue; }
+      schedule(key, d, (b, at) => play(d, number, b.beat, at, b.half));
     }
+    const master = s.metronome ? s.masterBeats(state) : null;
+    if (master) schedule("metronome", master, (b, at) => click(at, b.beat));
+    else delete s.last.metronome;
   }
 
   s.tick = tick;

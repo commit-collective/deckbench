@@ -1222,7 +1222,7 @@ $("sound").addEventListener("click", async () => {
     const on = await Sound.toggle();
     $("sound").setAttribute("aria-pressed", String(on));
     $("sound").textContent = on ? "Listening" : "Listen";
-    if (on && S.state && !Sound.sources(S.state).length) {
+    if (on && S.state && !Sound.sources(S.state).length && !(Sound.metronome && Sound.masterBeats(S.state))) {
       toast("Listening. No bench deck plays now: one is heard once it plays (with the bench's mixer on, while it is on air). " +
             "Real players are not heard here: their music comes out of the mixer.", "warn");
     }
@@ -1349,7 +1349,14 @@ for (const [id, key] of [["pktnoisy", "noisy"], ["pktours", "ours"], ["pktfollow
   let saved = {};
   try { saved = JSON.parse(store.get("deckbench.sound", "{}")) || {}; } catch (e) { saved = {}; }
   if (typeof saved.volume === "number") Sound.setVolume(saved.volume); else Sound.volume = 0.4;
-  const keep = () => store.set("deckbench.sound", JSON.stringify({volume: Sound.volume}));
+  Sound.metronome = saved.metronome === true;
+  const keep = () => store.set("deckbench.sound", JSON.stringify({volume: Sound.volume, metronome: Sound.metronome}));
+  $("metronome").setAttribute("aria-checked", String(Sound.metronome));
+  $("metronome").addEventListener("click", () => {
+    Sound.metronome = !Sound.metronome;
+    $("metronome").setAttribute("aria-checked", String(Sound.metronome));
+    keep();
+  });
   $("soundvol").value = Math.round(Sound.volume * 100);
   $("soundvol").addEventListener("input", (e) => { Sound.setVolume(e.target.value / 100); keep(); });
 })();
