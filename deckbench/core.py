@@ -362,6 +362,20 @@ class World:
                 % (deck.name, grid["bpm"], grid["first"], ", its tempo changes (followed at its first)" if grid.get("variable") else ""))
         self.changed()
 
+    def set_audio(self, deck, path, bpm, offset=0.0, expect=None):
+        """Gives the deck a sound file and keeps its track: the audio of the real player's track it has loaded, read from
+        that player, made at `bpm` with its first beat `offset` seconds in. False, and nothing changes, if `expect()`
+        says the deck has loaded something else meanwhile. Raises audio.AudioError if the file will not do."""
+        from .audio import load_file
+        track = load_file(path, bpm, offset)
+        with self.lock:
+            if expect is not None and not expect():
+                return False
+            deck.audio = track
+        log("%s plays its track's audio, %s (%.1f s)" % (deck.name, os.path.basename(path), track.seconds))
+        self.changed()
+        return True
+
     def clear_audio(self, deck):
         """The deck is back to its drum loop (the track it has loaded stays loaded)."""
         with self.lock:

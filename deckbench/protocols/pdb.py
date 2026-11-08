@@ -29,24 +29,28 @@ def device_string(text):
         return struct.pack("<BHB", 0x90, 4 + len(raw), 0) + raw
 
 
-def track_row(track_id, title):
+TITLE, PATH = 17, 20                                    # the track row's strings: its title and its audio file's path
+
+
+def track_row(track_id, title, path=""):
     """A track row: the fixed part (0x88 bytes) and the strings after it."""
     empty = device_string("")
-    strings = empty + device_string(title)
+    strings = empty + device_string(title) + device_string(path)
     row = bytearray(0x88)
     struct.pack_into("<H", row, 0x00, 0x24)             # subtype
     struct.pack_into("<I", row, 0x48, track_id)
     struct.pack_into("<H", row, 0x5c, 3)                # the 3 before the offsets
     for i in range(21):
         struct.pack_into("<H", row, 0x5e + 2 * i, 0x88)         # the empty string
-    struct.pack_into("<H", row, 0x5e + 2 * 17, 0x88 + len(empty))   # the title
+    struct.pack_into("<H", row, 0x5e + 2 * TITLE, 0x88 + len(empty))
+    struct.pack_into("<H", row, 0x5e + 2 * PATH, 0x88 + len(empty) + len(device_string(title)))
     return bytes(row) + strings
 
 
 def build_pdb(titles):
-    """export.pdb for {rekordbox id: title}: the header page, an empty index page
+    """export.pdb for {rekordbox id: title, or (title, path of its audio file)}: the header page, an empty index page
     (the first page of a table is one), and the data pages of the tracks."""
-    rows = [track_row(i, t) for i, t in sorted(titles.items())]
+    rows = [track_row(i, *(t if isinstance(t, tuple) else (t,))) for i, t in sorted(titles.items())]
     data_pages = []
     page = []
     heap = 0
@@ -96,9 +100,24 @@ def build_pdb(titles):
 
 
 def parse_pdb(pdb):
-    """{id: title} of the tracks of an export.pdb, read as the analysis describes (the
-    table pointer, the list of pages, the row groups at the end of each data page, the
-    18th string of a track row). A reference to check the files made here and real ones."""
+    """{id: title} of the tracks of an export.pdb. A reference to check the files made here and real ones."""
+    return {track: strings["title"] for track, strings in parse_tracks(pdb).items()}
+
+
+def read_string(page, at):
+    """The DeviceSQL string at `at`: short ASCII, long ASCII or long UTF-16LE."""
+    kind = page[at]
+    if kind & 1:
+        return page[at + 1:at + (kind >> 1)].decode("ascii", "replace")
+    length = struct.unpack_from("<H", page, at + 1)[0]
+    raw = page[at + 4:at + length]
+    return raw.decode("utf-16-le", "replace") if kind == 0x90 else raw.decode("utf-8", "replace")
+
+
+def parse_tracks(pdb):
+    """{id: {"title", "path"}} of the tracks of an export.pdb, read as the analysis describes (the table pointer, the
+    list of pages, the row groups at the end of each data page, the 18th and 21st strings of a track row: its title and
+    the path of its audio file on the media)."""
     size, tables = struct.unpack_from("<II", pdb, 4)
     first = last = None
     for t in range(tables):
@@ -119,15 +138,9 @@ def parse_pdb(pdb):
                 base = size - 36 * (group + 1)
                 if struct.unpack_from("<H", page, base + 32)[0] >> bit & 1:
                     start = 0x28 + struct.unpack_from("<H", page, base + 2 * (15 - bit))[0]
-                    at = start + struct.unpack_from("<H", page, start + 0x5E + 2 * 17)[0]
-                    kind = page[at]
-                    if kind & 1:
-                        title = page[at + 1:at + (kind >> 1)].decode("ascii")
-                    else:
-                        length = struct.unpack_from("<H", page, at + 1)[0]
-                        raw = page[at + 4:at + length]
-                        title = raw.decode("utf-16-le") if kind == 0x90 else raw.decode("utf-8")
-                    found[struct.unpack_from("<I", page, start + 0x48)[0]] = title
+                    strings = {name: read_string(page, start + struct.unpack_from("<H", page, start + 0x5E + 2 * index)[0])
+                               for name, index in (("title", TITLE), ("path", PATH))}
+                    found[struct.unpack_from("<I", page, start + 0x48)[0]] = strings
         if n == last:
             break
         n = nxt

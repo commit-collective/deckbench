@@ -800,8 +800,13 @@ function render() {
       const grid = !l ? "" : l.state === "ready" && d.grid
         ? "grid " + d.grid.bpm.toFixed(2) + " BPM" + (d.grid.variable ? ", its first tempo (it changes)" : "")
         : l.state === "failed" ? "no grid: " + l.reason : "reading its grid\u2026";
-      fill(q("track"), h("b", {}, d.track), " \u00b7 " + where + (grid ? " \u00b7 " + grid : ""));
-      const tip = d.track + " \u00b7 " + where + (grid ? " \u00b7 " + grid : "");
+      /* and its audio, read from the player's media once the grid is */
+      const a = d.linked_audio, sound = !a ? "" : a.state === "ready" ? "its audio"
+        : a.state === "reading" ? "reading its audio" + (a.total ? " " + Math.round(100 * a.done / a.total) + " %" : "\u2026")
+        : a.state === "decoding" ? "decoding its audio\u2026" : a.state === "failed" ? "no audio: " + a.reason : "";
+      const more = [grid, sound].filter(Boolean).map((x) => " \u00b7 " + x).join("");
+      fill(q("track"), h("b", {}, d.track), " \u00b7 " + where + more);
+      const tip = d.track + " \u00b7 " + where + more;
       if (q("track").title !== tip) q("track").title = tip;
     } else fill(q("track"), "no track");
     syncSources(card, n, s);
@@ -1092,7 +1097,7 @@ function renderNetwork() {
 
 /* ---- settings ---- */
 
-for (const name of ["strict", "refuse_db", "claim", "player_control", "auto_track_info", "auto_waveforms"]) {
+for (const name of ["strict", "refuse_db", "claim", "player_control", "auto_track_info", "auto_waveforms", "track_audio"]) {
   $(name).addEventListener("click", () => act("api/settings/" + name + "/" + ($(name).getAttribute("aria-checked") === "true" ? 0 : 1)));
 }
 $("profile").addEventListener("change", (e) => act("api/settings/profile/" + (e.target.value || "default")));
@@ -1101,7 +1106,7 @@ $("model").addEventListener("keydown", (e) => { if (e.key === "Enter") $("models
 
 function renderSettings() {
   const s = S.state, set = settingsOf(s), b = s.bench || {};
-  for (const name of ["strict", "refuse_db", "claim", "player_control", "auto_track_info", "auto_waveforms"]) $(name).setAttribute("aria-checked", String(!!set[name]));
+  for (const name of ["strict", "refuse_db", "claim", "player_control", "auto_track_info", "auto_waveforms", "track_audio"]) $(name).setAttribute("aria-checked", String(!!set[name]));
   if (document.activeElement !== $("model")) $("model").value = set.model || "";
   const profile = $("profile"), titles = b.profiles || {};
   if (profile.options.length !== Object.keys(titles).length + 1) {

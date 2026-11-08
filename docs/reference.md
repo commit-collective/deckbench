@@ -118,7 +118,8 @@ Options (`python -m deckbench --help`):
     GET  /api/deck/<n>/audio.wav      the deck's sound file as a WAV, which the page's Listen button plays for it (404 if it has none)
     GET  /api/deck/<n>/waveform       its loudness, 100 values a second of 0 to 100, which the deck's strip draws behind its grid
     POST /api/deck/<n>/unplug         the cable is pulled (also plug, and silence/<seconds>)
-    POST /api/settings/<name>/<value> strict, refuse_db, player_control and auto_track_info (0 or 1), model (the name the decks announce)
+    POST /api/settings/<name>/<value> strict, refuse_db, player_control, auto_track_info, auto_waveforms and track_audio (0 or 1),
+                                      model (the name the decks announce)
     GET  /api/unit                    what is known of the device under test (the network's word, and the adapters')
     POST /api/unit/press/<control>    press a control of the device under test through an adapter
     GET  /api/examples                the scenarios that come with the bench (deckbench/examples)
@@ -187,9 +188,18 @@ grid:
 - its bars are counted as the grid counts them, so a track whose first beat is not on a bar line is on the right beat
 - its strip draws the track's waveform
 
-A grid whose tempo changes is followed at its first tempo, and the deck says so. The deck still sounds like its drum
-loop, at the track's tempo and on its bars: the track's audio is not read. To ask the player, the deck asks as
+A grid whose tempo changes is followed at its first tempo, and the deck says so. To ask the player, the deck asks as
 itself when it is a player 1 to 4, else as an unused bench player 1 to 4 or the presence, as for track info.
+
+Once the grid is read, the bench reads the track's audio too, as a player loading a linked track does: it finds the
+file in the media's `PIONEER/rekordbox/export.pdb` and reads it over NFS (the SD as `/B/`, the USB as `/C/`, read
+only), from the deck's own address. The file is kept with the files sent from the page, and the deck plays it
+instead of its drum loop, made at the grid's tempo with its first beat where the grid has it. So the deck sounds like
+the track, in the page's Listen and on the sound port. A file other than a WAV needs ffmpeg. A track of 300 MB or
+more is not read. **Read a loaded track's audio** in Settings (`track_audio`) turns this off. Media that has only a
+Device Library Plus database (`exportLibrary.db`) is not read. Each deck has `linked_audio`: a `state` (`reading`
+with `done` and `total` bytes, `decoding`, `ready` with the `file`, or `failed` with a `reason`), and the event
+`linked_audio_read` says it plays the track.
 
 Each deck in the state has `linked`: `null` for a track of a bench database, else the `source`, `slot` and `rbid`, a
 `state` (`waiting`, `reading`, `ready` with the `title`, `artist` and `key`, or `failed` with a `reason`) and `grid`
@@ -199,7 +209,8 @@ the beats from a bar line to the track's first beat. The event `linked_track_rea
 A bench deck also takes the load-track command (type 0x19) that rekordbox or Beat Link sends a player, unless it
 plays, as a player refuses then. The events are `load_command`, and `load_refused` with a `reason`. This has packet
 and loopback coverage only. The grid and waveform reading is the players' (see above), not yet tried on hardware
-for a bench deck.
+for a bench deck. The audio reading is tested against a server that answers as Crate Digger describes the players,
+not yet against a player.
 
 ## Remote loading
 

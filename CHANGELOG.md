@@ -18,6 +18,9 @@ Newest first. A release is a tagged commit.
   the grid: the track's tempo, its bars counted as the grid counts them, and its waveform on the strip. A tempo set
   afterwards is reported as a pitch. The sound is still the drum loop. See docs/reference.md.
 - A bench deck takes the load-track command that rekordbox or Beat Link sends a player, and refuses it while it plays.
+- A bench deck on a real player's track plays the track itself: the bench reads its audio file from the player's SD or
+  USB over NFS, as a player loading a linked track does, and the deck plays it on the grid, in Listen and on the sound
+  port. Settings has a switch for it. Not yet tried against a player.
 
 - A real player's loop is steadier, from a capture of 2- and 4-beat loops on a CDJ-2000NXS2. The beats ahead of
   the playhead take their place in the bar from the loop, so a 2-beat loop's numbers no longer move every pass. A

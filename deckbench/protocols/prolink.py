@@ -194,6 +194,8 @@ class LinkDeck:
         # of a bench deck's database, and the key of the grid it has taken (once per load)
         self.linked = None
         self.linked_applied = None
+        self.linked_audio = None            # reading its audio from the player: {state, done, total, reason, file}
+        self.audio_key = None               # the key of the track whose audio it has
 
     @property
     def number(self):
@@ -683,6 +685,13 @@ class Prolink(Protocol):
         # the real players' controls and the reading of their track info, for every eligible player at once. Both on by
         # default, and control off for an observer, which is there to watch
         self.control_on, self.auto_info, self.auto_waves = not self.observer, bool(auto_track_info), bool(auto_waveforms)
+        # a bench deck's real track: its audio, read from the player's media over NFS (read_linked_audio)
+        self.track_audio = True
+        self.tracks_dir = None              # where the files read are kept (uploads.default_dir() if None)
+        self.nfs_portmap = 111              # the players' portmapper (a test's own server is elsewhere)
+        self.pdbs = collections.OrderedDict()   # (address, MAC, slot): ((size, mtime), {id: {title, path}}) of its export.pdb
+        self.audio_files = {}               # (key, size, mtime): the file kept
+        self.audio_failed = {}              # key: (when, why), tried again after a minute
         self.info_tried = {}                # metadata key: when the bench last read it by itself (auto_track_info)
         # real players' waveforms (read_waveforms): by the source's identity, slot, track and style
         self.waves = collections.OrderedDict()  # key: {"data": {...}, "used": time}, the least used first
@@ -805,6 +814,7 @@ class Prolink(Protocol):
         self.runtime.spawn(self.faders)
         self.runtime.spawn(self.read_track_info)
         self.runtime.spawn(self.read_waveforms)
+        self.runtime.spawn(self.read_linked_audio)
         if not self.observer:
             self.runtime.spawn(self.mixer.run)
         if wait:
@@ -1124,6 +1134,7 @@ class Prolink(Protocol):
         linked = link.linked
         title = linked.get("title") if linked else None
         return {"track": title or source.titles.get((link.slot, link.rbid), ""), "linked": dict(linked) if linked else None,
+                "linked_audio": dict(link.linked_audio) if link.linked_audio else None,
                 "track_id": "%d:%d:%d" % (link.source, link.slot, link.rbid),
                 "track_source": link.source, "track_slot": link.slot, "track_rbid": link.rbid,
                 "model": link.name.decode(), "address": link.address}
@@ -1270,6 +1281,97 @@ class Prolink(Protocol):
             if state != link.linked:
                 link.linked = state
                 self.world.changed()
+
+    AUDIO_LIMIT = 300 << 20             # bytes of a track's audio file, as of a file sent from the page
+
+    def read_linked_audio(self):
+        """Reads the audio of each bench deck's real track from the player's media, once its grid is read, and gives it
+        to the deck, which then sounds like the track: made at the grid's tempo, its first beat where the grid has it.
+        The file is found in the media's export.pdb and read over NFS, as a player reads a linked track (nfs.py), and
+        kept with the files sent from the page. A failure is tried again after a minute."""
+        while not self.runtime.stopping.wait(1.0):
+            if not self.track_audio:
+                continue
+            devices = [d for d in self.monitor.snapshot() if d["online"]]
+            for link in list(self.decks.values()):
+                if not (link.linked and link.linked.get("state") == "ready" and link.deck.grid and link.deck.enabled):
+                    continue
+                key, source = self.linked_key(link, devices)
+                if not key or link.audio_key == key or link.linked_applied != key:
+                    continue
+                failed = self.audio_failed.get(key)
+                if failed and time.time() - failed[0] < 60:
+                    continue
+                self.fetch_linked_audio(link, key, source)
+                if self.runtime.stopping.is_set():
+                    return
+
+    def audio_state(self, link, state, **extra):
+        """What the page is told of a deck's reading of its audio: told again for a new state, or every tenth of it."""
+        old = link.linked_audio or {}
+        new = dict(extra, state=state)
+        step = lambda s: int(10 * s.get("done", 0) / s["total"]) if s.get("total") else 0
+        if old.get("state") != state or step(old) != step(new) or state != "reading":
+            link.linked_audio = new
+            self.world.changed()
+        else:
+            link.linked_audio = new
+
+    def track_path(self, client, source, slot, rbid):
+        """The path of the track's audio file on the media, from its export.pdb, which is read again only when it changed."""
+        from ..nfs import NotFound
+        from .pdb import parse_tracks
+        media = (source["ip"], source["mac"], slot)
+        handle, attributes = client.open(slot, "PIONEER/rekordbox/export.pdb")
+        stamp = (attributes["size"], attributes["mtime"])
+        cached = self.pdbs.get(media)
+        if not cached or cached[0] != stamp:
+            parts = []
+            client.read(handle, attributes["size"], parts.append, limit=self.AUDIO_LIMIT)
+            self.pdbs[media] = cached = (stamp, parse_tracks(b"".join(parts)))
+            while len(self.pdbs) > 4:
+                self.pdbs.popitem(last=False)
+        track = cached[1].get(rbid)
+        if not track or not track["path"]:
+            raise NotFound("track %d is not in the media's export.pdb" % rbid)
+        return track["path"]
+
+    def fetch_linked_audio(self, link, key, source):
+        import tempfile
+        from .. import nfs, uploads
+        from ..audio import AudioError
+        slot, rbid = key[3], key[4]
+        self.audio_state(link, "reading", done=0, total=None)
+        try:
+            with nfs.Client(source["ip"], link.address, self.nfs_portmap) as client:
+                path = self.track_path(client, source, slot, rbid)
+                handle, attributes = client.open(slot, path)
+                size = attributes["size"]
+                kept = self.audio_files.get((key, size, attributes["mtime"]))
+                if not kept or not os.path.isfile(kept):
+                    with tempfile.TemporaryFile() as part:
+                        client.read(handle, size, part.write, limit=self.AUDIO_LIMIT,
+                                    progress=lambda done: self.audio_state(link, "reading", done=done, total=size))
+                        part.seek(0)
+                        kept = uploads.keep(self.tracks_dir or uploads.default_dir(), path.replace("\\", "/").rsplit("/", 1)[-1],
+                                            part, size)
+                    self.audio_files[(key, size, attributes["mtime"])] = kept
+            self.audio_state(link, "decoding", file=os.path.basename(kept))
+            grid = link.deck.grid
+            if not grid or not self.world.set_audio(link.deck, kept, grid["bpm"], grid["first_ms"] / 1000.0,
+                                                    expect=lambda: link.linked_applied == key):
+                self.audio_state(link, "waiting")
+                return
+        except (nfs.NfsError, OSError, AudioError, ValueError, struct.error) as error:   # TimeoutError is an OSError
+            why = str(error) or type(error).__name__
+            self.audio_failed[key] = (time.time(), why)
+            self.audio_state(link, "failed", reason=why)
+            log("audio of track %d on %s not read: %s" % (rbid, source["ip"], why))
+            return
+        link.audio_key = key
+        self.audio_state(link, "ready", file=os.path.basename(kept))
+        self.world.events.add("linked_audio_read", deck=link.number, source=link.source, slot=slot, rbid=rbid,
+                              file=os.path.basename(kept))
 
     def linked_waveform(self, number):
         """GET /api/deck/N/track-waveform: the waveform of the real player's track a bench deck has loaded. (status, body)"""
@@ -1835,6 +1937,7 @@ class Prolink(Protocol):
         link.source, link.rbid = (deck.number if source is None else int(source)), rbid
         link.linked_applied = None                          # a real player's track: its grid is taken once read
         link.linked = None
+        link.audio_key = link.linked_audio = None
         origin = self.decks.get(link.source, link)          # the title is in the database of the player it comes from
         key = (link.slot, rbid)
         if title is not None:
@@ -1847,6 +1950,7 @@ class Prolink(Protocol):
         return {"strict": any(l.strict for l in links), "refuse_db": any(l.refuse_db for l in links),
                 "claim": self.claim, "mixer": self.mixer.on, "profile": self.profile, "observer": self.observer,
                 "player_control": self.control_on, "auto_track_info": self.auto_info, "auto_waveforms": self.auto_waves,
+                "track_audio": self.track_audio,
                 "model": links[0].name.decode() if len({l.name for l in links}) == 1 else ""}
 
     def set_option(self, name, value):
@@ -1866,7 +1970,7 @@ class Prolink(Protocol):
             self.claim = str(value) in ("1", "True")
             log("a deck that comes online %s" % ("claims its number first" if self.claim else "is there at once"))
             return True
-        if name in ("player_control", "auto_track_info", "auto_waveforms") and value in ("0", "1", 0, 1, True, False):
+        if name in ("player_control", "auto_track_info", "auto_waveforms", "track_audio") and value in ("0", "1", 0, 1, True, False):
             on = str(value) in ("1", "True")
             if name == "player_control":
                 self.control_on = on
@@ -1875,6 +1979,8 @@ class Prolink(Protocol):
                     self.release_held_cues()
             elif name == "auto_track_info":
                 self.auto_info = on
+            elif name == "track_audio":
+                self.track_audio = on
             else:
                 self.auto_waves = on
             log("%s %s" % (name.replace("_", " "), "on" if on else "off"))

@@ -272,6 +272,7 @@ def main(argv=None):
                    observer_auto=a.observe and a.observer_number is None,
                    auto_track_info=not a.no_track_info, auto_waveforms=not a.no_waveforms,
                    target=a.target or ("DJS-" if any(spec.split(":")[0] == "djs1000-emu" for _, spec in adapters) else None))
+    link.tracks_dir = a.tracks_dir                          # a real track's audio is kept with the files sent from the page
     if a.capture:
         try:
             link.monitor.record(a.capture)
