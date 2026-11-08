@@ -61,9 +61,8 @@ def follow_stop(d, previous, st, now):
     phase = d.get("phase")
     if before in ("playing", "looping") and state == "paused" and phase and phase[2] > 0 \
             and now - phase[0] < 4 * 60 / phase[2]:
-        # it stopped between the last status that said playing and this one
-        stop = (previous["seen"] + now) / 2
-        held = phase[1] + (stop - phase[0]) * phase[2] / 60
+        # it stopped as this status came: a player sends one at once when its state changes
+        held = phase[1] + (now - phase[0]) * phase[2] / 60
         held = min(max(held, r), r + 1) if abs(held - (r + 0.5)) < 1 else None
     elif state == "cued" and before == "paused":
         p = d.get("held")
@@ -73,6 +72,9 @@ def follow_stop(d, previous, st, now):
         held = d.get("cue")
     elif state == before:
         held = d.get("held")
+        # stopped right before a beat, it can still report that beat a moment later: it stands on it
+        if held is not None and r - 0.15 <= held < r - 0.001:
+            held = float(r)
     d["held"] = held if agrees(held) else None
     if state == "cued":
         d["cue"] = d["held"]
@@ -345,10 +347,18 @@ class Monitor:
             st["beat_window"] = [previous["seen"], now]
         else:
             st["beat_window"] = previous.get("beat_window")
+        # when its state last changed (as when it started), bench time
+        st["since"] = previous.get("since", now) if previous.get("state") == st["state"] else now
         # started from a stop: a beat from before it (the previous play or CUE hold) is not where it is now
-        if (previous.get("state") not in MOVING and st["state"] in MOVING and d.get("phase")
-                and d["phase"][0] < previous.get("seen", 0)):
-            d["phase"] = d["bar_phase"] = None
+        if previous.get("state") not in MOVING and st["state"] in MOVING:
+            if d.get("phase") and d["phase"][0] < previous.get("seen", 0):
+                d["phase"] = d["bar_phase"] = None
+            # where it starts from: where the bench followed it, else at a cue the beat after the reported one
+            r = previous.get("track_beat")
+            d["start_from"] = d.get("held") if d.get("held") is not None else (
+                float(r) if r is not None and previous.get("state") == "cued" else None)
+        elif st["state"] not in MOVING:
+            d["start_from"] = None
         if d["ours"]:
             d["status"] = st
         else:
@@ -396,6 +406,15 @@ class Monitor:
             if st and now - st["seen"] < 1.0 and st["track_beat"] is not None and st["bar"]:
                 delta = (bar - st["bar"] + 2) % 4 - 2
                 pos = st["track_beat"] - 1.0 + delta
+                # the first beat after a start from a stop: where it stood and the time since, at its tempo. Waiting at
+                # a cue a player reports the beat before it with the cue's bar, so the count above can be one short.
+                # The beat it starts on is often not sent: this one can be the next
+                start = d.get("start_from")
+                if start is not None and st.get("since") is not None and bpm > 0:
+                    first = float(round(start + (now - st["since"]) * bpm / 60))
+                    if abs(first - pos) <= 1:
+                        pos = first
+                d["start_from"] = None
             # The reported bar need not match the absolute track count.
             d["bar_phase"] = [now, bar - 1.0, bpm]
             d["beat_since_status"] = True

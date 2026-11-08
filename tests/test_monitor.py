@@ -107,6 +107,32 @@ class PhaseParsing(unittest.TestCase):
         self.assertIsNotNone(found["phase"])
 
 
+    def test_the_first_beat_from_a_cue_is_counted_from_where_it_stood(self):
+        """Waiting at a cue on beat 33 (bar 1) an XDJ reported beat 32 with bar 1, and its first beat packet came a
+        beat after it started (bar 2): beat 34, not 33. When it came at once (bar 1), it was beat 33."""
+        world = world_of(5)
+        net = Prolink(world)
+        monitor = net.monitor
+        link = net.decks[5]
+        for delay, bar, expected in ((0.473, 2, 33.0), (0.002, 1, 32.0)):
+            device = monitor.device("127.0.0.%d" % (9 + bar), 100.0, False)
+            def status(state, beat, now):
+                data = bytearray(link.status())
+                data[0x7B] = state
+                data[0x89] = (data[0x89] | 0x40) if state == 3 else (data[0x89] & ~0x40)
+                data[0xA0:0xA4] = beat.to_bytes(4, "big")
+                data[0xA6] = 1
+                monitor.status(device, data, now)
+            status(6, 32, 100.0)                                     # cued
+            status(3, 32, 100.2)                                     # PLAY: still beat 32, bar 1
+            beat = bytearray(link.beat(0.0))
+            beat[0x5C] = bar
+            beat[0x5A:0x5C] = (12690).to_bytes(2, "big")             # 126.9 BPM, a beat each 0.473 s
+            beat[0x55:0x58] = (0x100000).to_bytes(3, "big")
+            monitor.beat(device, bytes(beat), 100.2 + delay)
+            self.assertEqual(device["phase"][1], expected, (delay, bar))
+
+
 class Heard(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

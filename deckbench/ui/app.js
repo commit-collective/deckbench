@@ -402,12 +402,17 @@ function cueRun(d, st, running, now) {
   const b = st.track_beat - 1, rate = (st.bpm || st.track_bpm || 120) / 60;
   let seen = beatSeen[d.ip];
   if (!seen || !running || !seen.running) {
-    /* from a stop, PLAY or CUE held: where it stood (as the bench followed it), else its cue, else the beat after the
-       reported one, as the stopped strip was drawn, so the strip starts where it was and not a beat behind */
-    const near = (at) => at != null && at >= b - 0.001 && at <= b + 1.001;
-    const start = [seen && seen.stood, st.state === "cue playing" ? d.cue : null].find(near);
-    const from = running && seen && !seen.running ? (start != null ? start : b + 1) : b;
-    return beatSeen[d.ip] = {beat: b, t: now, at: from, running, stood: running ? null : d.held};
+    /* from a stop, PLAY or CUE held: where the stopped strip stood (where the bench followed it, else the beat after
+       the one it reported while stopped), from when the bench saw it start (status.since). The first statuses of a
+       start report the beat before the cue, then the cue's within a few hundredths of a second, and a player sends
+       no beat for the beat it starts on: the strip must not start from whichever of those the page saw first */
+    const near = (at) => at != null && at >= b - 1.001 && at <= b + 1.001;
+    if (running && seen && !seen.running && near(seen.stood)) {
+      const since = st.since != null && st.since <= now && now - st.since < 1 ? st.since : now;
+      return beatSeen[d.ip] = {beat: b, t: since, at: seen.stood, running};
+    }
+    return beatSeen[d.ip] = {beat: b, t: now, at: running ? b : null, running,
+                             stood: running ? null : (d.held != null ? d.held : b + 1)};
   }
   let at = seen.at + (now - seen.t) * rate;
   const win = st.beat_window;

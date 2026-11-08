@@ -4,6 +4,12 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- A start from a stop, PLAY or a held CUE, no longer runs a beat ahead or behind at random. A player sends no beat
+  for the beat it starts on, and at a cue it reports the beat before with the cue's bar. The strip now starts from
+  where the player stood, timed from its first status, and its first beat is counted from there. Checked against
+  a capture of an XDJ-1000MK2 and a CDJ-2000NXS2.
+- A pause is placed when its status comes, which players send at once, and a pause right before a beat keeps its
+  place when the player reports that beat a moment later.
 - PLAY or a held CUE from a stop starts the strip where the player stood, not a beat behind, and a beat from before
   the stop is no longer taken for the new start.
 - PLAY/PAUSE and CUE take effect sooner: the wait between connecting to a player and pressing is 0.1 s, down from
