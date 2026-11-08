@@ -1118,11 +1118,8 @@ class Prolink(Protocol):
     def info(self):
         devices = self.control_devices()
         now = time.time()
-        # a loaded track's info stays while it is loaded, so its title does not go and come back as it is read again
-        loaded = {self.metadata_key(device) for device in devices}
+        self.forget_unloaded_info(devices)
         with self._metadata_lock:
-            self.track_metadata = {key: (now, value[1]) if key in loaded else value
-                                   for key, value in self.track_metadata.items() if key in loaded or now - value[0] < 60}
             metadata = dict(self.track_metadata)
         for device in devices:
             key = self.metadata_key(device)
@@ -1195,10 +1192,19 @@ class Prolink(Protocol):
             return None, None, "enable an unused bench player 1 to 4, or use an observer in that range"
         return sender, peers[0], None
 
+    def forget_unloaded_info(self, devices):
+        """Track info is kept while its track is loaded, so its title does not go and come back, and forgotten once no
+        player has it: another USB or SD can hold another track with the same ID in the same slot (rekordbox counts
+        from 1 on each export)."""
+        loaded = {self.metadata_key(device) for device in devices if device.get("status")}
+        with self._metadata_lock:
+            self.track_metadata = {key: value for key, value in self.track_metadata.items() if key in loaded}
+
     def read_track_info(self):
         """Reads each player's track info by itself when its track changes (auto_track_info), as Read track info
         does. One that failed is tried again after 30 seconds. One that worked stays while its track is loaded."""
         while not self.runtime.stopping.wait(1.0):
+            self.forget_unloaded_info(self.monitor.snapshot())
             if not self.auto_info:
                 continue
             now = time.time()
@@ -1231,12 +1237,12 @@ class Prolink(Protocol):
 
     def read_waveforms(self):
         """Reads the waveform of each player's track by itself (auto_track_info), one at a time, outside the network
-        threads and the world lock. Drops one whose source has gone, or that no player has had loaded for a minute."""
+        threads and the world lock. Drops one as soon as no player has its track loaded: another USB or SD can hold
+        another track with the same ID in the same slot."""
         from ..waveforms import Unavailable, read_track_waveforms
         while not self.runtime.stopping.wait(1.0):
             now = time.time()
             devices = [d for d in self.monitor.snapshot() if d["online"]]
-            sources = {(d["ip"], d["number"], d["mac"]) for d in devices}
             wanted = {}
             for device in devices:
                 if device["kind"] == "player":
@@ -1247,9 +1253,9 @@ class Prolink(Protocol):
                 for key, entry in list(self.waves.items()):
                     if key in wanted:
                         entry["used"] = now
-                    elif key[:3] not in sources or now - entry["used"] > 60:
+                    else:
                         del self.waves[key]
-                self.wave_failed = {k: v for k, v in self.wave_failed.items() if now - v[0] < 60}
+                self.wave_failed = {k: v for k, v in self.wave_failed.items() if k in wanted and now - v[0] < 60}
                 todo = [k for k in wanted if k not in self.waves and k not in self.wave_failed]
             if not self.auto_waves or not todo:
                 continue

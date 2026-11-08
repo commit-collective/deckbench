@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- A track's title and waveform are forgotten once no player has it loaded, so a USB or SD swapped for another
+  whose track has the same ID in the same slot no longer shows the old ones.
 - A start from a stop, PLAY or a held CUE, no longer runs a beat ahead or behind at random. A player sends no beat
   for the beat it starts on, and at a cue it reports the beat before with the cue's bar. The strip now starts from
   where the player stood, timed from its first status, and its first beat is counted from there. Checked against
