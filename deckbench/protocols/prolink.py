@@ -1902,9 +1902,54 @@ class Prolink(Protocol):
                     return False, "the mixer is off"
         return True, ""
 
+    SLOTS = {"sd": 2, "usb": 3}
+
+    def player_do(self, params):
+        """A scenario's `player` step on a real player, by its number: a button (`press`), CUE held for `hold` seconds,
+        or a track to load (`load`, its rekordbox id, with `source` and `slot`). It goes through the same checks as the
+        page's own controls, Player control included. (ok, message)."""
+        try:
+            number = int(params["player"])
+        except (KeyError, TypeError, ValueError):
+            return False, "a player step needs `player`, a player number"
+        device = next((d for d in self.control_devices() if d["online"] and d["number"] == number), None)
+        if device is None:
+            return False, "no player %d on the link" % number
+        api = lambda kind, value, extra=None: self.player_api(["player", device["ip"], kind, value],
+                                                              dict({"number": [str(number)]}, **(extra or {})))
+        if "load" in params:
+            slot = params.get("slot", "usb")
+            slot = self.SLOTS.get(str(slot).lower(), slot)
+            code, body = api("load", str(params["load"]), {"source": [str(params.get("source", number))], "slot": [str(slot)]})
+        elif params.get("press") == "cue" and params.get("hold"):
+            code, body = api("command", "cue-down")
+            if code < 300:
+                end = time.monotonic() + float(params["hold"])
+                while time.monotonic() < end and not self.runtime.stopping.is_set():
+                    self.runtime.stopping.wait(min(1.0, max(0.0, end - time.monotonic())))
+                    self.keep_held_cue(device["ip"])
+                api("command", "cue-up")
+        elif "press" in params:
+            code, body = api("command", str(params["press"]))
+        else:
+            return False, "a player step needs `press` or `load`"
+        if code >= 300:
+            return False, body.get("error", "refused (%d)" % code)
+        return True, "sent to player %d (not confirmed: expect_player checks what it does)" % number
+
+    def player_state(self, number):
+        """What a real player says of itself, for a scenario's expect_player: its status (play, sync, master, on_air,
+        state, loop, bpm, pitch, bar, rbid...) and `online`. Empty when no such player was heard."""
+        device = next((d for d in self.monitor.snapshot() if d["number"] == number and d["kind"] == "player"), None)
+        if device is None:
+            return {}
+        return dict(device["status"] or {}, online=device["online"], model=device["model"])
+
     def action(self, name, params):
         if name == "mixer":
             return self.mixer_do(params)
+        if name == "player":
+            return self.player_do(params)
         return None
 
     def handle_api(self, parts, query):

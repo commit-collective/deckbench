@@ -53,6 +53,19 @@ Implement protocol facts independently and check the license before reusing any 
 - macOS hardware and local-software interoperability validation
 - NFS audio serving only as a separate, explicitly reviewed project
 
+## Record a mix, replay it on the players
+
+Scenarios can press a real player's buttons and load its tracks. A full automation pass could go further: record what
+the players do during a mix (the tracks they load, when they play, cue, sync and take the master, their tempo and loops)
+as a scenario, then replay it on the same players, which load each track and play it from the right place by themselves.
+
+- Record from what the players broadcast and the bench already reads (status, beats, track ids), into the scenario format
+- Replay only when the setup matches: the same players and numbers, the same media with the same track ids, else say what differs
+- Reach a position by what the players allow (cue, play, seek by beat jumps if a model takes them), and check it with
+  expect_player after each step
+- Leave the mixer out: its faders and EQs are not controlled from the network, so a replay sets the players and the
+  mix is done by hand
+
 ## The hosted page with an installed runtime
 
 A browser cannot speak Pro DJ Link (it has no UDP broadcasts or fixed ports), so something always runs on the machine

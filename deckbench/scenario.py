@@ -38,6 +38,11 @@ What a step does (`deck` is the player number where a deck is meant):
   unit             press a control of the device under test through the adapter: `press` (its name) or `send` (a raw line)
   mixer            do something with the simulated mixer: `on` (true or false), `master` (its master level), and for a
                    `channel`: its `fader` (0 to 100), `fader_start` (true or false), or a `command` (start or stop)
+  player           a real player on the network, by its number (`player`), with Player control on: `press` a button
+                   (play-pause, cue, sync-on, sync-off, master, start, stop), with `hold` seconds for CUE, or `load` a
+                   track (its rekordbox id, from `source`, the player whose media has it, and `slot`, usb or sd)
+  expect_player    what that player says of itself (`play`, `sync`, `master`, `on_air`, `state`, `loop`, `bpm`, `rbid`,
+                   `online`...) matches `match` within `within` seconds (default 5), as expect_unit
 
 Any step can have `when`, a match against the device under test (as in `expect_unit`): the step is done only if it holds
 at that moment, so a scenario can bring a device that keeps its state to where it starts: {"do": "unit", "press": "sync",
@@ -58,7 +63,7 @@ from .matching import explain, matches
 
 DECK_ACTIONS = ("on", "off", "play", "stop", "sync", "unsync", "master", "release", "loop", "unloop", "load", "tempo",
                 "unplug", "plug", "silence")
-ACTIONS = DECK_ACTIONS + ("loss", "log", "expect", "expect_unit", "expect_deck", "unit", "mixer")
+ACTIONS = DECK_ACTIONS + ("loss", "log", "expect", "expect_unit", "expect_deck", "unit", "mixer", "player", "expect_player")
 REQUIRES = ("unit", "adapter")
 
 
@@ -95,11 +100,14 @@ class Scenario:
             raise ScenarioError("step %r: %s needs a deck" % (step, do))
         for key, kinds in (("loop", ("beats",)), ("load", ("id",)), ("tempo", ("bpm",)), ("silence", ("seconds",)),
                            ("loss", ("percent",)), ("log", ("text",)), ("expect", ("event",)),
-                           ("expect_unit", ("match",)), ("expect_deck", ("match", "deck"))):
+                           ("expect_unit", ("match",)), ("expect_deck", ("match", "deck")), ("player", ("player",)),
+                           ("expect_player", ("player", "match"))):
             if do == key:
                 for need in kinds:
                     if need not in step:
                         raise ScenarioError("step %r: %s needs %s" % (step, do, need))
+        if do == "player" and ("press" in step) == ("load" in step):
+            raise ScenarioError("step %r: player needs press or load" % (step,))
 
     def run(self, world, clock=time.time, sleep=time.sleep, log=None, on_step=None, cancel=None):
         """Runs the steps against the World, at their times (`clock` and `sleep` can be replaced to test). The results.
@@ -210,6 +218,11 @@ class Scenario:
             write(step["text"])
         elif do == "mixer":
             return world.protocol_action("mixer", step)
+        elif do == "player":
+            return world.protocol_action("player", step)
+        elif do == "expect_player":
+            return Scenario.wait_for(lambda: world.player_state(int(step["player"])), step["match"],
+                                     float(step.get("within", 5)), float(step.get("for", 0)))
         elif do == "unit":
             if "press" in step:
                 return world.press_unit(control=step["press"])

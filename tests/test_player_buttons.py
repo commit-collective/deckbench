@@ -6,6 +6,7 @@ import unittest.mock
 
 import test_player_control as controls
 from deckbench.protocols import transport
+from deckbench.scenario import Scenario, ScenarioError
 
 # The datagrams of the test that worked on CDJ-3000 firmware (cdj3k-emu, 2026-11-05), as its logs recorded them.
 TESTED = {
@@ -227,6 +228,58 @@ class Buttons(unittest.TestCase):
         clash = dict(device, number=transport.CONTROLLER, ip="127.0.0.54", mac="02:00:00:00:00:54")
         self.net.monitor.devices[("127.0.0.54", transport.CONTROLLER)] = clash
         self.assertEqual(self.call("command", "cue")[0], 409)
+
+
+class ScenarioSteps(unittest.TestCase):
+    """A scenario's player and expect_player steps: the page's own controls on a real player, by its number."""
+    setUp = controls.PlayerControl.setUp
+    feed = controls.PlayerControl.feed
+    call = controls.PlayerControl.call
+    received = Buttons.received
+
+    def run_steps(self, *steps):
+        return [(ok, message) for _, ok, message in Scenario({"steps": list(steps)}).run(self.net.world)]
+
+    def test_a_bad_player_step_is_refused_when_it_is_read(self):
+        for step in ({"do": "player", "press": "cue"}, {"do": "player", "player": 2},
+                     {"do": "player", "player": 2, "press": "cue", "load": 1}, {"do": "expect_player", "player": 2}):
+            with self.subTest(step=step), self.assertRaises(ScenarioError):
+                Scenario({"steps": [step]})
+
+    def test_a_press_needs_player_control_and_a_player_there(self):
+        (ok, message), = self.run_steps({"do": "player", "player": 2, "press": "play-pause"})
+        self.assertFalse(ok)
+        self.assertIn("Player control", message)
+        (ok, message), = self.run_steps({"do": "player", "player": 4, "press": "play-pause"})
+        self.assertEqual((ok, message), (False, "no player 4 on the link"))
+
+    def test_a_press_and_a_held_cue_reach_the_player(self):
+        self.call("arm", "1")
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
+            receiver.bind((self.ip, self.net.ports.beat))
+            receiver.settimeout(2)
+            results = self.run_steps({"at": 0, "do": "player", "player": 2, "press": "play-pause"},
+                                     {"at": 0, "do": "player", "player": 2, "press": "cue", "hold": 0.3})
+            self.assertTrue(all(ok for ok, _ in results), results)
+            self.assertEqual(self.received(receiver, 8),
+                             [LEGACY["connect"], LEGACY["play-pause down"], LEGACY["play-pause up"], LEGACY["disconnect"],
+                              LEGACY["connect"], LEGACY["cue down"], LEGACY["cue up"], LEGACY["disconnect"]])
+        self.assertEqual(self.net.held, {})
+
+    def test_a_load_names_its_source_and_slot(self):
+        self.call("arm", "1")
+        with unittest.mock.patch.object(self.net, "load_player_track", return_value=(202, {"sent": True})) as load:
+            (ok, _), = self.run_steps({"do": "player", "player": 2, "load": 205})
+            self.assertTrue(ok)
+            self.assertEqual(load.call_args.args[1:], ("205", {"number": ["2"], "source": ["2"], "slot": ["3"]}))
+            self.run_steps({"do": "player", "player": 2, "load": 7, "source": 1, "slot": "sd"})
+            self.assertEqual(load.call_args.args[2], {"number": ["2"], "source": ["1"], "slot": ["2"]})
+
+    def test_expect_player_reads_what_the_player_says(self):
+        results = self.run_steps({"do": "expect_player", "player": 2, "match": {"online": True, "play": False}, "within": 1},
+                                 {"do": "expect_player", "player": 2, "match": {"play": True}, "within": 0.2},
+                                 {"do": "expect_player", "player": 4, "match": {"online": True}, "within": 0.2})
+        self.assertEqual([ok for ok, _ in results], [True, False, False])
 
 
 if __name__ == "__main__":

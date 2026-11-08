@@ -4,6 +4,9 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- A scenario can play real players: a `player` step presses a button (CUE held for a while too) or loads a track on a
+  player by its number, with Player control on, and `expect_player` checks what that player says of itself.
+
 - A bench deck's header is a player's: it opens to all of it, with where its track comes from, its grid and its audio
   on a line of their own and the state under. Opening moves neither the number nor the name. The state is in one order
   on both, ON AIR first, and the folded tags are at the right with their rows balanced. A bench deck shows MASTER and

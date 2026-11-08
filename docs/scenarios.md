@@ -46,7 +46,26 @@ from the start), `do`, and what the action needs. `deck` is the player number.
 | `unit` (`press` or `send`) | press a control of the device under test through an adapter, or send it a raw line |
 | `mixer` (`on`, `master`, `channel` with `fader`, `fader_start` or `command`) | the simulated mixer: switch it on, put its master level up or down, move a channel's fader (0 to 100), turn its fader start on, or tell its player to `start` or `stop` (see [mixer.md](mixer.md)) |
 
+| `player` (`player`, then `press` or `load`) | a real player on the network, by its number, with Player control on in Settings: `press` one of its buttons (`play-pause`, `cue`, `sync-on`, `sync-off`, `master`, or `start` and `stop` for fader start), `cue` with `hold` (seconds) to keep CUE down that long, or `load` a track by its rekordbox id from `source` (the player whose media has it, the player itself by default) and `slot` (`usb` by default, or `sd`) |
+| `expect_player` (`player`, `match`, `within`, `for`) | what that player says of itself: `play`, `sync`, `master`, `on_air`, `state`, `loop`, `bpm`, `pitch`, `bar`, `rbid`, `online`... (`within` is 5 by default) |
+
 `load` can also take `source` (the player whose database the track is in) and `slot`.
+
+A `player` step is sent, never confirmed: the player may ignore it (a button it does not take, a track it is playing), so
+follow it with an `expect_player` when the result matters. Its button presses are experimental and were tried on the
+CDJ-2000NXS2 and XDJ-1000MK2 (see [link.md](link.md)). A step with `hold` lasts as long as the hold, and the steps after it
+wait for it. For example, a player loads a track from its own USB, cues and plays, and the scenario checks that it plays:
+
+```json
+{"name": "a real player plays a track",
+ "steps": [
+   {"at": 0,  "do": "player", "player": 2, "load": 205},
+   {"at": 3,  "do": "expect_player", "player": 2, "match": {"rbid": 205}},
+   {"at": 4,  "do": "player", "player": 2, "press": "cue", "hold": 2},
+   {"at": 7,  "do": "player", "player": 2, "press": "play-pause"},
+   {"at": 7,  "do": "expect_player", "player": 2, "match": {"play": true}, "within": 3}
+ ]}
+```
 
 On the page: the **Scenario** tab has the JSON in an editor that says what is wrong with it and where, the examples that come with
 the bench (`deckbench/examples`, which `--scenario` plays too), the scenarios kept in the browser, OPEN and DOWNLOAD for files, RUN and

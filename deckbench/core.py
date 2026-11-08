@@ -128,6 +128,15 @@ class World:
                 return result
         return False, "nothing here does %s" % name
 
+    def player_state(self, number):
+        """What a real player on the network says of itself (see expect_player), {} if none was heard."""
+        for protocol in self.protocols:
+            read = getattr(protocol, "player_state", None)
+            state = read(number) if read else None
+            if state:
+                return state
+        return {}
+
     def press_unit(self, control=None, line=None):
         """Presses a control of the device under test through an adapter that has it (or sends a raw command line).
         (True, "") or (False, why)."""

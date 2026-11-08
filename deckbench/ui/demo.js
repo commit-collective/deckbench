@@ -446,6 +446,7 @@ class DemoBench {
         }
       }
       case "expect_deck": return this.waitFor(() => this.snapshot().decks[Number(step.deck)] || {}, step.match || {}, step.within ?? 2);
+      case "player": case "expect_player": return [false, step.do + " needs a real player, and the demo has none"];
       default: return [false, step.do + " needs a device under test, and the demo has none"];
     }
   }
