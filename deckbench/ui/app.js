@@ -1097,7 +1097,7 @@ function renderNetwork() {
 
 /* ---- settings ---- */
 
-for (const name of ["strict", "refuse_db", "claim", "player_control", "auto_track_info", "auto_waveforms", "track_audio"]) {
+for (const name of ["strict", "refuse_db", "claim", "player_control", "auto_track_info", "auto_waveforms", "track_audio", "keep_track_audio"]) {
   $(name).addEventListener("click", () => act("api/settings/" + name + "/" + ($(name).getAttribute("aria-checked") === "true" ? 0 : 1)));
 }
 $("profile").addEventListener("change", (e) => act("api/settings/profile/" + (e.target.value || "default")));
@@ -1106,7 +1106,7 @@ $("model").addEventListener("keydown", (e) => { if (e.key === "Enter") $("models
 
 function renderSettings() {
   const s = S.state, set = settingsOf(s), b = s.bench || {};
-  for (const name of ["strict", "refuse_db", "claim", "player_control", "auto_track_info", "auto_waveforms", "track_audio"]) $(name).setAttribute("aria-checked", String(!!set[name]));
+  for (const name of ["strict", "refuse_db", "claim", "player_control", "auto_track_info", "auto_waveforms", "track_audio", "keep_track_audio"]) $(name).setAttribute("aria-checked", String(!!set[name]));
   if (document.activeElement !== $("model")) $("model").value = set.model || "";
   const profile = $("profile"), titles = b.profiles || {};
   if (profile.options.length !== Object.keys(titles).length + 1) {
@@ -1157,7 +1157,8 @@ $("sound").addEventListener("click", async () => {
     $("sound").setAttribute("aria-pressed", String(on));
     $("sound").textContent = on ? "Listening" : "Listen";
     if (on && S.state && !Sound.sources(S.state, Sound.options).length) {
-      toast("No audible decks yet. Check playback, Sound settings and mixer on-air state.", "warn");
+      toast("Listening. Nothing plays now: a deck is heard once it plays, and with a mixer only while it is on air. " +
+            "A real player is heard as a beat, not its music. If one plays and is not heard, check the Sound settings.", "warn");
     }
   } catch (e) {
     toast(e.message || "The browser would not start the sound.");

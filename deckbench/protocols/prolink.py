@@ -687,7 +687,9 @@ class Prolink(Protocol):
         self.control_on, self.auto_info, self.auto_waves = not self.observer, bool(auto_track_info), bool(auto_waveforms)
         # a bench deck's real track: its audio, read from the player's media over NFS (read_linked_audio)
         self.track_audio = True
-        self.tracks_dir = None              # where the files read are kept (uploads.default_dir() if None)
+        self.keep_track_audio = False       # kept between runs, in the folder of the files sent from the page (audio_folder)
+        self.tracks_dir = None              # that folder (uploads.default_dir() if None)
+        self.session_audio = None           # else this run's own folder, removed when the bench stops
         self.nfs_portmap = 111              # the players' portmapper (a test's own server is elsewhere)
         self.pdbs = collections.OrderedDict()   # (address, MAC, slot): ((size, mtime), {id: {title, path}}) of its export.pdb
         self.audio_files = {}               # (key, size, mtime): the file kept
@@ -831,6 +833,10 @@ class Prolink(Protocol):
         self.player_controls.clear()
         result = self.runtime.close()
         self.monitor.close()
+        if self.session_audio:                  # the real tracks' audio read during this run
+            import shutil
+            shutil.rmtree(self.session_audio, ignore_errors=True)
+            self.session_audio = None
         return result
 
     def accepts_source(self, address):
@@ -1317,6 +1323,29 @@ class Prolink(Protocol):
         else:
             link.linked_audio = new
 
+    SESSION_PREFIX = "deckbench-audio-"
+
+    def audio_folder(self):
+        """Where a real track's audio goes: with Keep a loaded track's audio on, the folder of the files sent from the
+        page, kept between runs and trimmed as they are. Else a folder of this run's own in the system's temporary
+        folder, removed when the bench stops. One a run left behind (it did not stop) is removed a day later."""
+        from .. import uploads
+        if self.keep_track_audio:
+            return self.tracks_dir or uploads.default_dir()
+        if not self.session_audio or not os.path.isdir(self.session_audio):
+            import shutil
+            import tempfile
+            base = tempfile.gettempdir()
+            for name in os.listdir(base):
+                path = os.path.join(base, name)
+                try:
+                    if name.startswith(self.SESSION_PREFIX) and time.time() - os.path.getmtime(path) > 86400:
+                        shutil.rmtree(path, ignore_errors=True)
+                except OSError:
+                    pass
+            self.session_audio = tempfile.mkdtemp(prefix=self.SESSION_PREFIX)
+        return self.session_audio
+
     def track_path(self, client, source, slot, rbid):
         """The path of the track's audio file on the media, from its export.pdb, which is read again only when it changed."""
         from ..nfs import NotFound
@@ -1340,6 +1369,7 @@ class Prolink(Protocol):
         import tempfile
         from .. import nfs, uploads
         from ..audio import AudioError
+        folder = self.audio_folder()
         slot, rbid = key[3], key[4]
         self.audio_state(link, "reading", done=0, total=None)
         try:
@@ -1347,15 +1377,14 @@ class Prolink(Protocol):
                 path = self.track_path(client, source, slot, rbid)
                 handle, attributes = client.open(slot, path)
                 size = attributes["size"]
-                kept = self.audio_files.get((key, size, attributes["mtime"]))
+                kept = self.audio_files.get((key, size, attributes["mtime"], folder))
                 if not kept or not os.path.isfile(kept):
                     with tempfile.TemporaryFile() as part:
                         client.read(handle, size, part.write, limit=self.AUDIO_LIMIT,
                                     progress=lambda done: self.audio_state(link, "reading", done=done, total=size))
                         part.seek(0)
-                        kept = uploads.keep(self.tracks_dir or uploads.default_dir(), path.replace("\\", "/").rsplit("/", 1)[-1],
-                                            part, size)
-                    self.audio_files[(key, size, attributes["mtime"])] = kept
+                        kept = uploads.keep(folder, path.replace("\\", "/").rsplit("/", 1)[-1], part, size)
+                    self.audio_files[(key, size, attributes["mtime"], folder)] = kept
             self.audio_state(link, "decoding", file=os.path.basename(kept))
             grid = link.deck.grid
             if not grid or not self.world.set_audio(link.deck, kept, grid["bpm"], grid["first_ms"] / 1000.0,
@@ -1950,7 +1979,7 @@ class Prolink(Protocol):
         return {"strict": any(l.strict for l in links), "refuse_db": any(l.refuse_db for l in links),
                 "claim": self.claim, "mixer": self.mixer.on, "profile": self.profile, "observer": self.observer,
                 "player_control": self.control_on, "auto_track_info": self.auto_info, "auto_waveforms": self.auto_waves,
-                "track_audio": self.track_audio,
+                "track_audio": self.track_audio, "keep_track_audio": self.keep_track_audio,
                 "model": links[0].name.decode() if len({l.name for l in links}) == 1 else ""}
 
     def set_option(self, name, value):
@@ -1970,7 +1999,8 @@ class Prolink(Protocol):
             self.claim = str(value) in ("1", "True")
             log("a deck that comes online %s" % ("claims its number first" if self.claim else "is there at once"))
             return True
-        if name in ("player_control", "auto_track_info", "auto_waveforms", "track_audio") and value in ("0", "1", 0, 1, True, False):
+        if name in ("player_control", "auto_track_info", "auto_waveforms", "track_audio", "keep_track_audio") \
+                and value in ("0", "1", 0, 1, True, False):
             on = str(value) in ("1", "True")
             if name == "player_control":
                 self.control_on = on
@@ -1981,6 +2011,8 @@ class Prolink(Protocol):
                 self.auto_info = on
             elif name == "track_audio":
                 self.track_audio = on
+            elif name == "keep_track_audio":
+                self.keep_track_audio = on
             else:
                 self.auto_waves = on
             log("%s %s" % (name.replace("_", " "), "on" if on else "off"))

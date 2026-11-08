@@ -152,6 +152,10 @@
         <div class="what"><b>Read a loaded track's audio</b><span>A bench deck that loads a real player's track reads its audio file from that player's SD or USB, as a player loading a linked track does, and plays it instead of its drum loop. A file other than a WAV needs ffmpeg on the bench's machine.</span></div>
         <button class="switch" role="switch" id="track_audio" aria-checked="false" aria-label="Read a loaded track's audio"></button>
       </div>
+      <div class="setting">
+        <div class="what"><b>Keep a loaded track's audio</b><span>Off: the audio read from a player is kept only while the bench runs, in a temporary folder removed when it stops. On: it is kept with the files sent from the page, so the track loads again at once, until it goes unused for a month.</span></div>
+        <button class="switch" role="switch" id="keep_track_audio" aria-checked="false" aria-label="Keep a loaded track's audio"></button>
+      </div>
       <h2>Behaviour</h2>
       <div class="setting">
         <div class="what"><b>Strict decks</b><span>Serve the players 1 to 4 that announced themselves and nobody else, as a CDJ-2000NXS2 or an XDJ-1000MK2 does.</span></div>

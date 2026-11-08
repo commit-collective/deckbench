@@ -3,6 +3,7 @@
 bench deck that plays a real player's track getting its audio that way."""
 import io
 import os
+import shutil
 import socket
 import struct
 import tempfile
@@ -143,6 +144,7 @@ class TrackAudio(unittest.TestCase):
         self.folder = tempfile.mkdtemp()
         self.addCleanup(lambda: [os.remove(os.path.join(self.folder, f)) for f in os.listdir(self.folder)])
         self.net.tracks_dir = self.folder
+        self.addCleanup(lambda: self.net.session_audio and shutil.rmtree(self.net.session_audio, ignore_errors=True))
         export = pdb.build_pdb({57: ("Real träck", "/Contents/Someone/Real track.wav"), 58: ("Other", "")})
         self.player_media = FakePlayer({"/C/PIONEER/rekordbox/export.pdb": export,
                                         "/C/Contents/Someone/Real track.wav": wav_bytes()}, address=self.ip)
@@ -162,7 +164,8 @@ class TrackAudio(unittest.TestCase):
         audio = self.deck.audio
         self.assertIsNotNone(audio)
         self.assertEqual((audio.bpm, audio.offset), (125.5, 0.25))      # made at the grid's tempo, from its first beat
-        self.assertTrue(audio.path.startswith(self.folder) and audio.path.endswith("Real track.wav"))
+        self.assertTrue(audio.path.startswith(self.net.session_audio) and audio.path.endswith("Real track.wav"))
+        self.assertEqual(os.listdir(self.folder), [])                   # not kept with the page's files
         self.assertEqual(self.net.describe(self.deck)["linked_audio"]["state"], "ready")
         self.assertEqual(self.deck.grid["first"], 3)                    # the track and its grid stay
         self.assertEqual(self.world.events.since(0)[-1]["kind"], "linked_audio_read")
@@ -183,6 +186,17 @@ class TrackAudio(unittest.TestCase):
         self.world.load_track(self.deck, 58, source=2, slot=3)
         self.assertIsNone(self.deck.audio)
         self.assertIsNone(self.net.describe(self.deck)["linked_audio"])
+
+    def test_the_audio_goes_when_the_bench_stops_unless_it_is_kept(self):
+        self.world.load_track(self.deck, 57, source=2, slot=3)
+        self.rounds(2)
+        self.audio_rounds(1)
+        session = self.net.session_audio
+        self.assertTrue(os.path.isfile(self.deck.audio.path))
+        self.net.stop()
+        self.assertFalse(os.path.exists(session))
+        self.net.set_option("keep_track_audio", "1")
+        self.assertEqual(self.net.audio_folder(), self.folder)
 
     def test_nothing_is_read_with_the_setting_off(self):
         self.net.set_option("track_audio", "0")

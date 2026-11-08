@@ -118,7 +118,8 @@ Options (`python -m deckbench --help`):
     GET  /api/deck/<n>/audio.wav      the deck's sound file as a WAV, which the page's Listen button plays for it (404 if it has none)
     GET  /api/deck/<n>/waveform       its loudness, 100 values a second of 0 to 100, which the deck's strip draws behind its grid
     POST /api/deck/<n>/unplug         the cable is pulled (also plug, and silence/<seconds>)
-    POST /api/settings/<name>/<value> strict, refuse_db, player_control, auto_track_info, auto_waveforms and track_audio (0 or 1),
+    POST /api/settings/<name>/<value> strict, refuse_db, player_control, auto_track_info, auto_waveforms, track_audio and
+                                      keep_track_audio (0 or 1),
                                       model (the name the decks announce)
     GET  /api/unit                    what is known of the device under test (the network's word, and the adapters')
     POST /api/unit/press/<control>    press a control of the device under test through an adapter
@@ -193,10 +194,12 @@ itself when it is a player 1 to 4, else as an unused bench player 1 to 4 or the 
 
 Once the grid is read, the bench reads the track's audio too, as a player loading a linked track does: it finds the
 file in the media's `PIONEER/rekordbox/export.pdb` and reads it over NFS (the SD as `/B/`, the USB as `/C/`, read
-only), from the deck's own address. The file is kept with the files sent from the page, and the deck plays it
-instead of its drum loop, made at the grid's tempo with its first beat where the grid has it. So the deck sounds like
+only), from the deck's own address. The file is kept in a temporary folder of the run's own, removed when the bench
+stops, and the deck plays it instead of its drum loop, made at the grid's tempo with its first beat where the grid has it. So the deck sounds like
 the track, in the page's Listen and on the sound port. A file other than a WAV needs ffmpeg. A track of 300 MB or
-more is not read. **Read a loaded track's audio** in Settings (`track_audio`) turns this off. Media that has only a
+more is not read. **Read a loaded track's audio** in Settings (`track_audio`) turns this off. **Keep a loaded track's audio**
+(`keep_track_audio`) keeps the files with those sent from the page instead, so a track loads again at once in a later
+run, until it goes unused for a month. Media that has only a
 Device Library Plus database (`exportLibrary.db`) is not read. Each deck has `linked_audio`: a `state` (`reading`
 with `done` and `total` bytes, `decoding`, `ready` with the `file`, or `failed` with a `reason`), and the event
 `linked_audio_read` says it plays the track.
