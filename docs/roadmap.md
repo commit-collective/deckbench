@@ -53,6 +53,19 @@ Implement protocol facts independently and check the license before reusing any 
 - macOS hardware and local-software interoperability validation
 - NFS audio serving only as a separate, explicitly reviewed project
 
+## The hosted page with an installed runtime
+
+A browser cannot speak Pro DJ Link (it has no UDP broadcasts or fixed ports), so something always runs on the machine
+cabled to the players. The bench can become that runtime, with the hosted page as its usual screen:
+
+- Package the bench as one executable for each system, so nothing else is installed (it needs only the standard
+  library, plus the optional QR package)
+- Run it in the background from login, as a service or a tray app, with the hosted page finding it on `127.0.0.1`
+  by itself: no terminal and no address to type
+- Keep the page working with older runtimes, from the version the bench reports, since the page updates on deploy
+  and the runtime only when its user updates it
+- Sign the executables for macOS and Windows, and say what the firewall asks on the first run
+
 ## A deck API of its own, eventually
 
 The protocol layer could become a library apart from the bench: one model of a deck (state, beats, track, tempo) and
