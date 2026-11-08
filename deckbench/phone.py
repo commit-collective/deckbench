@@ -112,6 +112,19 @@ def pairing_url(address, port, token):
     return APP + "#" + urlencode({"bench": "http://%s:%d" % (ip, port), "token": token})
 
 
+def qr_matrix(url):
+    """The QR of `url` as rows of "1" (dark) and "0", without the quiet zone, for the page to draw. None without the
+    optional qrcode package."""
+    try:
+        import qrcode
+    except ImportError:
+        return None
+    qr = qrcode.QRCode(border=0)
+    qr.add_data(url)
+    qr.make(fit=True)
+    return ["".join("1" if dark else "0" for dark in row) for row in qr.get_matrix()]
+
+
 def print_qr(url, out):
     """Print a QR locally when the optional qrcode package is installed."""
     try:

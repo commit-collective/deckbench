@@ -80,7 +80,8 @@ Options (`python -m deckbench --help`):
 - `--model NAME`: the device name the decks announce (default `CDJ-FAKEn`)
 - `--http-port PORT` (default 8750, -1 for none), `--http-host ADDRESS`
 - `--phone`: enable token-protected access for the hosted page and print a pairing link and, with the optional `phone`
-  extra installed, a terminal QR. `--phone-address IPv4` selects the address reachable from the phone
+  extra installed, a terminal QR. Without it, the page's **Phone** button shares the bench on demand (docs/phone.md).
+  `--phone-address IPv4` selects the address reachable from the phone, for both
 - `--network-info`: list interface information without starting the bench or changing the network
 - `--allow-origin ORIGIN`: a page of that origin (the hosted page, `https://commitcollective.cc`) may use the API, with CORS. Every other
   site is refused, since any web page can reach a bench on localhost otherwise. Repeat for more
@@ -109,6 +110,9 @@ Options (`python -m deckbench --help`):
     POST /api/deck/<n>/audio/clear    the deck's drum loop again
     POST /api/audio/source/<n|all>    the sound port plays only deck n (the unit's input is one CDJ), or all the decks again
     GET  /api/uploads                 where the bench keeps the files the page sent and what it holds: {"dir", "files", "bytes"}
+    GET  /api/share                   how the bench is shared with phones: on, fixed (--phone), url, direct, address, port, addresses, qr.
+                                      Only for the page on the bench's machine. POST /api/share/on?address=<IPv4> and /api/share/off
+                                      start and stop sharing (docs/phone.md)
     POST /api/uploads/clear           remove them (a file a deck has loaded stays): {"removed", "bytes"}
     POST /api/upload?name=<file>      the body is a sound file from the page's computer: the bench keeps it and answers {"path": ...}
     GET  /api/deck/<n>/audio.wav      the deck's sound file as a WAV, which the page's Listen button plays for it (404 if it has none)

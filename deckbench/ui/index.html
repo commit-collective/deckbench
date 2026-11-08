@@ -20,6 +20,7 @@
   <div class="actions">
     <button class="btn small" id="sound" aria-pressed="false" title="Listen here: play each deck's beat in this browser (not what a unit hears, which is the sound port). With a mixer on, only the decks on air are heard">Listen</button>
     <button class="btn small" id="changebench" hidden></button>
+    <button class="btn small" id="phone" hidden aria-pressed="false" title="Open this bench on a phone: a QR code to scan, for phones on this network">Phone</button>
     <button class="btn small" id="allon" title="Switch every deck on (except one that has the unit's number)">All on</button>
     <button class="btn small" id="alloff" title="Switch every deck off">All off</button>
   </div>
@@ -201,6 +202,23 @@
     <p class="hint" id="connmsg"></p>
     <div class="toolbar"><button class="btn primary" id="connok">Connect</button><span class="grow"></span>
       <button class="btn" id="conndemo" title="A bench made of JavaScript in this page: no network needed">Try the demo</button></div>
+  </div>
+</div>
+<div id="phonebox" class="overlay" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="phonetitle">
+    <h1 id="phonetitle">Open it on a phone</h1>
+    <p id="phonewhat"></p>
+    <canvas class="qr" id="phoneqr" width="264" height="264" hidden aria-label="QR code of the link"></canvas>
+    <pre id="phonelink" hidden></pre>
+    <label id="phoneaddrrow">The address phones reach this computer at<select id="phoneaddr"></select></label>
+    <p class="hint" id="phonemsg"></p>
+    <div class="toolbar">
+      <button class="btn primary" id="phoneon">Share on this network</button>
+      <button class="btn" id="phonecopy" hidden>Copy the link</button>
+      <span class="grow"></span>
+      <button class="btn danger" id="phoneoff" hidden>Stop sharing</button>
+      <button class="btn" id="phoneclose">Close</button>
+    </div>
   </div>
 </div>
 <div id="toasts" role="status" aria-live="polite"></div>

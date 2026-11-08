@@ -168,7 +168,8 @@ def main(argv=None):
     ap.add_argument("--phone", action="store_true",
                     help="enable token-protected phone access and show a pairing link and QR when available")
     ap.add_argument("--phone-address", metavar="IPv4",
-                    help="the PC address reachable from the phone (default: the OS default route address)")
+                    help="the PC address reachable from the phone, for --phone and the page's Phone button "
+                         "(default: the OS default route address)")
     ap.add_argument("--network-info", action="store_true",
                     help="show local interfaces and addresses without starting the bench or changing the network")
     ap.add_argument("--tracks-dir", metavar="DIR",
@@ -191,8 +192,6 @@ def main(argv=None):
     if a.network_info:
         return phone.network_info(sys.stdout)
 
-    if a.phone_address and not a.phone:
-        ap.error("--phone-address requires --phone")
     if a.phone:
         if a.http_port < 0:
             ap.error("--phone needs the HTTP server")
@@ -348,7 +347,8 @@ def main(argv=None):
     network = NetworkSetup(link, a.dj_interface, netmask=a.netmask) if a.http_port >= 0 else None
     world.info['cli_scenarios'] = bool(scenarios)
     try:
-        server = serve(world, a.http_host, a.http_port, a.allow_origin, token, a.tracks_dir, network=network) \
+        server = serve(world, a.http_host, a.http_port, a.allow_origin, token, a.tracks_dir, network=network,
+                       phone_address=a.phone_address) \
             if a.http_port >= 0 else None
     except OSError as e:
         link.stop()
@@ -370,6 +370,8 @@ def main(argv=None):
             log("phone: no usable default-route IPv4 address, specify --phone-address")
         else:
             log("phone pairing link: %s" % url)
+            server.set_phone_link(url, "http://%s:%d/#token=%s" % (address, server.server_address[1], quote(token, safe="")),
+                                  address, server.server_address[1])
             log("phone: use Wi-Fi that can reach %s, or specify --phone-address" % address)
             if not phone.print_qr(url, sys.stdout):
                 log("phone: QR unavailable. Install qrcode and use a Unicode-capable terminal")

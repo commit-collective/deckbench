@@ -32,6 +32,23 @@ Replace the name with the DJ adapter's actual name and choose an unused player n
 addresses and their mask. It does not change the adapter. For more than one deck, the adapter needs a distinct address
 for each deck. If it has too few addresses or multiple subnets, the command stops with an explanation.
 
+### The Phone button
+
+A bench started without `--phone` answers its own machine only. **Phone**, at the top of the page on that machine,
+shares it on demand: choose the address phones reach this computer at (the default route's is offered first, or the
+one given with `--phone-address`), then **Share on this network**. The bench then also listens on that address, with a
+token of its own and the hosted site allowed, and the dialog shows the QR code and the link. The page on this
+computer keeps working as before, without a token. **Stop sharing** closes the phones' connections and forgets the
+token. A new share has a new one.
+
+Only the page on the bench's own machine, opened through `127.0.0.1` or `localhost`, sees the button and the link,
+and can start or stop sharing. A phone cannot, and neither can another site's page. Started with `--phone`, the bench
+already shares: the button shows the link and the QR, and sharing lasts until the bench stops. The QR needs the
+optional package below. Without it the dialog gives the link to copy. Windows may ask once whether Python can accept
+connections on that network.
+
+### Starting with `--phone`
+
 Alternatively, start the bench with `--phone` and explicit DJ network addresses:
 
     python -m deckbench --phone --numbers 2,3 --on --bind 169.254.100.1,169.254.100.2 --netmask 255.255.0.0

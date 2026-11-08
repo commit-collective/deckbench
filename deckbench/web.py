@@ -57,6 +57,11 @@
     POST /api/audio/source/<n|all>   the sound port plays only deck n (the unit's input is one CDJ), or all the decks again: the state's
                                      bench.audio_source says which. The emulator's deck does it when the INPUT SOURCE knob is turned
     GET  /api/uploads                the folder and what it holds: {"dir", "files", "bytes"}
+    GET  /api/share                  sharing the bench with phones on this network: {"on", "fixed", "url", "direct", "address", "port",
+                                     "addresses", "qr"}. Only for a page on this machine (403 elsewhere)
+    POST /api/share/on?address=<IPv4>  listen on that address too (default: the one the phone is likely to reach), with a token of its own,
+                                     for the hosted page: answers as GET. 409 when the bench was started with --phone, which shares already
+    POST /api/share/off              stop: the phones' connections close and the token is forgotten
     POST /api/uploads/clear          removes the sent files (not one a deck has loaded): {"removed", "bytes"}
 
 The page (deckbench/ui: index.html, app.css, app.js, no build step and no packages) follows /api/stream and counts the
@@ -64,9 +69,12 @@ beat squares on from each deck's phase, so it needs nothing but a browser, on th
 (by default it listens on 127.0.0.1 only).
 """
 import hmac
+import ipaddress
 import json
 import os
 import re
+import secrets
+import subprocess
 import threading
 import sys
 import time
@@ -106,6 +114,8 @@ class Server(ThreadingHTTPServer):
     # at once, with other programs asking too): the connection that does not fit is held back a second (or, through WSL's forwarding of
     # localhost, refused), and the page says the bench does not answer.
     request_queue_size = 128
+    # each listener's own: the token it wants, the other origins it allows, whether it is the phones' and has been stopped
+    token, allowed, shared, closed = None, frozenset(), False, False
 
     def server_bind(self):
         """As HTTPServer's, without the reverse lookup of the address (socket.getfqdn), which can take many seconds on a machine
@@ -121,15 +131,23 @@ class Server(ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
-def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, tracks=None, network=None):
+def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, tracks=None, network=None, phone_address=None):
     """Starts the server in a thread; returns it.
 
     A request to the API that comes from a page (it has an Origin header) is refused unless that page is the bench's own
     or its origin is in `allow_origins` (for a page hosted elsewhere, such as https://commitcollective.cc), which is
     then given the CORS headers it needs, a preflight for a private network included. With a `token` the API wants it,
     as `?token=...` or `Authorization: Bearer ...`. The page's own files are served to anyone who can reach the port. The files the page
-    sends are kept in the folder `tracks` (default uploads.default_dir())."""
+    sends are kept in the folder `tracks` (default uploads.default_dir()).
+
+    A page on this machine can share the bench with phones (/api/share): a second listener on an address of the local
+    network, with a token of its own and the hosted page allowed, which stops when asked. `phone_address` is the address
+    it offers first. The returned server's set_phone_link(url, direct, address, port) says the bench already shares
+    (started with --phone): the page then shows that link and cannot stop it."""
     allowed = {o.rstrip("/") for o in allow_origins}
+    # sharing with phones: the second listener, or the link of a bench started with --phone (fixed)
+    share = {"server": None, "url": None, "direct": None, "address": None, "port": None, "fixed": False}
+    share_lock = threading.Lock()
     runner = Runner(world)
     journal = Journal()
     mutation_lock = threading.RLock()
@@ -156,7 +174,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
         def cors(self):
             """The headers that let an allowed page read the answer."""
             origin = self.headers.get("Origin")
-            if origin and origin.rstrip("/") in allowed:
+            if origin and origin.rstrip("/") in self.server.allowed:
                 self.send_header("Access-Control-Allow-Origin", origin)
                 self.send_header("Vary", "Origin")
 
@@ -173,10 +191,14 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
         def guard(self, preflight=False):
             """False (after answering) if this request to the API must not be done: from a page that is not allowed,
             or without the token."""
+            if self.server.closed:                  # sharing stopped: a request that was on its way
+                self.send(503, json.dumps({"error": "the bench no longer shares on this address"}))
+                return False
             origin = self.headers.get("Origin")
-            if origin and origin.rstrip("/") not in allowed and origin != "http://" + (self.headers.get("Host") or ""):
+            if origin and origin.rstrip("/") not in self.server.allowed and origin != "http://" + (self.headers.get("Host") or ""):
                 self.send(403, json.dumps({"error": "this page may not use the bench: start it with --allow-origin %s" % origin}))
                 return False
+            token = self.server.token
             if token and not preflight:             # a browser sends no credentials with a preflight
                 given = (self.headers.get("Authorization") or "")[7:] if (self.headers.get("Authorization") or "").startswith("Bearer ") \
                     else parse_qs(urlparse(self.path).query).get("token", [""])[0]
@@ -215,7 +237,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 last = {"state": None, "scenario": None}
                 sent_events, beat, generation = 0, 0.0, world.events.generation
                 send_event("cleared", "{}")   # a reconnect replays the current server history
-                while True:
+                while not self.server.closed:
                     snap = world.snapshot()
                     now = snap.pop("now")
                     key = json.dumps(snap, sort_keys=True)
@@ -254,6 +276,10 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                           {'error': 'Network setup is not enabled for this embedded bench'}))
             elif path == "/api/uploads":
                 self.send(200, json.dumps(upload_store.summary(folder)))
+            elif path == "/api/share":
+                if not self.local_page():
+                    return self.send(403, json.dumps({"error": "only a page on the bench's own machine sees how it is shared"}))
+                self.send(200, json.dumps(share_state(listing=True)))
             elif re.fullmatch(r"/api/player/[\d.]+/waveform", path):
                 answer = next((p.waveform_asset(path.split("/")[3]) for p in world.protocols
                                if hasattr(p, "waveform_asset")), (404, {"error": "no link protocol here"}))
@@ -304,9 +330,25 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
             else:
                 self.send(404, '{"error": "not found"}')
 
+        def local_page(self):
+            """A request from a page on the bench's own machine, through its own address: only such a page may share the bench
+            with phones, or see the link (which has the token). Not through the phones' listener, not from another page's origin,
+            and not through a name that only points here (the Host is the loopback)."""
+            host = (self.headers.get("Host") or "").rpartition(":")[0] or (self.headers.get("Host") or "")
+            origin = self.headers.get("Origin")
+            return (not self.server.shared and self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+                    and host.strip("[]") in ("127.0.0.1", "localhost", "::1")
+                    and (not origin or origin == "http://" + (self.headers.get("Host") or "")))
+
         def do_POST(self):
             if not self.guard():
                 return
+            if self.path.split("?")[0] in ("/api/share/on", "/api/share/off"):
+                if not self.local_page():
+                    return self.send(403, json.dumps({"error": "only a page on the bench's own machine can share it"}))
+                address = parse_qs(urlparse(self.path).query).get("address", [""])[0].strip()
+                code, body = answer(share_on(address) if self.path.split("?")[0].endswith("/on") else share_off())
+                return self.send(code, json.dumps(body))
             if self.path.split('?')[0] == '/api/upload':
                 return self.post()
             with mutation_lock:
@@ -506,7 +548,87 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 return self.send(200, json.dumps(world.snapshot()))
             self.send(404, '{"error": "not found"}')
 
+    def share_state(listing=False):
+        """What the page on this machine is told of sharing. With `listing`, the addresses it can share on (asking the system
+        can take a moment) and the QR of the link."""
+        from . import phone
+        with share_lock:
+            out = {"on": bool(share["fixed"] or share["server"]), "fixed": share["fixed"], "url": share["url"],
+                   "direct": share["direct"], "address": share["address"], "port": share["port"]}
+        if listing:
+            route = phone_address or phone.route_address()
+            try:
+                found = [(name, str(ip.ip)) for name, ip in phone.interfaces() if not ip.ip.is_loopback]
+            except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
+                found = []
+            addresses = [{"name": name, "address": address, "default": address == route} for name, address in found]
+            if route and not any(a["address"] == route for a in addresses):
+                addresses.insert(0, {"name": "", "address": route, "default": True})
+            out["addresses"] = sorted(addresses, key=lambda a: not a["default"])
+            out["qr"] = phone.qr_matrix(out["url"]) if out["url"] else None
+        return out
+
+    def share_on(address):
+        """Shares the bench on `address` (default: the one phones are likely to reach): (status, body)."""
+        from . import phone
+        with share_lock:
+            if share["fixed"]:
+                return 409, {"error": "the bench was started with --phone: it shares until it stops"}
+            if share["server"]:
+                return 200, None
+        address = address or phone_address or phone.route_address() or ""
+        try:
+            ip = ipaddress.IPv4Address(address)
+            if ip.is_loopback or ip.is_unspecified or ip.is_multicast:
+                raise ValueError()
+        except ValueError:
+            return 400, {"error": "give an IPv4 address of this machine that phones can reach, not %r" % address}
+        try:
+            try:
+                shared = Server((str(ip), server.server_address[1]), Handler)   # the same port, if it is free there
+            except OSError:
+                shared = Server((str(ip), 0), Handler)
+        except OSError as e:
+            return 400, {"error": "cannot listen on %s: %s" % (ip, e.strerror or e)}
+        shared.token, shared.allowed, shared.shared, shared.closed = (secrets.token_urlsafe(12), allowed | {phone.SITE},
+                                                                     True, False)
+        shared.daemon_threads = True
+        threading.Thread(target=shared.serve_forever, daemon=True).start()
+        port_ = shared.server_address[1]
+        with share_lock:
+            share.update(server=shared, address=str(ip), port=port_, url=phone.pairing_url(str(ip), port_, shared.token),
+                         direct="http://%s:%d/#token=%s" % (ip, port_, shared.token))
+        world.info["phone"] = {"address": str(ip), "port": port_}
+        log("phone: shared on http://%s:%d/ with a token of its own, until it is stopped" % (ip, port_))
+        world.changed()
+        return 200, None
+
+    def share_off():
+        with share_lock:
+            if share["fixed"]:
+                return 409, {"error": "the bench was started with --phone: it shares until it stops"}
+            shared = share["server"]
+            share.update(server=None, url=None, direct=None, address=None, port=None)
+        if shared:
+            shared.closed = True                    # the phones' event streams end, and their next requests are refused
+            shared.shutdown()
+            shared.server_close()
+            world.info["phone"] = None
+            log("phone: no longer shared")
+            world.changed()
+        return 200, None
+
+    def answer(result):
+        code, body = result
+        return code, body if body is not None else share_state(listing=True)
+
+    def set_phone_link(url, direct, address, port_):
+        with share_lock:
+            share.update(fixed=True, url=url, direct=direct, address=address, port=port_)
+
     server = Server((host, port), Handler)
+    server.token, server.allowed, server.shared, server.closed = token, allowed, False, False
+    server.set_phone_link = set_phone_link
     server.runner = runner
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()

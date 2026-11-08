@@ -4,6 +4,11 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- **Phone**, at the top of the page on the bench's machine, shares the bench with phones on demand: it listens on an
+  address of the local network too, with a token of its own, and shows the QR code and the link in the page. **Stop
+  sharing** closes it. Started with `--phone`, the button shows the existing link and QR. `--phone-address` now also
+  sets the address the button offers first.
+
 - A bench deck can load a real player's SD or USB track: pick it from the tracks the players have loaded, or give the
   player, slot and ID. The bench reads the track's grid, title and waveform from that player, and the deck plays on
   the grid: the track's tempo, its bars counted as the grid counts them, and its waveform on the strip. A tempo set

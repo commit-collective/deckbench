@@ -1409,6 +1409,7 @@ function start() {
   fillSaved();
   drawEvents();
   loadExamples();
+  initPhone();
   connect();
   requestAnimationFrame(frame);
   const change = $("changebench");
@@ -1426,6 +1427,82 @@ function start() {
     document.body.prepend(note);
   }
 }
+
+/* ---- a phone as the screen ----
+   The bench shares itself with phones on this network when the page on its own machine asks (api/share): a second listener on
+   an address of the local network, with a token of its own. The QR opens the hosted page with that address and token. A bench
+   started with --phone already shares: the dialog shows its link, and it cannot be stopped from here. Only the page on the
+   bench's machine is answered, so the button shows only there. */
+async function phoneState() {
+  const r = await transport.fetch("api/share");
+  return r.ok ? r.json() : null;
+}
+
+function drawQr(canvas, rows) {
+  const g = canvas.getContext("2d"), n = rows.length, quiet = 4, size = canvas.width;
+  const cell = Math.floor(size / (n + 2 * quiet)), at = Math.floor((size - cell * n) / 2);
+  g.fillStyle = "#fff";                                     /* dark on light whatever the theme: what cameras read best */
+  g.fillRect(0, 0, size, size);
+  g.fillStyle = "#000";
+  rows.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (row[x] === "1") g.fillRect(at + x * cell, at + y * cell, cell, cell); });
+}
+
+function renderPhone(st) {
+  if (!st) return;
+  $("phone").setAttribute("aria-pressed", String(!!st.on));
+  $("phonewhat").textContent = st.fixed
+    ? "The bench was started with --phone, so it shares on " + st.address + " until it stops. Scan the code with the phone's camera."
+    : st.on ? "Scan the code with the phone's camera. Phones on this network that have the link can control the bench, until you stop sharing."
+    : "The bench answers this computer only. Sharing lets phones on this network open it too, with a link that has a key of its own: " +
+      "anyone with the link can control the bench, so keep it to your phone.";
+  const qr = $("phoneqr");
+  qr.hidden = !(st.on && st.qr);
+  if (st.on && st.qr) drawQr(qr, st.qr);
+  $("phonelink").hidden = !st.on;
+  $("phonelink").textContent = st.on ? st.url + "\n\nOr, if the phone cannot open that page: " + st.direct : "";
+  $("phonecopy").hidden = !st.on;
+  $("phoneon").hidden = !!st.on;
+  $("phoneoff").hidden = !st.on || !!st.fixed;
+  $("phoneaddrrow").hidden = !!st.on;
+  const select = $("phoneaddr"), addresses = st.addresses || [];
+  if (!st.on) select.replaceChildren(...addresses.map((a) => h("option", {value: a.address, selected: !!a.default},
+    a.address + (a.name ? " (" + a.name + ")" : "") + (a.default ? ", the default route" : ""))));
+  $("phonemsg").textContent = st.on && !st.qr
+    ? "No QR here: install the optional package on the bench's machine (python -m pip install \".[phone]\") and open this again."
+    : !st.on && !addresses.length ? "No network address found: is this computer on Wi-Fi or a network the phone is on?"
+    : st.on ? "The phone and this computer must be on the same network. A firewall may ask whether Python can accept connections."
+    : "";
+}
+
+async function openPhone() {
+  $("phonebox").hidden = false;
+  $("phonemsg").textContent = "Looking at this computer's networks\u2026";
+  try { renderPhone(await phoneState()); } catch (e) { $("phonemsg").textContent = "The bench does not answer."; }
+}
+
+async function initPhone() {
+  if (transport.demo || transport.remote()) return;
+  try {
+    const r = await transport.fetch("api/share");
+    if (r.ok) $("phone").hidden = false;
+  } catch (e) { /* no button */ }
+}
+
+$("phone").addEventListener("click", openPhone);
+$("phoneclose").addEventListener("click", () => { $("phonebox").hidden = true; });
+$("phonebox").addEventListener("click", (e) => { if (e.target === $("phonebox")) $("phonebox").hidden = true; });
+$("phoneon").addEventListener("click", async () => {
+  $("phoneon").disabled = true;
+  try { renderPhone(await api("api/share/on?address=" + encodeURIComponent($("phoneaddr").value || ""))); } catch (e) { /* a toast said why */ }
+  $("phoneon").disabled = false;
+});
+$("phoneoff").addEventListener("click", async () => {
+  try { renderPhone(await api("api/share/off")); } catch (e) { /* a toast said why */ }
+});
+$("phonecopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("phonelink").textContent.split("\n")[0]); toast("Link copied. It has the key: keep it to your phone.", "ok"); }
+  catch (e) { toast("Could not copy: select the link and copy it."); }
+});
 
 function loadScript(src) {
   return new Promise((resolve, reject) => { document.head.append(h("script", {src, onload: resolve, onerror: reject})); });
