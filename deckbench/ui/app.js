@@ -212,8 +212,41 @@ function beatIndicators() {
    all of it, the details of where the track comes from on a line of their own and the state under. The number and the name
    stay where they are. */
 function identity() {
-  return h("details", {class: "deck-id"}, h("summary", {class: "identity", title: "Show all of it"},
+  return h("details", {class: "deck-id", ontoggle: (e) => fitTags(e.currentTarget.parentNode.querySelector(".flags"), true)},
+    h("summary", {class: "identity", title: "Show all of it"},
     h("span", {class: "model"}), h("span", {class: "track"}), h("span", {class: "track where", hidden: true})));
+}
+
+/* Folded tags that wrap keep the full width of their box: a browser does not narrow a box to its balanced rows. This
+   narrows it to its widest row, so the name and the track beside it get the room the wrap freed. It runs when the tags
+   change, when the header opens or closes and when the card's width changes. */
+const fitted = typeof ResizeObserver === "function" ? new ResizeObserver((entries) => {
+  for (const e of entries) {
+    const head = e.target, width = Math.round(e.contentRect.width);
+    if (head.dataset.fitWidth === String(width)) continue;
+    head.dataset.fitWidth = String(width);
+    fitTags(head.querySelector(".flags"), true);
+  }
+}) : null;
+function fitTags(flags, force = false) {
+  if (!flags || !flags.getBoundingClientRect) return;
+  const head = flags.closest(".deck-head"), open = !!(head && head.querySelector(":scope > .deck-id[open]"));
+  const key = (flags.dataset.fill || "") + (open ? "\u0001open" : "");
+  if (!force && flags.dataset.fit === key) return;
+  flags.dataset.fit = key;
+  if (fitted && head && !head.dataset.fitWidth) { head.dataset.fitWidth = "?"; fitted.observe(head); }
+  flags.style.width = "";
+  const tags = [...flags.children];
+  if (open || tags.length < 2) return;
+  const rows = new Map();                 /* each row's left and right edges, by its top */
+  for (const t of tags) {
+    const r = t.getBoundingClientRect(), top = Math.round(r.top), row = rows.get(top);
+    rows.set(top, row ? [Math.min(row[0], r.left), Math.max(row[1], r.right)] : [r.left, r.right]);
+  }
+  if (rows.size < 2) return;
+  const gap = parseFloat(getComputedStyle(tags[0]).marginLeft) || 0;
+  const widest = Math.max(...[...rows.values()].map(([l, r]) => r - l));
+  flags.style.width = Math.ceil(widest + gap + 1) + "px";
 }
 
 /* A card's state, in one order for both kinds: what it is under test, on air, its roles, its loop, then what is wrong. Folded,
@@ -833,6 +866,7 @@ function renderDevices() {
     fill(q("flags"), stateTags({unit: d.unit && (S.state.adapters || []).some((a) => a.name === "djs1000-emu"),
       air: live && st.on_air ? true : null, master: live && st.master, sync: live && st.sync, loop: !!(live && st.loop),
       offline: !d.online}));
+    fitTags(q("flags"));
     const facts = [];
     if (d.kind === "mixer") {
       const airs = Object.entries(d.air || {}).map(([channel, on]) => h("span", {class: "air" + (on ? " lit" : "")}, "CH " + channel));
@@ -891,6 +925,7 @@ function render() {
       air: (mixer && mixer.on || d.air_said) && d.on ? !!d.on_air : null,
       airTip: mixer && mixer.on ? "What the bench's mixer says" : "What a mixer on the network says of its channel " + n + ". It does not silence the deck's sound here",
       master: d.on && d.master, sync: d.on && d.sync, loop: d.on && d.loop ? d.loop : null, unplugged: d.unplugged}));
+    fitTags(q("flags"));
 
     setText(q("lcd").firstChild, d.on ? d.bpm.toFixed(1) : "--");
     const power = q("num");                  /* the number: the deck's on / off switch */

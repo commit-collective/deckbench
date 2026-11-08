@@ -7,7 +7,7 @@ Newest first. A release is a tagged commit.
 - A bench deck's header is a player's: it opens to all of it, with where its track comes from, its grid and its audio
   on a line of their own and the state under. Opening moves neither the number nor the name. The state is in one order
   on both, ON AIR first, and the folded tags are at the right with their rows balanced. A bench deck shows MASTER and
-  SYNC there too.
+  SYNC there too. When the tags wrap, their box narrows to its widest row, and the name and the track take the room.
 
 - A bench deck no longer logs every beat of every player. On Windows its socket for commands also gets the broadcasts
   of that port (beats, the mixer's on-air report, position, fader start), and each was logged. They are left to the
