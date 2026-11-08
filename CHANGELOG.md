@@ -4,6 +4,10 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Load a track takes one kind of track at a time. A player's track fills in its player, slot, ID and title and
+  clears the sound file. A sound file puts the database back to the deck's own. The track picked stays shown, and
+  Clear empties the form.
+
 - A deck's sound file no longer crackles in Listen. The page started it again at every change of the deck's phase,
   with no fade: each time a synced deck was put back on its beat and each step of the pitch fader. It now plays on
   when it is within 40 ms of the deck, takes a new tempo as a new speed, and fades over a jump.

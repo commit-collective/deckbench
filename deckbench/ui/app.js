@@ -272,7 +272,17 @@ function buildDeck(n, numbers) {
           h("select", {class: "t-source"}, numbers.map((m) => h("option", {value: m, selected: m === n}, "deck " + m + (m === n ? " (itself)" : ""))))),
         h("label", {}, "Slot", h("select", {class: "t-slot"},
           Object.entries(SLOTS).map(([k, v]) => h("option", {value: k, selected: k === "3"}, v)))),
-        h("button", {class: "btn primary wide", onclick: () => loadTrack(n, card)}, "Load it from its first beat"))));
+        h("div", {class: "wide load-actions"},
+          h("button", {class: "btn", type: "button", title: "Empty the form", onclick: () => clearLoad(card, n)}, "Clear"),
+          h("button", {class: "btn primary", onclick: () => loadTrack(n, card)}, "Load it from its first beat")))));
+  /* one kind of track at a time: a sound file puts the database back to the deck's own, a real player's database clears the file */
+  const field = (cls) => card.querySelector("." + cls);
+  if (field("t-audio")) field("t-audio").addEventListener("input", (e) => { if (e.target.value.trim()) clearFor(card, "file", n); });
+  field("t-source").addEventListener("change", (e) => {
+    if (!(e.target.value in S.state.decks)) clearFor(card, "player", n);
+    field("t-copy").value = "";
+  });
+  field("t-id").addEventListener("input", () => { field("t-copy").value = ""; });
   let tempoSent = 0, tempoLater = null;                       /* the fader is followed as it moves, a request every 60 ms at most */
   const sendTempo = (value) => { tempoSent = Date.now(); act("api/deck/" + n + "/tempo/" + value); };
   card.querySelector(".tempo-range").addEventListener("input", (e) => {
@@ -300,6 +310,7 @@ async function sendFile(card, file) {
   try {
     const sent = await api("api/upload?name=" + encodeURIComponent(file.name), {body: file});
     card.querySelector(".t-audio").value = sent.path;
+    clearFor(card, "file", card.id.replace(/^deck/, ""));
     const title = card.querySelector(".t-title"), bpm = card.querySelector(".t-bpm");
     if (!title.value) title.value = file.name.replace(/\.[^.]+$/, "");
     const guess = /(\d{2,3}(?:\.\d+)?)\s*bpm/i.exec(file.name);
@@ -333,13 +344,17 @@ function syncSources(card, n, s) {
   });
   const copySig = tracks.map((t) => t.join("=")).join("|");
   if (copy.dataset.sig !== copySig) {
+    const chosen = copy.value;                                 /* the track picked stays shown while a player still has it */
     copy.replaceChildren(h("option", {value: ""}, "Choose\u2026"), ...tracks.map(([value, label]) => h("option", {value}, label)));
+    if (tracks.some(([value]) => value === chosen)) copy.value = chosen;
     copy.dataset.sig = copySig;
   }
   const row = card.querySelector(".t-copy-row");
   if (row.hidden !== !tracks.length) row.hidden = !tracks.length;
 }
 
+/* A real player's track fills in where it is and its title, and clears the sound file: the bench reads the track's grid and audio
+   from that player. The picker keeps showing it. */
 function copyTrack(card, select) {
   if (!select.value) return;
   const [source, slot, rbid, ...title] = select.value.split(":");
@@ -349,7 +364,29 @@ function copyTrack(card, select) {
   set("t-slot", slot);
   set("t-title", title.join(":"));
   set("t-bpm", "");                                           /* the grid gives it */
-  select.value = "";
+  clearFor(card, "player");
+}
+
+/* What belongs to the other kind of track: for a real player's, the sound file. For a sound file, the database, slot and ID,
+   which go back to the deck's own. */
+function clearFor(card, kind, n) {
+  const f = (cls) => card.querySelector("." + cls);
+  if (kind === "player") {
+    for (const cls of ["t-audio", "t-offset"]) if (f(cls)) f(cls).value = "";
+  } else {
+    f("t-copy").value = "";
+    f("t-source").value = String(n);
+    f("t-slot").value = "3";
+    f("t-id").value = "";
+  }
+}
+
+function clearLoad(card, n) {
+  for (const cls of ["t-id", "t-bpm", "t-title", "t-audio", "t-offset"]) {
+    const e = card.querySelector("." + cls);
+    if (e) e.value = "";
+  }
+  clearFor(card, "file", n);
 }
 
 function loadTrack(n, card) {

@@ -244,6 +244,8 @@ details.fold[open] summary::before { transform: rotate(90deg); }
 .fields label { display: flex; flex-direction: column; gap: 4px; font: 400 10px var(--lab); letter-spacing: var(--ls); text-transform: var(--tt); color: var(--muted); }
 .fields input, .fields select { width: 100%; }
 .fields .wide { grid-column: 1 / -1; }
+.fields .load-actions { display: flex; gap: 8px; }
+.fields .load-actions .primary { flex: 1; }
 
 /* ---- side panels ---- */
 .side { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden;
