@@ -347,6 +347,15 @@ class Monitor:
             st["beat_window"] = [previous["seen"], now]
         else:
             st["beat_window"] = previous.get("beat_window")
+        # how its beats line up with its bars: two statuses in a row that agree. A status in the middle of a change
+        # (its bar moved on, its beat not yet, as at a loop's jump back) does not, and beats are not counted from it
+        if st["track_beat"] is not None and st["bar"]:
+            offset = (st["bar"] - st["track_beat"]) % 4
+            if offset == d.get("bar_offset_seen"):
+                d["bar_offset"] = offset
+            d["bar_offset_seen"] = offset
+            if offset == d.get("bar_offset"):
+                d["good_status"] = st
         # when its state last changed (as when it started), bench time
         st["since"] = previous.get("since", now) if previous.get("state") == st["state"] else now
         # started from a stop: a beat from before it (the previous play or CUE hold) is not where it is now
@@ -403,6 +412,11 @@ class Monitor:
         st = d["status"]
         if 1 <= bar <= 4:
             pos = bar - 1.0
+            good = d.get("good_status")
+            if (st and good is not None and good is not st and st["track_beat"] is not None and st["bar"]
+                    and (st["bar"] - st["track_beat"]) % 4 != d.get("bar_offset") and now - good["seen"] < 1.0
+                    and good.get("since") == st.get("since")):     # from this run, not before a stop
+                st = good                           # counted from the last status that fits, not a half-changed one
             if st and now - st["seen"] < 1.0 and st["track_beat"] is not None and st["bar"]:
                 delta = (bar - st["bar"] + 2) % 4 - 2
                 pos = st["track_beat"] - 1.0 + delta

@@ -133,6 +133,34 @@ class PhaseParsing(unittest.TestCase):
             self.assertEqual(device["phase"][1], expected, (delay, bar))
 
 
+    def test_a_half_changed_status_at_a_loops_jump_back_is_not_counted_from(self):
+        """In a two-beat loop on beats 93 (bar 1) and 94 (bar 2), an NXS2 sent beat 94 with bar 3 just before the beat
+        that jumped back: the beat is 93 (place 92), not 92."""
+        world = world_of(5)
+        net = Prolink(world)
+        monitor = net.monitor
+        link = net.decks[5]
+        device = monitor.device("127.0.0.9", 100.0, False)
+        def status(beat, bar, now):
+            data = bytearray(link.status())
+            data[0x7B] = 4                                           # looping
+            data[0x89] |= 0x40
+            data[0xA0:0xA4] = beat.to_bytes(4, "big")
+            data[0xA6] = bar
+            monitor.status(device, data, now)
+        def beat(bar, now):
+            data = bytearray(link.beat(0.0))
+            data[0x5C] = bar
+            monitor.beat(device, bytes(data), now)
+        status(93, 1, 100.0)
+        beat(2, 100.47)
+        status(94, 2, 100.48)
+        status(94, 2, 100.68)
+        status(94, 3, 100.94)                                        # its bar moved on, its beat not yet
+        beat(1, 100.95)
+        self.assertEqual(device["phase"][1], 92.0)
+
+
 class Heard(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

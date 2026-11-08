@@ -88,6 +88,23 @@ for (const [t, pos] of [[300, 60], [300.5, 61], [301, 62], [302, 10]]) Strip.obs
 const jumped = Strip.layoutDevice("jumped", {status: {loop: false, track_beat: 11}}, 302.1).ticks.filter((t) => t.dt < 0);
 check("the past after a jump is the new place's", jumped.length >= 5 && jumped.every((t, i) => t.at === 10 - (jumped.length - 1 - i)), jumped.map((t) => t.at));
 
+// A two-beat loop on beats 93 and 94 (places 92, 93), as a CDJ-2000NXS2 played it: the beat it jumps back to is a bar's
+// first ahead of the playhead too, a beat whose packet did not come is drawn, and before the first jump back what comes
+// is not known
+const twoLoop = {status: {loop: true, track_beat: 94}, online: true};
+[[92, 1], [93, 2], [92, 1], [93, 2], [92, 1]].forEach(([pos, bar], i) => {               // the second 92 never came
+  if (i !== 2) Strip.observe("two", [400 + i * 0.47 + offset, pos, 127.7], offset, [400 + i * 0.47 + offset, bar - 1, 127.7]);
+});
+const two = Strip.layoutDevice("two", twoLoop, 402.0).ticks;
+check("a two-beat loop's first beat is a bar's first ahead too", two.filter((t) => t.at === 92).every((t) => t.beat === 1)
+  && two.filter((t) => t.at === 93).every((t) => t.beat === 2), two.map((t) => [t.at, t.beat]));
+const twoPast = two.filter((t) => t.dt < 0).map((t) => t.at);
+check("a beat whose packet did not come is drawn", twoPast.slice(-5).join() === "92,93,92,93,92", twoPast);
+Strip.observe("fresh", [500 + offset, 40, 120], offset);
+const fresh = Strip.layoutDevice("fresh", {status: {loop: true, track_beat: 41}, online: true}, 500.1).ticks;
+check("before its first jump back a loop's beats to come are not known", fresh.filter((t) => t.dt > 0).every((t) => t.unsure)
+  && fresh.filter((t) => t.dt < 0).every((t) => !t.unsure), fresh.map((t) => [t.at, !!t.unsure]));
+
 // An eight-beat loop outlasts the visible history. Its tint must survive at every beat, including the wrap.
 const longLoop = {status: {loop: true, source: 1, slot: 3, rbid: 10}};
 for (let k = 0; k <= 24; k++) {

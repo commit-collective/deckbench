@@ -423,7 +423,11 @@ function cueRun(d, st, running, now) {
 }
 
 function devicePlan(d, wave, now) {
-  const st = d.status, moving = () => ({plan: Strip.layoutDevice(d.ip, d, now), place: null});
+  const st = d.status, moving = () => {
+    const plan = Strip.layoutDevice(d.ip, d, now);
+    if (wave) for (const t of plan.ticks) if (wave.bars[t.at] != null) t.beat = wave.bars[t.at];      /* the grid's bars */
+    return {plan, place: null};
+  };
   if (!st || st.track_beat == null) return moving();
   /* without a precise position, moving while its beats come: a beat in the last two, whatever its play flag says */
   const beating = d.phase && d.phase[2] > 0 && now + S.offset - d.phase[0] < 2 * 60 / d.phase[2];

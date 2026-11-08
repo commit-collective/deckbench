@@ -118,22 +118,35 @@ const Strip = (() => {
     }
     const loopPlace = (pos) => looping && from != null && length > 0 && pos >= from + length
       ? from + ((pos - from) % length) : pos;
-    list.forEach((e) => {
-      const prev = history[history.indexOf(e) - 1];
-      const at = loopPlace(e.pos);
-      const inLoop = looping && from != null && at >= from && at < from + length;
-      const wrap = inLoop && !!prev && at === from && at < loopPlace(prev.pos) - 0.5;
-      ticks.push({dt: e.t - now, at, beat: e.bar, inLoop, wrap});
+    const known = looping && from != null && length > 0;
+    const inLoopAt = (at) => known && at >= from && at < from + length;
+    /* a beat's place in the bar, from another beat's: by its own place in the track, so a beat ahead of a loop's jump back
+       is the bar's beat it is when it comes, not the count straight on */
+    const barOf = (at, ref) => ((ref.bar - 1 + Math.round(at - ref.pos)) % 4 + 4) % 4 + 1;
+    list.forEach((e, i) => {
+      const prev = i ? list[i - 1] : history[history.indexOf(e) - 1];
+      /* a beat whose packet did not come (players skip one now and then): where it was, between the two that came */
+      if (prev && i) {
+        const r = prev.bpm / 60, missed = Math.round((e.t - prev.t) * r) - 1;
+        for (let j = 1; j <= missed && missed <= 3; j++) {
+          const at = loopPlace(prev.pos + j);
+          ticks.push({dt: prev.t + j / r - now, at, beat: barOf(at, prev), inLoop: inLoopAt(at),
+                      wrap: known && at === from && j > 0 && loopPlace(prev.pos + j - 1) > at});
+        }
+      }
+      const at = loopPlace(e.pos), before = ticks.length ? ticks[ticks.length - 1].at : prev ? loopPlace(prev.pos) : null;
+      ticks.push({dt: e.t - now, at, beat: e.bar, inLoop: inLoopAt(at), wrap: inLoopAt(at) && before != null && at === from && at < before - 0.5});
     });
     const last = list[list.length - 1], rate = last.bpm / 60;
     for (let n = 1; last.t + n / rate < now + AHEAD + 1; n++) {
       let at = last.pos + n, wrap = false;
-      if (looping && from != null && length > 0 && at >= from + length) {
+      if (known && at >= from + length) {
         const wrapped = from + ((at - from) % length);
         wrap = (at - from) % length === 0;
         at = wrapped;
       }
-      ticks.push({dt: last.t + n / rate - now, at, beat: (last.bar - 1 + n) % 4 + 1, inLoop: looping && from != null, wrap});
+      /* looping before its first jump back: its length is not known, so neither are the beats to come */
+      ticks.push({dt: last.t + n / rate - now, at, beat: barOf(at, last), inLoop: known, wrap, unsure: looping && !known});
     }
     return {ticks, stopped: false, loop: looping ? length : 0, looping};
   };
@@ -165,7 +178,8 @@ const Strip = (() => {
     g.globalAlpha = 0.28;
     for (let from = 0; from < ticks.length;) {
       let to = from;
-      while (to + 1 < ticks.length && ticks[to + 1].at === ticks[to].at + 1) to++;           /* a loop's jump back ends the run */
+      if (ticks[from].unsure) { from++; continue; }                                        /* not known: no waveform */
+      while (to + 1 < ticks.length && ticks[to + 1].at === ticks[to].at + 1 && !ticks[to + 1].unsure) to++;   /* a loop's jump back ends the run */
       const x0 = x(ticks[from].dt), x1 = x(ticks[to].dt) + gap;
       if (x1 >= 0 && x0 <= w && x1 > x0) {
         /* each beat between its tick and the next one's: the ticks of a real player are where its beats came */
@@ -227,9 +241,14 @@ const Strip = (() => {
       g.fillRect(x(t.dt), 0, gap * 4, h);
     });
 
+    /* the loop: a light tint, so the beats, the waveform and the markers of its jumps back stand out on it */
     g.fillStyle = loopColor;
-    g.globalAlpha = 0.2;                                            /* the loop */
-    ticks.forEach((t, i) => { if (t.inLoop) g.fillRect(x(t.dt), 0, gap, h); });
+    g.globalAlpha = 0.1;
+    ticks.forEach((t, i) => {
+      if (!t.inLoop) return;
+      const next = ticks[i + 1], width = next ? Math.max(0, x(next.dt) - x(t.dt)) : gap;
+      g.fillRect(x(t.dt), 0, width, h);
+    });
     g.globalAlpha = 1;
 
     if (options.wave) v.waveform(g, options.wave, ticks, x, gap, w, h, text);
@@ -239,28 +258,31 @@ const Strip = (() => {
     ticks.forEach((t) => {
       const px = x(t.dt), past = t.dt < 0;
       if (px < -2 || px > w + 2) return;
-      g.globalAlpha = past ? 0.45 : 1;
+      g.globalAlpha = t.unsure ? 0.2 : past ? 0.45 : 1;
       g.strokeStyle = t.beat === 1 ? first : muted;
       g.lineWidth = t.beat === 1 ? 2 : 1;
       g.beginPath();
       g.moveTo(px + 0.5, t.beat === 1 ? 3 : h * 0.5);
       g.lineTo(px + 0.5, h - 3);
       g.stroke();
-      if (gap >= 15) {
+      if (gap >= 15 && !t.unsure) {
         g.fillStyle = t.beat === 1 ? text : muted;
         g.fillText(String(options.bars ? t.beat : Math.round(t.at) + 1), px + 3, t.beat === 1 ? 4 : h * 0.5 - 10);
       }
-      if (t.wrap) {                                                 /* the loop goes back here */
-        g.globalAlpha = 1;
+      if (t.wrap) {                     /* the loop goes back here: one marker, the same wherever it is, its past dimmer */
+        g.globalAlpha = past ? 0.6 : 1;
         g.strokeStyle = loopColor;
         g.lineWidth = 2;
-        g.setLineDash([3, 3]);
         g.beginPath();
-        g.moveTo(px + 0.5, 0);
-        g.lineTo(px + 0.5, h);
+        g.moveTo(px - 0.5, 0);
+        g.lineTo(px - 0.5, h);
         g.stroke();
-        g.setLineDash([]);
         g.fillStyle = loopColor;
+        g.beginPath();                                              /* a flag at the top, pointing into the new pass */
+        g.moveTo(px - 1, 0);
+        g.lineTo(px + 6, 0);
+        g.lineTo(px - 1, 7);
+        g.fill();
         g.fillText("↻", px + 3, h - 12);
       }
     });
