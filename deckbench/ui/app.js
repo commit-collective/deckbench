@@ -208,14 +208,34 @@ function beatIndicators() {
     h("div", {class: "beats", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")));
 }
 
+/* A card's header, the same for a bench deck and a player: the name and a line of its track, which open (a click, or Enter) to
+   all of it, the details of where the track comes from on a line of their own and the state under. The number and the name
+   stay where they are. */
+function identity() {
+  return h("details", {class: "deck-id"}, h("summary", {class: "identity", title: "Show all of it"},
+    h("span", {class: "model"}), h("span", {class: "track"}), h("span", {class: "track where", hidden: true})));
+}
+
+/* A card's state, in one order for both kinds: what it is under test, on air, its roles, its loop, then what is wrong. Folded,
+   the tags are at the right, and the browser balances their rows; opened, they are a row under the name. */
+function stateTags(t) {
+  const tag = (kind, text, title) => h("span", {class: "tag " + kind, title: title || null}, text);
+  const tags = [t.unit ? tag("unit", "UNIT UNDER TEST") : null,
+    t.air == null ? null : t.air ? tag("air-tag", "ON AIR", t.airTip) : tag("off-air", "OFF AIR", t.airTip),
+    t.master ? tag("master", "MASTER") : null, t.sync ? tag("sync", "SYNC") : null,
+    t.loop ? tag("loop", t.loop === true ? "LOOP" : "LOOP " + t.loop) : null,
+    t.unplugged ? tag("cable", "UNPLUGGED") : null, t.offline ? tag("offline", "OFFLINE") : null].filter(Boolean);
+  return tags.flatMap((x, i) => i ? [" ", x] : [x]);                 /* spaces between: where a row may break */
+}
+
 function buildDeck(n, numbers) {
   const q = (cls) => card.querySelector("." + cls);
   const card = h("article", {class: "deck off", id: "deck" + n, "aria-label": "Deck " + n},
     h("div", {class: "deck-head"},
       h("button", {class: "num", type: "button", "aria-pressed": "false", title: "Switch deck " + n + " on or off",
         "aria-label": "Deck " + n + " on", onclick: () => act("api/deck/" + n + "/on")}, n),
-      h("div", {class: "deck-id"}, h("div", {class: "model"}), h("div", {class: "track"})),
-      h("div", {class: "tags"})),
+      identity(),
+      h("div", {class: "tags"}, h("div", {class: "flags", "aria-label": "State"}))),
     h("div", {class: "live"},
       beatIndicators(),
       h("div", {class: "lcd", "aria-label": "Tempo"}, h("b", {}, "--"), h("span", {}, "BPM"))),
@@ -687,9 +707,8 @@ function buildDevice(d) {
   return h("article", {class: "deck device off", id: devId(d.ip), "aria-label": (d.model || "Device") + " on the link"},
     h("div", {class: "deck-head"},
       h("div", {class: "num", "aria-hidden": "true"}),
-      h("details", {class: "deck-id"}, h("summary", {class: "identity", title: "Show full player and track information"},
-        h("span", {class: "model"}), h("span", {class: "track"}), h("span", {class: "track where", hidden: true}))),
-      h("div", {class: "tags"}, h("div", {class: "unit-slot"}), h("div", {class: "flags", "aria-label": "State"}))),
+      identity(),
+      h("div", {class: "tags"}, h("div", {class: "flags", "aria-label": "State"}))),
     mixer ? h("div", {class: "airs", "aria-label": "Channels on air"}) : h("div", {class: "live"},
       beatIndicators(),
       h("div", {class: "lcd", "aria-label": "Tempo"}, h("b", {}, "--"), h("span", {}, "BPM"))),
@@ -808,17 +827,12 @@ function renderDevices() {
     if (titled) fill(where, st.state, ids); else fill(where);
     if (where.hidden !== !titled) where.hidden = !titled;
     const tip = [d.model, d.ip].filter(Boolean).join(" · ") + "\n" + track.textContent + (titled ? "\n" + where.textContent : "") +
-      "\nClick or press Enter to expand";
+      "\nClick or press Enter to open";
     if (q("identity").title !== tip) q("identity").title = tip;
-    /* the tags are a column at the right of the header, the height of the number's box: the unit tag at the top and the state (side by side, wrapping onto
-       a row under when there are too many for the width) at the bottom. The column is always there: a flag that comes or goes does not change the card's height */
-    fill(q("unit-slot"), d.unit && (S.state.adapters || []).some((a) => a.name === "djs1000-emu") ? h("span", {class: "tag unit"}, "UNIT UNDER TEST") : null);
     const live = st && d.online;
-    fill(q("flags"), !d.online ? h("span", {class: "tag offline"}, "OFFLINE") : null,
-         live && st.master ? h("span", {class: "tag master"}, "MASTER") : null,
-         live && st.sync ? h("span", {class: "tag sync"}, "SYNC") : null,
-         live && st.on_air ? h("span", {class: "tag air-tag"}, "ON AIR") : null,
-         live && st.loop ? h("span", {class: "tag loop"}, "LOOP") : null);
+    fill(q("flags"), stateTags({unit: d.unit && (S.state.adapters || []).some((a) => a.name === "djs1000-emu"),
+      air: live && st.on_air ? true : null, master: live && st.master, sync: live && st.sync, loop: !!(live && st.loop),
+      offline: !d.online}));
     const facts = [];
     if (d.kind === "mixer") {
       const airs = Object.entries(d.air || {}).map(([channel, on]) => h("span", {class: "air" + (on ? " lit" : "")}, "CH " + channel));
@@ -865,17 +879,18 @@ function render() {
         : a.state === "reading" ? "reading its audio" + (a.total ? " " + Math.round(100 * a.done / a.total) + " %" : "\u2026")
         : a.state === "decoding" ? "decoding its audio\u2026" : a.state === "failed" ? "no audio: " + a.reason : "";
       const more = [grid, sound].filter(Boolean).map((x) => " \u00b7 " + x).join("");
-      fill(q("track"), h("b", {}, d.track), " \u00b7 " + where + more);
-      const tip = d.track + " \u00b7 " + where + more;
-      if (q("track").title !== tip) q("track").title = tip;
-    } else fill(q("track"), "no track");
+      fill(q("track"), h("b", {}, d.track), l && l.artist ? " \u00b7 " + l.artist : "");
+      fill(q("where"), where + more);
+      const tip = (d.model || d.name) + (d.address ? " \u00b7 " + d.address : "") + "\n" + d.track + "\n" + where + more + "\nClick or press Enter to open";
+      if (q("identity").title !== tip) q("identity").title = tip;
+    } else { fill(q("track"), "no track"); fill(q("where")); }
+    if (q("where").hidden !== !d.track) q("where").hidden = !d.track;
     syncSources(card, n, s);
     const mixer = mixerOf(s);
-    fill(q("tags"), d.on && d.loop ? h("span", {class: "tag loop"}, "LOOP " + d.loop) : null,
-         d.unplugged ? h("span", {class: "tag cable"}, "UNPLUGGED") : null,
-         (mixer && mixer.on || d.air_said) && d.on ? h("span", {class: "tag " + (d.on_air ? "air-tag" : "off-air"),
-           title: mixer && mixer.on ? "What the bench's mixer says" : "What a mixer on the network says of its channel " + n + ". It does not silence the deck's sound here"},
-           d.on_air ? "ON AIR" : "OFF AIR") : null);
+    fill(q("flags"), stateTags({
+      air: (mixer && mixer.on || d.air_said) && d.on ? !!d.on_air : null,
+      airTip: mixer && mixer.on ? "What the bench's mixer says" : "What a mixer on the network says of its channel " + n + ". It does not silence the deck's sound here",
+      master: d.on && d.master, sync: d.on && d.sync, loop: d.on && d.loop ? d.loop : null, unplugged: d.unplugged}));
 
     setText(q("lcd").firstChild, d.on ? d.bpm.toFixed(1) : "--");
     const power = q("num");                  /* the number: the deck's on / off switch */

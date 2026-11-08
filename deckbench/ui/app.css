@@ -136,7 +136,8 @@ button { cursor: pointer; }
 .deck.off:not(.device) .live, .deck.off:not(.device) .strip, .deck.off:not(.device) .row, .deck.off:not(.device) .fold,
 .deck.off:not(.device) .switches { display: none; }
 .deck.unplugged { border-color: var(--danger); }
-.deck-head { display: flex; gap: 12px; align-items: center; min-width: 0; }
+/* the number and the name at the top, folded or opened: opening adds lines under them, and moves neither */
+.deck-head { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
 button.num { cursor: pointer; padding: 0; }
 button.num:hover:not(:disabled) { border-color: var(--text); }
 button.num:disabled { cursor: default; opacity: .5; }
@@ -144,23 +145,29 @@ button.num:disabled { cursor: default; opacity: .5; }
   font-size: 16px; background: transparent; color: var(--muted); border: 1px solid var(--line-2); }
 .deck.on .num { color: #0b0c0e; background: var(--on); border-color: var(--on); box-shadow: 0 0 10px -2px color-mix(in srgb, var(--on) var(--glow), transparent); }
 .deck-id { min-width: 0; flex: 1; }
-.device .identity { list-style: none; cursor: pointer; }
-.device .identity::-webkit-details-marker { display: none; }
-.device .identity:focus-visible { outline: 1px solid var(--text); outline-offset: 3px; }
-.device .identity .model, .device .identity .track { display: block; }
-/* Expanded: the text takes the header's width beside the number, the tags move under it, and the address is a line of its own */
-.device .deck-head:has(> .deck-id[open]) { flex-wrap: wrap; align-items: flex-start; }
-.device .deck-head:has(> .deck-id[open]) > .deck-id { flex: 1 1 calc(100% - 70px); }
-.device .deck-head:has(> .deck-id[open]) > .tags { flex: 1 1 100%; max-width: none; min-height: 0; align-items: flex-start; }
-.device .deck-head:has(> .deck-id[open]) .flags, .device .deck-head:has(> .deck-id[open]) .unit-slot { justify-content: flex-start; }
-.device .deck-head:has(> .deck-id[open]) .unit-slot:empty { display: none; }
-.device .deck-id[open] .model, .device .deck-id[open] .track { white-space: normal; overflow-wrap: break-word; }
-.device .deck-id[open] .model .addr { display: block; margin-left: 0; white-space: nowrap; }
+.identity { list-style: none; cursor: pointer; min-height: 38px; }
+.identity::-webkit-details-marker { display: none; }
+.identity:focus-visible { outline: 1px solid var(--text); outline-offset: 3px; }
+.identity .model, .identity .track { display: block; }
+.deck-id:not([open]) .where { display: none; }
+/* Opened: the text takes the header's width beside the number, the tags move under it in one row, and the address is a line
+   of its own */
+.deck-head:has(> .deck-id[open]) { flex-wrap: wrap; }
+.deck-head:has(> .deck-id[open]) > .deck-id { flex: 1 1 calc(100% - 70px); }
+.deck-head:has(> .deck-id[open]) > .tags { flex: 1 1 100%; max-width: none; }
+.deck-head:has(> .deck-id[open]) .flags { text-align: left; text-wrap: wrap; }
+.deck-head:has(> .deck-id[open]) .flags .tag { margin: 2px 6px 2px 0; }
+.deck-head:has(> .deck-id[open]) .flags:empty { display: none; }
+.deck-id[open] .model, .deck-id[open] .track { white-space: normal; overflow-wrap: break-word; }
+.deck-id[open] .model .addr { display: block; margin-left: 0; white-space: nowrap; }
 .model { font-weight: var(--fw-b); font-size: 15px; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model .addr { color: var(--muted); font: 400 11px var(--mono); margin-left: 8px; letter-spacing: 0; }
 .track { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .track b { color: var(--text); font-weight: 500; }
-.tags { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+/* Folded: the state at the right, its rows balanced by the browser (no long row over a short one), as blocks */
+.tags { flex: 0 1 auto; min-width: 0; max-width: 58%; }
+.flags { text-align: right; text-wrap: balance; font-size: 0; line-height: 0; }
+.flags .tag { display: inline-block; font-size: 10px; line-height: 15px; margin: 2px 0 2px 6px; white-space: nowrap; }
 .tag { --c: var(--text); font-size: 10px; font-weight: 500; letter-spacing: .08em; padding: 1px 6px; border-radius: calc(var(--r) * .66); color: var(--c);
   border: 1px solid color-mix(in srgb, var(--c) var(--tag-bd), transparent); background: color-mix(in srgb, var(--c) var(--tag-bg), transparent); }
 .tag.loop { --c: var(--loop); }
@@ -315,11 +322,6 @@ h2:first-child { margin-top: 0; }
 .deck.device.offline { opacity: .5; }
 .deck.device .num { background: transparent; color: var(--text); border-color: var(--line-2); box-shadow: none; }
 .deck.device.online .num { border-color: var(--sync); color: var(--sync); }
-/* a device's tags: the column at the right of the header is as tall as the number's box, the unit tag at the top and the state at the bottom, and the state
-   wraps onto a row under when it is wider than the share of the header it has */
-.deck.device .tags { flex: 0 1 auto; min-width: 0; max-width: 58%; min-height: 38px; justify-content: space-between; gap: 4px; }
-.deck.device .unit-slot { display: flex; justify-content: flex-end; min-height: 17px; }
-.deck.device .flags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 6px; min-height: 17px; }
 .deck.device .facts { color: var(--muted); font: 400 11px var(--lab); display: flex; flex-wrap: wrap; gap: 2px 14px; }
 .airs { display: flex; gap: 6px; flex-wrap: wrap; }
 .airs .air { padding: 3px 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); }

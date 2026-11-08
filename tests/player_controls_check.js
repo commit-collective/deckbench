@@ -13,6 +13,7 @@ const context = vm.createContext({
   buildPlayerLoad: () => null,
 });
 const script = fs.readFileSync(path.join(__dirname, "..", "deckbench", "ui", "app.js"), "utf8");
+vm.runInContext("function identity() {" + script.split("function identity() {")[1].split("/* A card's state")[0], context);
 vm.runInContext("function playerCommand(" + script.split("function playerCommand(")[1].split("function buildPlayerLoad")[0], context);
 vm.runInContext("function buildDevice(d) {" + script.split("function buildDevice(d) {")[1].split("function renderDevices()")[0], context);
 const card = context.buildDevice({ip: "127.0.0.9", kind: "player", model: "CDJ-2000NXS2"});
