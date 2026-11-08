@@ -1,22 +1,24 @@
 """The ports the tests run the bench on. Not the real ones (UDP 50000-50002, TCP 12523 and 1051): something else may hold
 them (rekordbox, another bench) and Windows can reserve them. Each test class that starts a bench in this process takes
 a range of its own, since the threads of one keep its ports until the process ends.
-DECKBENCH_PORT_SHIFT, if set, is the shift of the first range."""
+DECKBENCH_PORT_SHIFT, if set, is the shift of the first range. The ranges are 10 apart: the protocol's ports come in
+runs of three at most (50000 to 50002), and a wider step runs out of ports above 65535 in a whole run of the tests."""
 import os
 
 from deckbench.protocols.prolink import Ports, PortError, Prolink
 from deckbench.testing import ports_free
 
 _last = []
+STEP = 10
 
 
 def fresh():
     if not _last and os.environ.get("DECKBENCH_PORT_SHIFT"):
         shift = int(os.environ["DECKBENCH_PORT_SHIFT"])
     else:
-        shift = (_last[-1] + 100) if _last else 1000
+        shift = (_last[-1] + STEP) if _last else 1000
         while not ports_free(Ports.shifted(shift)):
-            shift += 100
+            shift += STEP
     _last.append(shift)
     return Ports.shifted(shift)
 
