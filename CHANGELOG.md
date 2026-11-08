@@ -4,6 +4,9 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Listen plays only the bench's decks. A real player was heard as a beat made up for it, which only stood in the way of
+  its own music, out of the mixer. The Sound settings keep the volume.
+
 - The Phone button is lit whenever the bench is shared with phones, from the start with `--phone` too. It was lit only
   once its dialog had been opened.
 

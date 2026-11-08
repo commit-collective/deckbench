@@ -49,7 +49,7 @@ check("with a mixer, off the air", !Sound.audible({on: true, play: true, on_air:
 check("with a mixer, on the air", Sound.audible({on: true, play: true, on_air: true}, true));
 check("with no mixer, on air does not matter", Sound.audible({on: true, play: true, on_air: false}, false));
 
-// the sources of sound: the bench's decks, and the other devices on the link that play and are on the air
+// the sources of sound: the bench's decks that play, and never a real player on the link
 const state = {
   decks: {1: {on: true, play: true, on_air: true, phase: [0, 0, 120]}, 2: {on: true, play: false, on_air: false}, 3: {on: true, play: true, on_air: true, phase: [0, 0, 120]}},
   protocols: {prolink: {mixer: {on: false}, devices: [
@@ -57,27 +57,15 @@ const state = {
     {ip: "10.0.0.6", number: 6, kind: "player", online: true, status: {play: false}, phase: null},
     {ip: "10.0.0.7", number: 7, kind: "player", online: false, status: {play: true, on_air: true}, phase: [0, 0, 124]}]}},
 };
-const keys = (options) => Sound.sources(state, options).map((x) => x.key).join();
-check("no mixer anywhere: the decks that play, and the devices that play, on air or not", keys({own: true, other: true}) === "1,3,ext:10.0.0.5", keys({own: true, other: true}));
-check("a device keeps its number for its voice", Sound.sources(state, {own: true, other: true})[2].number === 5);
-check("only the others", keys({own: false, other: true}) === "ext:10.0.0.5");
-check("only the bench's", keys({own: true, other: false}) === "1,3");
-check("a device that is offline or stopped is not heard", !keys({own: false, other: true}).includes("10.0.0.6") && !keys({own: false, other: true}).includes("10.0.0.7"));
-state.decks[3].on_air = false;                                  // the bench's mixer (or another) said deck 3 is off the air
+const keys = () => Sound.sources(state).map((x) => x.key).join();
+check("the bench's decks that play, and not the real player that plays", keys() === "1,3", keys());
+check("a deck keeps its number for its voice", Sound.sources(state)[1].number === 3);
+state.decks[3].on_air = false;                                  // a mixer said deck 3 is off the air
+check("a real mixer's word does not silence a bench deck", keys() === "1,3", keys());
 state.protocols.prolink.mixer.on = true;
-check("the bench's mixer on: the decks on air, and the devices that say they are", keys({own: true, other: true}) === "1", keys({own: true, other: true}));
+check("the bench's own mixer does", keys() === "1", keys());
 state.protocols.prolink.devices[0].status.on_air = true;
-check("a device on air is heard", keys({own: true, other: true}) === "1,ext:10.0.0.5");
-state.protocols.prolink.mixer.on = false;
-state.protocols.prolink.devices.push({ip: "10.0.0.8", number: 33, kind: "mixer", online: true, status: null, phase: null});
-check("a mixer on the link: the devices on air, and every bench deck that plays, which its faders do not carry",
-      keys({own: true, other: true}) === "1,3,ext:10.0.0.5", keys({own: true, other: true}));
-state.protocols.prolink.devices[0].status.on_air = false;
-check("and a device off the air is silent", keys({own: true, other: true}) === "1,3", keys({own: true, other: true}));
-state.protocols.prolink.devices[0].status = null;
-state.protocols.prolink.devices[0].bar_phase = [0, 0, 124];
-check("broadcast-only devices can be auditioned before a virtual deck is enabled", keys({own: false, other: true}) === "ext:10.0.0.5");
-check("external audition follows the reported bar", Sound.sources(state, {other: true})[0].deck.phase[1] === 0);
+check("a real player on air is still not heard", keys() === "1", keys());
 beats = Sound.beats({phase: [1000, 10.0, 120], loop: 0, loop_from: 0}, 0, 0.6, 1000);
 check("a beat knows its place in the track", beats[0].at === 10 && beats[1].at === 11, beats.map((b) => b.at));
 beats = Sound.beats(looped, 0, 4.2, 1000);

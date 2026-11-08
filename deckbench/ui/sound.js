@@ -7,7 +7,7 @@
 const Sound = (() => {
   const LOOKAHEAD = 0.18;                     /* seconds of beats scheduled ahead of the clock */
   const s = {ctx: null, on: false, timer: null, last: {}, played: 0,   /* played: how many beats were sounded (for a check) */
-             options: {own: true, other: true}, volume: 0.4,
+             volume: 0.4,
              files: {}, buffers: {}};   /* files: the sound file each deck plays now; buffers: the files got from the bench, by deck and name */
 
   /* The beats of a deck between two moments (seconds, the page's clock), as {k, time, beat}: k counts the beats of the deck's
@@ -49,28 +49,15 @@ const Sound = (() => {
   /* is a deck heard: it plays, and with a mixer on it is on the air */
   s.audible = (deck, mixerOn) => !!deck.on && !!deck.play && !deck.unplugged && (!mixerOn || !!deck.on_air);
 
-  /* The sources of sound in a state: the bench's decks and, if asked, the other devices on the link that play (their beats, as the
-   * bench heard them). [{key, number, deck}] with deck as `beats` and `audible` take it. */
-  s.sources = (state, options) => {
+  /* The sources of sound in a state: the bench's decks that play. [{key, number, deck}] with deck as `beats` and `audible` take
+   * it. A real player on the link is not heard: its music is its own, out of the mixer, and a beat made up for it here would
+   * only stand in its way. A bench deck's sound goes through the bench's own mixer only: a real mixer on the link may say it is
+   * off the air (its channel of that number is down), but its faders do not carry the bench's sound, so only the bench's
+   * mixer silences it, as on the bench's sound port. */
+  s.sources = (state) => {
     const prolink = state.protocols && state.protocols.prolink, out = [];
-    const devices = (prolink && prolink.devices) || [];
-    const mixer = prolink && prolink.mixer;
-    const mixerOn = !!(mixer && mixer.on) || devices.some((d) => d.kind === "mixer" && d.online);
-    if (options.own) {
-      /* a bench deck's sound goes through the bench's own mixer only: a real mixer on the link may say it is off the air
-         (its channel of that number is down), but its faders do not carry the bench's sound, so only the bench's mixer
-         silences it, as on the bench's sound port */
-      const own = !!(mixer && mixer.on);
-      for (const [n, d] of Object.entries(state.decks)) if (s.audible(d, own)) out.push({key: n, number: Number(n), deck: d});
-    }
-    if (options.other) {
-      for (const d of devices) {
-        const st = d.status;
-        if (d.kind === "mixer" || !d.online || !d.phase) continue;
-        const deck = {on: true, play: true, phase: d.bar_phase || d.phase, loop: 0, loop_from: 0, on_air: st && st.on_air};
-        if (s.audible(deck, !!st && mixerOn)) out.push({key: "ext:" + d.ip, number: d.number || 1, deck});
-      }
-    }
+    const mixer = prolink && prolink.mixer, own = !!(mixer && mixer.on);
+    for (const [n, d] of Object.entries(state.decks)) if (s.audible(d, own)) out.push({key: n, number: Number(n), deck: d});
     return out;
   };
 
@@ -255,7 +242,7 @@ const Sound = (() => {
     if (!state || !s.ctx || s.ctx.state !== "running") return;
     const now = Date.now() / 1000, offset = S.offset;
     const clock = s.ctx.currentTime - now;      /* the page's clock to the audio clock */
-    const heard = s.sources(state, s.options), keys = new Set(heard.map((x) => x.key));
+    const heard = s.sources(state), keys = new Set(heard.map((x) => x.key));
     for (const key of Object.keys(s.last)) if (!keys.has(key)) delete s.last[key];
     for (const key of Object.keys(s.files)) {
       const d = (heard.find((x) => x.key === key) || {}).deck;

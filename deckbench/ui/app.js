@@ -1222,9 +1222,9 @@ $("sound").addEventListener("click", async () => {
     const on = await Sound.toggle();
     $("sound").setAttribute("aria-pressed", String(on));
     $("sound").textContent = on ? "Listening" : "Listen";
-    if (on && S.state && !Sound.sources(S.state, Sound.options).length) {
-      toast("Listening. Nothing plays now: a deck is heard once it plays (with the bench's mixer on, while it is on air). " +
-            "A real player is heard as a beat, not its music, while a mixer says it is on air. If one plays and is not heard, check the Sound settings.", "warn");
+    if (on && S.state && !Sound.sources(S.state).length) {
+      toast("Listening. No bench deck plays now: one is heard once it plays (with the bench's mixer on, while it is on air). " +
+            "Real players are not heard here: their music comes out of the mixer.", "warn");
     }
   } catch (e) {
     toast(e.message || "The browser would not start the sound.");
@@ -1348,18 +1348,8 @@ for (const [id, key] of [["pktnoisy", "noisy"], ["pktours", "ours"], ["pktfollow
 (function soundOptions() {
   let saved = {};
   try { saved = JSON.parse(store.get("deckbench.sound", "{}")) || {}; } catch (e) { saved = {}; }
-  Sound.options.own = saved.own !== false;
-  Sound.options.other = saved.other !== false;
   if (typeof saved.volume === "number") Sound.setVolume(saved.volume); else Sound.volume = 0.4;
-  const keep = () => store.set("deckbench.sound", JSON.stringify({own: Sound.options.own, other: Sound.options.other, volume: Sound.volume}));
-  for (const [id, key] of [["soundown", "own"], ["soundother", "other"]]) {
-    $(id).setAttribute("aria-checked", String(Sound.options[key]));
-    $(id).addEventListener("click", () => {
-      Sound.options[key] = !Sound.options[key];
-      $(id).setAttribute("aria-checked", String(Sound.options[key]));
-      keep();
-    });
-  }
+  const keep = () => store.set("deckbench.sound", JSON.stringify({volume: Sound.volume}));
   $("soundvol").value = Math.round(Sound.volume * 100);
   $("soundvol").addEventListener("input", (e) => { Sound.setVolume(e.target.value / 100); keep(); });
 })();

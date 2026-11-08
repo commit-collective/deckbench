@@ -66,9 +66,9 @@ bench's mixer on, only its decks that are on the air are heard. A real mixer on 
 faders do not carry their sound. A browser starts sound only after a click, so it is off when the page opens.
 It is for hearing the decks. The stream above is what a device under test is fed.
 
-For physical CDJs this is a synthesized beat reference, not the audio playing on their USB sticks. Fresh broadcast beats
-can be auditioned without an enabled virtual deck or full player status. When status and a mixer are available, on-air
-flags still control which players are heard. Check the Sound settings, mixer faders and phone media volume if silent.
+Real players are not heard in Listen: their music comes out of the mixer, and a beat made up for them would only stand
+in its way. A bench deck that plays a real player's track plays that track's audio (docs/reference.md). Check the
+bench's mixer and the phone's media volume if a bench deck that plays is silent.
 A suspended browser audio context is reported rather than shown as listening successfully.
 
 The hosted app updates separately from a local Python checkout. To test new frontend changes before publishing them,
