@@ -22,7 +22,8 @@ const Sound = (() => {
     for (let k = Math.ceil(posAt(from) - 1e-9); k <= Math.floor(posAt(to)); k++) {
       let at = k;
       if (going && at >= deck.loop_from + deck.loop) at = deck.loop_from + ((at - deck.loop_from) % deck.loop);
-      out.push({k, at, time: t + (k - pos) / rate - offset, beat: ((at % 4) + 4) % 4 + 1, half: 0.5 / rate});
+      /* bar_shift: a real track's grid that starts elsewhere in its bar */
+      out.push({k, at, time: t + (k - pos) / rate - offset, beat: (((at + (deck.bar_shift || 0)) % 4) + 4) % 4 + 1, half: 0.5 / rate});
     }
     return out;
   };

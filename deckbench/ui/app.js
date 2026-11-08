@@ -230,6 +230,8 @@ function buildDeck(n, numbers) {
     h("details", {class: "fold"},
       h("summary", {}, "Load a track"),
       h("div", {class: "fields"},
+        h("label", {class: "wide t-copy-row", hidden: true, title: "Fill in the track a real player has loaded. The bench reads its grid, title and waveform from that player"},
+          "A player's track", h("select", {class: "t-copy", onchange: (e) => copyTrack(card, e.target)})),
         h("label", {}, "Rekordbox id", h("input", {type: "number", class: "t-id", min: 1, placeholder: String(100 + Number(n))})),
         h("label", {}, "BPM", h("input", {type: "number", class: "t-bpm", step: 0.1, min: 40, max: 220, placeholder: "keep"})),
         h("label", {class: "wide"}, "Title", h("input", {type: "text", class: "t-title", placeholder: "Track of deck " + n})),
@@ -282,6 +284,47 @@ async function sendFile(card, file) {
   button.disabled = false;
   button.textContent = "Browse\u2026";
   card.querySelector(".t-file").value = "";
+}
+
+/* The databases a deck can load from: its own, the other bench decks', and the real players' on the link (the bench reads the
+   grid of their SD and USB tracks). Kept up as players come and go, without losing the choice. And the tracks the real players
+   have loaded, to fill the form with. */
+function syncSources(card, n, s) {
+  const select = card.querySelector(".t-source"), copy = card.querySelector(".t-copy");
+  if (!select || !copy) return;
+  const players = devicesOf(s).filter((d) => d.online && d.kind === "player" && d.number != null && !(String(d.number) in s.decks));
+  const want = Object.keys(s.decks).map((m) => [m, "deck " + m + (m === n ? " (itself)" : "")])
+    .concat(players.map((d) => [String(d.number), "player " + d.number + " (" + (d.model || d.name) + ")"]));
+  const sig = want.map((w) => w.join("=")).join("|");
+  if (select.dataset.sig !== sig) {
+    const chosen = select.value || n;
+    select.replaceChildren(...want.map(([value, label]) => h("option", {value, selected: value === chosen}, label)));
+    select.dataset.sig = sig;
+  }
+  const tracks = players.filter((d) => d.status && d.status.rbid && [2, 3].includes(d.status.slot)).map((d) => {
+    const st = d.status, title = d.metadata && d.metadata.title;
+    return [st.source + ":" + st.slot + ":" + st.rbid + ":" + (title || ""),
+            "player " + d.number + ": " + (title || "id " + st.rbid) + " (" + (SLOTS[st.slot] || "slot " + st.slot) + " of player " + st.source + ")"];
+  });
+  const copySig = tracks.map((t) => t.join("=")).join("|");
+  if (copy.dataset.sig !== copySig) {
+    copy.replaceChildren(h("option", {value: ""}, "Choose\u2026"), ...tracks.map(([value, label]) => h("option", {value}, label)));
+    copy.dataset.sig = copySig;
+  }
+  const row = card.querySelector(".t-copy-row");
+  if (row.hidden !== !tracks.length) row.hidden = !tracks.length;
+}
+
+function copyTrack(card, select) {
+  if (!select.value) return;
+  const [source, slot, rbid, ...title] = select.value.split(":");
+  const set = (cls, value) => { card.querySelector("." + cls).value = value; };
+  set("t-id", rbid);
+  set("t-source", source);
+  set("t-slot", slot);
+  set("t-title", title.join(":"));
+  set("t-bpm", "");                                           /* the grid gives it */
+  select.value = "";
 }
 
 function loadTrack(n, card) {
@@ -366,6 +409,24 @@ function waveOf(n, d) {
   }
   const w = waves[id];
   return w ? Object.assign({offset: d.audio.offset, bpm: d.audio.bpm}, w) : null;
+}
+
+/* The waveform of a real player's track that a bench deck has loaded, read by the bench from that player (api/deck/N/track-waveform),
+   once the deck says it is ready: by deck, for the track it was read for. */
+const linkedWaves = {};
+function linkedWaveOf(n, d) {
+  const l = d.linked, have = linkedWaves[n];
+  if (have && (!l || have.key !== l.key)) delete linkedWaves[n];
+  if (!l || l.state !== "ready" || transport.demo) return null;
+  if (!linkedWaves[n]) {
+    linkedWaves[n] = {key: l.key, pending: true};
+    transport.fetch("api/deck/" + n + "/track-waveform")
+      .then((r) => { if (!r.ok) throw new Error("none"); return r.json(); })
+      .then((data) => { if (linkedWaves[n] && linkedWaves[n].key === data.key) linkedWaves[n] = Strip.realWave(data); })
+      .catch(() => { if (linkedWaves[n] && linkedWaves[n].key === l.key) linkedWaves[n] = {key: l.key, failed: true}; });
+  }
+  const w = linkedWaves[n];
+  return w && w.peaks ? w : null;
 }
 
 /* A real player's waveform, read by the bench from the player that hosts the track (api/player/IP/waveform), once it says it
@@ -454,7 +515,7 @@ function strips() {
   const now = Date.now() / 1000;
   for (const [n, d] of Object.entries(S.state.decks)) {
     const card = $("deck" + n), canvas = card && card.querySelector(".strip");
-    if (canvas && d.on) Strip.draw(canvas, Strip.layout(d, now, S.offset), {wave: waveOf(n, d)});
+    if (canvas && d.on) Strip.draw(canvas, Strip.layout(d, now, S.offset), {wave: waveOf(n, d) || linkedWaveOf(n, d)});
     else if (canvas) canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
   }
   for (const d of devicesOf(S.state)) {
@@ -707,10 +768,18 @@ function render() {
 
     fill(q("model"), d.model || d.name, d.address ? h("span", {class: "addr"}, d.address) : null);
     if (d.track) {
-      const own = d.track_source === Number(n);
-      fill(q("track"), h("b", {}, d.track), " · " + (own ? "own database" : "deck " + d.track_source) + " · " +
-                       (SLOTS[d.track_slot] || "slot " + d.track_slot) + " · id " + d.track_rbid);
+      const own = d.track_source === Number(n), bench = String(d.track_source) in s.decks, l = d.linked;
+      const where = (own ? "own database" : (bench ? "deck " : "player ") + d.track_source) + " · " +
+                    (SLOTS[d.track_slot] || "slot " + d.track_slot) + " · id " + d.track_rbid;
+      /* a real player's track: its grid once the bench has read it from that player */
+      const grid = !l ? "" : l.state === "ready" && d.grid
+        ? "grid " + d.grid.bpm.toFixed(2) + " BPM" + (d.grid.variable ? ", its first tempo (it changes)" : "")
+        : l.state === "failed" ? "no grid: " + l.reason : "reading its grid\u2026";
+      fill(q("track"), h("b", {}, d.track), " \u00b7 " + where + (grid ? " \u00b7 " + grid : ""));
+      const tip = d.track + " \u00b7 " + where + (grid ? " \u00b7 " + grid : "");
+      if (q("track").title !== tip) q("track").title = tip;
     } else fill(q("track"), "no track");
+    syncSources(card, n, s);
     const mixer = mixerOf(s);
     fill(q("tags"), d.on && d.loop ? h("span", {class: "tag loop"}, "LOOP " + d.loop) : null,
          d.unplugged ? h("span", {class: "tag cable"}, "UNPLUGGED") : null,

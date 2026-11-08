@@ -41,6 +41,10 @@ Implement protocol facts independently and check the license before reusing any 
 - Automatically fetch metadata on track changes, with caching, failure backoff and a manual refresh option
 - Guarded remote track loading from an existing player library, with explicit source, slot and track ID
 - Browse and richer metadata
+- A bench deck on a real player's track: its audio read over NFS from the player, and a grid whose tempo changes
+  followed beat by beat rather than at its first tempo
+- A local rekordbox export (`export.pdb` and the analysis files of a USB) as a bench deck's database, so a sound file
+  gets its grid and tempo from its analysis rather than a typed BPM
 - Read a track's stored cues (memory and hot cues, the cue list): snap a stopped player to the cue it sits on, as
   Beat Link does, and mark the cues on the strip
 - Control a real player's tempo from the page, for instance with the bench as tempo master and the players synced to

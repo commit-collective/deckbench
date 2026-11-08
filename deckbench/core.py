@@ -46,6 +46,9 @@ class Deck:
         self.cue = 0.0                       # the cue point, in beats (where CUE takes the deck back to: the first beat of a track)
         self.cueing = False                  # CUE is held where the deck was paused, so that it plays until it is let go
         self.on_air = None                   # what a mixer said (True or False), None: none did, so it is on air while it plays
+        # The beat grid of a real player's track it has loaded, once read: {"bpm" (the track's, at its first beat), "first" (the
+        # place in the bar of the track's first beat, 1 to 4), "beats", "variable" (its tempo changes), "source"}, or None
+        self.grid = None
 
     def position(self, now):
         """Beats since the bar line, counted on from the anchor at the tempo
@@ -67,9 +70,22 @@ class Deck:
         return not self.playing and abs(self.position(time.time() if now is None else now) - self.cue) < 0.02
 
     @property
+    def bar_shift(self):
+        """Beats from a bar line to the track's first beat: 0 unless its grid starts elsewhere in the bar."""
+        return self.grid["first"] - 1 if self.grid else 0
+
+    def bar_beat(self, position):
+        """The place in the bar (1 to 4) of the beat that `position` (in beats) is in."""
+        return (int(position) + self.bar_shift) % 4 + 1
+
+    @property
     def beat_in_bar(self):
         """1 to 4."""
-        return int(self.position(time.time())) % 4 + 1
+        return self.bar_beat(self.position(time.time()))
+
+    def track_bpm(self):
+        """The track's own tempo: its grid's, else the tempo it plays at (the pitch at zero)."""
+        return self.grid["bpm"] if self.grid else self.tempo()
 
     def tempo(self):
         """The tempo it plays at: its own, or the master's if it is synced."""
@@ -180,7 +196,7 @@ class World:
                          "at": None if d.playing else round(d.position(time.time()), 3),    # where a stopped deck is, in beats
                          "master": d.master and d.enabled, "bpm": round(d.tempo(), 2),
                          "name": d.name, "loop": d.loop[1] if d.loop else 0, "loop_from": d.loop[0] if d.loop else 0,
-                         "unplugged": d.unplugged,
+                         "unplugged": d.unplugged, "grid": dict(d.grid) if d.grid else None, "bar_shift": d.bar_shift,
                          "audio": None if not d.audio else {"file": os.path.basename(d.audio.path), "bpm": d.audio.bpm,
                                                             "seconds": round(d.audio.seconds, 1), "offset": d.audio.offset},
                          "phase": [d.anchor_t, d.anchor_pos, round(d.tempo(), 2)]
@@ -305,6 +321,7 @@ class World:
             deck.track = (int(rbid), title)
             deck.cue, deck.cueing = 0.0, False
             deck.audio = None                # a track of the bench's own, not of a file (load_audio gives the file after)
+            deck.grid = None                 # a real player's track gets its grid once it is read (set_grid)
             if bpm:
                 deck.base_bpm = float(bpm)
             deck.anchor_t = time.time()
@@ -330,6 +347,20 @@ class World:
         log("%s plays %s (%.1f s, made at %.1f BPM)" % (deck.name, os.path.basename(path), track.seconds, track.bpm))
         self.changed()
         return track
+
+    def set_grid(self, deck, grid):
+        """The beat grid of the real player's track the deck has loaded, as read from that player: the deck plays at the track's
+        tempo (its pitch at zero) and counts its bars as the grid does. A grid whose tempo changes is followed at its first
+        tempo. None: the deck counts as it did before."""
+        def change():
+            deck.grid = dict(grid) if grid else None
+            if grid:
+                deck.base_bpm = float(grid["bpm"])
+        self.settle(change)
+        if grid:
+            log("%s has the track's grid: %.2f BPM, its first beat is beat %d of a bar%s"
+                % (deck.name, grid["bpm"], grid["first"], ", its tempo changes (followed at its first)" if grid.get("variable") else ""))
+        self.changed()
 
     def clear_audio(self, deck):
         """The deck is back to its drum loop (the track it has loaded stays loaded)."""

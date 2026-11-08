@@ -223,10 +223,10 @@ def sounds(number):
     return _cache[number]
 
 
-def voice(number, start, tempo, frames, rate=RATE):
+def voice(number, start, tempo, frames, rate=RATE, shift=0):
     """Mono samples (floats) of deck `number` for `frames` frames, beginning at the place `start` (in beats) of a deck that
     plays at `tempo` BPM. A kick on each beat, a hat on each half beat and a tick on each bar line (the beats of 0 to 3
-    make a bar, as the bench counts them)."""
+    make a bar, as the bench counts them, `shift` beats later when the track's grid starts elsewhere in its bar)."""
     out = [0.0] * frames
     per_beat = 60.0 / tempo * rate                       # frames a beat
     kick, hat, tick = sounds(number)
@@ -239,7 +239,7 @@ def voice(number, start, tempo, frames, rate=RATE):
         layers = []
         if half % 2 == 0:
             layers.append(kick)
-            if (half // 2) % 4 == 0:
+            if (half // 2 + shift) % 4 == 0:
                 layers.append(tick)
         else:
             layers.append(hat)
@@ -261,17 +261,18 @@ class Mixer:
         mix_l, mix_r = [0.0] * frames, [0.0] * frames
         with self.world.lock:
             only = self.numbers if self.numbers is not None else self.world.audio_decks      # the decks started with, or the one chosen since
-            heard = [(d.number, d.position(now), d.tempo(), getattr(d, "audio", None)) for d in self.world.decks.values()
+            heard = [(d.number, d.position(now), d.tempo(), getattr(d, "audio", None), getattr(d, "bar_shift", 0))
+                     for d in self.world.decks.values()
                      if d.enabled and d.playing and not getattr(d, "unplugged", False)
                      and (only is None or d.number in only)]
-        for number, position, tempo, track in heard:
+        for number, position, tempo, track, shift in heard:
             if track:                                  # a track of its own: the file, at the deck's tempo
                 left, right = track.block(position, tempo, frames)
                 for i in range(frames):
                     mix_l[i] += left[i]
                     mix_r[i] += right[i]
                 continue
-            for i, x in enumerate(voice(number, position, tempo, frames)):
+            for i, x in enumerate(voice(number, position, tempo, frames, shift=shift)):
                 mix_l[i] += x
                 mix_r[i] += x
         samples = array.array("h")

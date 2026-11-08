@@ -103,7 +103,9 @@ Options (`python -m deckbench --help`):
 
     POST /api/deck/<n>/tempo/<bpm>    the pitch fader: the deck plays at that tempo
     POST /api/deck/<n>/load/<id>      the deck loads that track (optional ?title=...&bpm=...&source=<player>&slot=<n>), from its first beat.
-                                      With ?audio=<path>&bpm=<what it was made at>&offset=<seconds> it plays that sound file (docs/audio.md)
+                                      With ?audio=<path>&bpm=<what it was made at>&offset=<seconds> it plays that sound file (docs/audio.md).
+                                      With a real player as the source, the bench reads the track's grid (see below)
+    GET  /api/deck/<n>/track-waveform the waveform and grid of the real player's track the deck has loaded, once read
     POST /api/deck/<n>/audio/clear    the deck's drum loop again
     POST /api/audio/source/<n|all>    the sound port plays only deck n (the unit's input is one CDJ), or all the decks again
     GET  /api/uploads                 where the bench keeps the files the page sent and what it holds: {"dir", "files", "bytes"}
@@ -163,6 +165,37 @@ marked as an estimate.
 Retrieval and the grid's alignment were tried on a CDJ-2000NXS2 (1.84), for a track on its own USB and on another
 NXS2's, and an XDJ-1000MK2 has answered. Live tracking, loops, seeks and the CDJ-3000 are not yet tried on
 hardware, nor its three-band style, which is not asked for.
+
+## A real player's track on a bench deck
+
+A bench deck can load a track from a real player's SD or USB, as a CDJ loads one over the link: in the deck's
+**Load a track**, pick **A player's track** (the tracks the players have loaded) or choose the player under **From the
+database of** with the slot and the rekordbox ID. The API takes the same as any load:
+`POST /api/deck/<n>/load/<id>?source=<player>&slot=<2|3>`.
+
+The deck's status then names that player, slot and track, so other devices ask that player for its title and
+grid, as they would for a real deck. The bench reads the track's grid, title and waveform from the player too, in
+the same worker as the players' waveforms, even with Read waveforms by itself off. Once read, the deck plays on the
+grid:
+
+- its tempo is the track's, at its first beat, with the pitch at zero. A tempo set afterwards is reported as a pitch,
+  as a player reports one, with the track's tempo unchanged
+- its bars are counted as the grid counts them, so a track whose first beat is not on a bar line is on the right beat
+- its strip draws the track's waveform
+
+A grid whose tempo changes is followed at its first tempo, and the deck says so. The deck still sounds like its drum
+loop, at the track's tempo and on its bars: the track's audio is not read. To ask the player, the deck asks as
+itself when it is a player 1 to 4, else as an unused bench player 1 to 4 or the presence, as for track info.
+
+Each deck in the state has `linked`: `null` for a track of a bench database, else the `source`, `slot` and `rbid`, a
+`state` (`waiting`, `reading`, `ready` with the `title`, `artist` and `key`, or `failed` with a `reason`) and `grid`
+(`bpm`, `first`, the place in the bar of the track's first beat, `beats`, `first_ms`, `variable`). `bar_shift` is
+the beats from a bar line to the track's first beat. The event `linked_track_read` says the grid was taken.
+
+A bench deck also takes the load-track command (type 0x19) that rekordbox or Beat Link sends a player, unless it
+plays, as a player refuses then. The events are `load_command`, and `load_refused` with a `reason`. This has packet
+and loopback coverage only. The grid and waveform reading is the players' (see above), not yet tried on hardware
+for a bench deck.
 
 ## Remote loading
 

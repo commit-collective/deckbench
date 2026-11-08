@@ -190,6 +190,10 @@ class LinkDeck:
         self.online = False                 # it has come onto the network (and claimed its number, if that is asked)
         self.alone = False                  # nothing else was on the network when it came online (a byte of its keep-alive)
         self.mac = loopback.deck_mac(deck.number)
+        # A real player's track it has loaded: how far reading its grid is ({state, reason, title, artist}), None for a track
+        # of a bench deck's database, and the key of the grid it has taken (once per load)
+        self.linked = None
+        self.linked_applied = None
 
     @property
     def number(self):
@@ -255,18 +259,18 @@ class LinkDeck:
         p[0x84:0x88] = struct.pack(">I", self.sync_number if self.net.sync_counter else 0)
         p[0x89] = self.flags()
         p[0x8B] = 0x7A if deck.playing else 0x7E
-        pitch = struct.pack(">I", PITCH_NORMAL)
+        pitch = struct.pack(">I", self.pitch())
         for at in (0x8C, 0x98, 0xC0, 0xC4):              # the four copies of the pitch
             p[at:at + 4] = pitch
         p[0x90:0x92] = struct.pack(">H", 0x8000)         # a rekordbox track: its tempo counts
-        p[0x92:0x94] = struct.pack(">H", int(round(deck.tempo() * 100)))
+        p[0x92:0x94] = struct.pack(">H", int(round(deck.track_bpm() * 100)))
         p[0x94:0x98] = bytes((0x7F, 0xFF, 0xFF, 0xFF))   # no slip play
         p[0x9D] = 0x0D if deck.playing else 0x01         # forward, CDJ jog / paused
         p[0x9E] = 1 if deck.master else 0                # "master meaningful"
         p[0x9F] = self.handing_to
         p[0xA0:0xA4] = struct.pack(">I", int(deck.position(time.time())) + 1)   # the beat in the track
         p[0xA4:0xA6] = bytes((0x01, 0xFF))               # no cue point ahead
-        p[0xA6] = deck.beat_in_bar
+        p[0xA6] = deck.bar_beat(deck.position(time.time()))
         p[0xB6] = 1                                     # compatibility flag, see prolink-go issue 11
         self.counter += 1
         p[0xC8:0xCC] = struct.pack(">I", self.counter)
@@ -277,18 +281,25 @@ class LinkDeck:
         """The beat packet at the beginning of the beat that `position` (in beats) is in."""
         deck = self.deck
         period = 60000.0 / deck.tempo()
-        beat = int(position) % 4 + 1
+        beat = deck.bar_beat(position)
         left = 5 - beat                                  # beats to the next bar line
         p = bytearray(0x60)
         p[0:0x1F] = header(0x28, self.name)
         p[0x1F], p[0x21], p[0x23] = 0x01, self.number, 0x3C
         for i, beats in enumerate((1, 2, left, 4, left + 4, 8)):
             p[0x24 + 4 * i:0x28 + 4 * i] = struct.pack(">I", int(period * beats))
-        p[0x55:0x58] = struct.pack(">I", PITCH_NORMAL)[1:]
-        p[0x5A:0x5C] = struct.pack(">H", int(round(deck.tempo() * 100)))
+        p[0x55:0x58] = struct.pack(">I", self.pitch())[1:]
+        p[0x5A:0x5C] = struct.pack(">H", int(round(deck.track_bpm() * 100)))
         p[0x5C] = beat
         p[0x5F] = self.number
         return bytes(p)
+
+    def pitch(self):
+        """The pitch it reports: none (PITCH_NORMAL) unless it has a track's grid, whose tempo it then plays at times this."""
+        deck = self.deck
+        if not deck.grid:
+            return PITCH_NORMAL
+        return max(0, min(2 * PITCH_NORMAL, int(round(PITCH_NORMAL * deck.tempo() / deck.track_bpm()))))
 
     # -- UDP --
     @property
@@ -1110,7 +1121,9 @@ class Prolink(Protocol):
             return {}
         # The title of the track is in the database of the player it was loaded from.
         source = self.decks.get(link.source, link)
-        return {"track": source.titles.get((link.slot, link.rbid), ""),
+        linked = link.linked
+        title = linked.get("title") if linked else None
+        return {"track": title or source.titles.get((link.slot, link.rbid), ""), "linked": dict(linked) if linked else None,
                 "track_id": "%d:%d:%d" % (link.source, link.slot, link.rbid),
                 "track_source": link.source, "track_slot": link.slot, "track_rbid": link.rbid,
                 "model": link.name.decode(), "address": link.address}
@@ -1178,6 +1191,17 @@ class Prolink(Protocol):
         peers = [d for d in devices if d["online"] and d["number"] == status.get("source")]
         if len(peers) != 1:
             return None, None, "track source is missing or ambiguous"
+        sender = self.query_sender(devices)
+        if sender is None:
+            return None, None, "enable an unused bench player 1 to 4, or use an observer in that range"
+        return sender, peers[0], None
+
+    def query_sender(self, devices, own=None):
+        """Who asks a player's database: `own`, a bench deck asking for the track it has loaded, if it is on as a player 1
+        to 4, else an unused bench player 1 to 4, else the presence or the observer if it announced as one. None if
+        nothing can (older players answer only numbers 1 to 4)."""
+        if own is not None and 1 <= own.number <= 4 and own.deck.enabled and not own.deck.unplugged:
+            return own
         occupied = {d["number"] for d in devices if d["online"]}
         sender = next((l for l in self.decks.values() if 1 <= l.number <= 4 and l.number not in occupied
                        and (l.deck.enabled or self.observer) and not l.deck.unplugged), None)
@@ -1188,9 +1212,80 @@ class Prolink(Protocol):
         if sender is None and announcer and self.announced in (1, 2, 3, 4) and self.announced not in occupied:
             # the presence, or the observer, announced as a player 1 to 4 (announced_number)
             sender = types.SimpleNamespace(address=announcer.address, number=self.announced, name=b"deckbench")
-        if sender is None:
-            return None, None, "enable an unused bench player 1 to 4, or use an observer in that range"
-        return sender, peers[0], None
+        return sender
+
+    # -- a real player's track on a bench deck --
+    def linked_key(self, link, devices):
+        """(key, source) of the real player's track a bench deck has loaded, the key as wave_key makes it, or (None, why).
+        (None, None) for a track of the deck's own database or of another bench deck's, which has no grid to read."""
+        if link.source in self.decks:
+            return None, None
+        if link.slot not in (2, 3) or not link.rbid:
+            return None, "only an SD or USB track of a real player has a grid to read"
+        found = [d for d in devices if d["online"] and d["kind"] == "player" and d["number"] == link.source]
+        if len(found) != 1:
+            return None, ("player %d is not on the network" % link.source) if not found else ("two players are %d" % link.source)
+        source = found[0]
+        return (source["ip"], source["number"], source["mac"], link.slot, link.rbid, "waveform"), source
+
+    @staticmethod
+    def grid_summary(grid, source):
+        """What a deck takes of a track's grid ([[ms, bar, bpm100]...]): its first tempo and where its first beat is."""
+        first = grid[0][2]
+        return {"bpm": first / 100.0, "first": grid[0][1], "beats": len(grid), "first_ms": grid[0][0],
+                "variable": any(abs(beat[2] - first) > 5 for beat in grid), "source": source}
+
+    def follow_linked(self, devices):
+        """Each bench deck's real track: what the page is told, and its grid given to the deck once read (once a load)."""
+        for link in list(self.decks.values()):
+            key, source = self.linked_key(link, devices) if link.deck.enabled else (None, None)
+            if key is None and source is None:
+                if link.linked is not None:
+                    link.linked = None
+                    self.world.changed()
+                continue
+            state = {"source": link.source, "slot": link.slot, "rbid": link.rbid}
+            if key is None:
+                state.update(state="failed", reason=source)
+            elif self.query_sender(devices, link) is None:
+                state.update(state="failed", reason="nothing can ask player %d: switch on a bench deck 1 to 4" % link.source)
+            else:
+                with self.wave_lock:
+                    entry = self.waves.get(key)
+                    failed = self.wave_failed.get(key)
+                if entry:
+                    meta = entry.get("meta") or {}
+                    state.update(state="ready", title=meta.get("title") or "", artist=meta.get("artist") or "",
+                                 key=":".join(str(part) for part in key))
+                    grid = self.grid_summary(entry["data"]["grid"], link.source)
+                    if link.linked_applied != key:
+                        link.linked_applied = key
+                        self.world.set_grid(link.deck, grid)
+                        self.world.events.add("linked_track_read", deck=link.number, source=link.source, slot=link.slot,
+                                              rbid=link.rbid, title=state["title"], bpm=grid["bpm"], first=grid["first"])
+                elif failed:
+                    state.update(state="failed", reason=failed[1])
+                else:
+                    state.update(state="reading" if self.wave_busy == key else "waiting")
+            if state != link.linked:
+                link.linked = state
+                self.world.changed()
+
+    def linked_waveform(self, number):
+        """GET /api/deck/N/track-waveform: the waveform of the real player's track a bench deck has loaded. (status, body)"""
+        import base64
+        link = self.decks.get(number)
+        if not link:
+            return 404, {"error": "no such deck"}
+        key, why = self.linked_key(link, [d for d in self.monitor.snapshot() if d["online"]])
+        with self.wave_lock:
+            entry = self.waves.get(key) if key else None
+        if not entry:
+            return 404, {"error": why or "the track's waveform has not been read"}
+        data = entry["data"]
+        return 200, {"key": ":".join(str(part) for part in key), "rate": 150, "style": data["style"],
+                     "overview": base64.b64encode(data["overview"]).decode(),
+                     "detail": base64.b64encode(data["detail"]).decode(), "grid": data["grid"]}
 
     def forget_unloaded_info(self, devices):
         """Track info is kept while its track is loaded, so its title does not go and come back, and forgotten once no
@@ -1239,16 +1334,23 @@ class Prolink(Protocol):
         """Reads the waveform of each player's track by itself (auto_track_info), one at a time, outside the network
         threads and the world lock. Drops one as soon as no player has its track loaded: another USB or SD can hold
         another track with the same ID in the same slot."""
+        from ..metadata import read_track_metadata
         from ..waveforms import Unavailable, read_track_waveforms
         while not self.runtime.stopping.wait(1.0):
             now = time.time()
             devices = [d for d in self.monitor.snapshot() if d["online"]]
-            wanted = {}
+            wanted, linked = {}, set()
             for device in devices:
                 if device["kind"] == "player":
                     key, sender, source, _ = self.wave_key(device)
                     if key:
                         wanted[key] = (sender, source)
+            for link in list(self.decks.values()):         # a bench deck's real track: read because it was loaded
+                key, source = self.linked_key(link, devices) if link.deck.enabled else (None, None)
+                sender = self.query_sender(devices, link) if key else None
+                if sender:
+                    wanted.setdefault(key, (sender, source))
+                    linked.add(key)
             with self.wave_lock:
                 for key, entry in list(self.waves.items()):
                     if key in wanted:
@@ -1256,8 +1358,10 @@ class Prolink(Protocol):
                     else:
                         del self.waves[key]
                 self.wave_failed = {k: v for k, v in self.wave_failed.items() if k in wanted and now - v[0] < 60}
-                todo = [k for k in wanted if k not in self.waves and k not in self.wave_failed]
-            if not self.auto_waves or not todo:
+                todo = [k for k in wanted if k not in self.waves and k not in self.wave_failed
+                        and (self.auto_waves or k in linked)]
+            self.follow_linked(devices)
+            if not todo:
                 continue
             key = todo[0]
             sender, source = wanted[key]
@@ -1276,13 +1380,20 @@ class Prolink(Protocol):
                 continue
             for note in data.pop("notes", []):
                 log("waveform of %s on %s: %s" % (key[4], key[0], note))
+            meta = None
+            if key in linked:                               # and its title, which the deck shows
+                try:
+                    meta = read_track_metadata(source["ip"], sender.address, sender.number, key[3], key[4], self.ports.query)
+                except (OSError, EOFError, ValueError) as error:
+                    log("title of %s on %s not read: %s" % (key[4], key[0], error))
             with self.wave_lock:
-                self.waves[key] = {"data": data, "used": time.time()}
+                self.waves[key] = {"data": data, "used": time.time(), "meta": meta}
                 while len(self.waves) > self.WAVES:
                     self.waves.popitem(last=False)
             self.world.events.add("waveform_read", source=key[1], slot=key[3], rbid=key[4],
                                   beats=len(data["grid"]), seconds=round(len(data["detail"]) / 150, 1),
                                   style=data["style"])
+            self.follow_linked([d for d in self.monitor.snapshot() if d["online"]])
 
     def wave_state(self, device):
         """What the page is told of a player's waveform: its key and whether it is ready, being read or failed."""
@@ -1722,6 +1833,8 @@ class Prolink(Protocol):
         if slot is not None:
             link.slot = int(slot)
         link.source, link.rbid = (deck.number if source is None else int(source)), rbid
+        link.linked_applied = None                          # a real player's track: its grid is taken once read
+        link.linked = None
         origin = self.decks.get(link.source, link)          # the title is in the database of the player it comes from
         key = (link.slot, rbid)
         if title is not None:
@@ -1849,6 +1962,31 @@ class Prolink(Protocol):
             return name.startswith("DJS-")
         return self.target is not None and str(self.target) in (str(number), source)
 
+    def load_command(self, address, data):
+        """A load-track command (type 0x19) sent to a bench deck, as rekordbox or Beat Link sends one to a player: the deck
+        loads that track, from the player and slot it names, unless it plays (a player refuses one then too)."""
+        links = [l for l in self.decks.values() if l.address == address]
+        if len(links) > 1:                                   # decks on one address: the target is in the packet
+            links = [l for l in links if len(data) > 0x40 and l.number == data[0x40] + 1]
+        if len(links) != 1:
+            return
+        link = links[0]
+        deck = link.deck
+        if not deck.enabled or deck.unplugged:
+            return
+        sender, source, slot = data[0x21], data[0x28], data[0x29]
+        rbid = struct.unpack(">I", data[0x2C:0x30])[0]
+        why = ("it plays" if deck.playing else "no such track" if not (1 <= source <= 127 and slot in (1, 2, 3, 4) and rbid)
+               else None)
+        if why:
+            log("%s: refuses to load track %d from player %d, slot %d, for %d: %s" % (deck.name, rbid, source, slot, sender, why))
+            self.world.events.add("load_refused", deck=link.number, sender=sender, source=source, slot=slot, rbid=rbid,
+                                  reason=why)
+            return
+        log("%s: told by %d to load track %d from player %d, slot %d" % (deck.name, sender, rbid, source, slot))
+        self.world.events.add("load_command", deck=link.number, sender=sender, source=source, slot=slot, rbid=rbid)
+        self.world.load_track(deck, rbid, None, None, source, slot)
+
     def sniff(self):
         """Listens to keep-alives and statuses for the optional test target:
         its number and address, and whether it is
@@ -1884,6 +2022,9 @@ class Prolink(Protocol):
                 port = bound[1]
                 self.monitor.feed(data, addr[0], port, to="*" if bound[0] == "0.0.0.0" else bound[0])
                 if len(data) < 0x30 or data[:10] != MAGIC:
+                    continue
+                if port == self.ports.update and data[0x0A] == 0x19 and bound[0] != "0.0.0.0":
+                    self.load_command(bound[0], data)        # a track to load, sent to one of the decks
                     continue
                 if port == self.ports.announce and startup.claimed_number(data) is not None:
                     self.defend(startup.claimed_number(data), addr[0])

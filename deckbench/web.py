@@ -36,7 +36,9 @@
     GET  /api/unit                   what is known of the device under test: the network's word and the adapters' (lamps...)
     POST /api/unit/press/<control>   press a control of the device under test through an adapter (sync, master)
     POST /api/settings/<name>/<value>  strict and refuse_db (0 or 1), model (the name the decks announce)
-    POST /api/deck/<n>/load/<id>     also ?source=<player>&slot=<n>: the track is in that player's database
+    POST /api/deck/<n>/load/<id>     also ?source=<player>&slot=<n>: the track is in that player's database. A real player's SD or USB
+                                     track: the bench reads its grid, title and waveform from that player, and the deck plays on the grid
+    GET  /api/deck/<n>/track-waveform  that real track's waveform and grid, as /api/player/<ip>/waveform has a player's (404 until read)
     POST /api/deck/<n>/load/<id>     also ?audio=<a path on the bench's machine>&bpm=<what it was made at>&offset=<seconds>: the deck plays
                                      that sound file (a WAV, or what ffmpeg reads) at its tempo instead of its drum loop. 400 and
                                      {"error": ...} if the file will not do
@@ -255,6 +257,10 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
             elif re.fullmatch(r"/api/player/[\d.]+/waveform", path):
                 answer = next((p.waveform_asset(path.split("/")[3]) for p in world.protocols
                                if hasattr(p, "waveform_asset")), (404, {"error": "no link protocol here"}))
+                self.send(answer[0], json.dumps(answer[1]))
+            elif re.fullmatch(r"/api/deck/\d+/track-waveform", path):
+                answer = next((p.linked_waveform(int(path.split("/")[3])) for p in world.protocols
+                               if hasattr(p, "linked_waveform")), (404, {"error": "no link protocol here"}))
                 self.send(answer[0], json.dumps(answer[1]))
             elif re.fullmatch(r"/api/deck/\d+/waveform", path):
                 deck = world.decks.get(int(path.split("/")[3]))

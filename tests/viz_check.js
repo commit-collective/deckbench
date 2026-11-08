@@ -28,6 +28,14 @@ check("future grid follows the reported bar", shiftedGrid.ticks[1].beat === 2);
 const physicalMaster = {...shifted, number: 1, online: true, status: {master: true}};
 const mixed = {decks: {}, protocols: {prolink: {devices: [physicalMaster]}}};
 check("master reference can come from a physical player", Strip.master(mixed).number === 1);
+
+// A bench deck on a real track's grid that starts on beat 3 of a bar (bar_shift 2): its bars are the grid's.
+const onGrid = {on: true, phase: [100, 0, 120], bar_shift: 2, loop: 0, loop_from: 0};
+check("a shifted deck's first beat is beat 3", Strip.beatOf(onGrid, 100, 0) === 3);
+const gridTicks = Strip.layout(onGrid, 100, 0).ticks.filter((t) => t.at >= 0 && t.at <= 2);
+check("its ticks are counted from the grid", gridTicks.map((t) => t.beat).join() === "3,4,1", gridTicks.map((t) => t.beat));
+const gridStopped = Strip.layout({on: true, at: 0, bpm: 120, bar_shift: 2}, 100, 0).ticks.filter((t) => t.at >= 0 && t.at <= 2);
+check("and stopped too", gridStopped.map((t) => t.beat).join() === "3,4,1", gridStopped.map((t) => t.beat));
 mixed.decks[3] = {on: true, master: true, phase: [100, 0, 120]};
 check("virtual master takes over the reference", String(Strip.master(mixed).number) === "3");
 mixed.decks[3].on = false;

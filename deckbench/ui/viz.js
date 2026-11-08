@@ -18,7 +18,8 @@ const Strip = (() => {
     if (!deck.bar_phase && deck.loop && at >= deck.loop_from + deck.loop) {
       at = deck.loop_from + (at - deck.loop_from) % deck.loop;
     }
-    return ((Math.floor(at) % 4) + 4) % 4 + 1;
+    const shift = deck.bar_phase ? 0 : deck.bar_shift || 0;          /* a bench deck on a real track's grid */
+    return (((Math.floor(at) + shift) % 4) + 4) % 4 + 1;
   };
 
   v.master = (state) => {
@@ -49,7 +50,7 @@ const Strip = (() => {
     const going = !!loop && at < from + loop;                                  /* a deck that is past its loop has left it behind */
     for (let k = Math.ceil(at - (BEHIND + 1) * rate); k <= Math.floor(at + (AHEAD + 1) * rate); k++) {
       const shown = going && k >= from + loop ? from + ((k - from) % loop) : k;
-      ticks.push({dt: (k - at) / rate, at: shown, beat: ((shown % 4) + 4) % 4 + 1, inLoop: !!loop && k >= from && (going || k < from + loop),
+      ticks.push({dt: (k - at) / rate, at: shown, beat: (((shown + (deck.bar_shift || 0)) % 4) + 4) % 4 + 1, inLoop: !!loop && k >= from && (going || k < from + loop),
                   wrap: going && k >= from + loop && (k - from) % loop === 0});
     }
     return {ticks, stopped: true, loop, loopAhead: loop && from > at ? from - at : 0};
