@@ -21,7 +21,7 @@ CONTROLLER = 54                     # the controller's number in the packets: re
 NAME = b"deckbench probe"           # as tested
 CONNECT, DISCONNECT = 1, 2
 HOLD = 0.1                          # seconds a button is held
-SETTLE = 0.25                       # after the connect, before the press: as first tested (--press-settle)
+SETTLE = 0.1                        # after the connect, before the press (--press-settle): none loses CUE, 0.05 worked
 
 
 def packet(subtype, button=None, pressed=False, slot=None):

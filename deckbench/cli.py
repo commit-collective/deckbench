@@ -74,7 +74,7 @@ def main(argv=None):
     ap.add_argument("--no-track-info", action="store_true", help="start with Read track info by itself off")
     ap.add_argument("--no-waveforms", action="store_true", help="start with Read waveforms by itself off")
     ap.add_argument("--press-settle", type=float, default=None, metavar="SECONDS",
-                    help="wait between connecting to a player and pressing its button (default 0.25, as first tested)")
+                    help="wait between connecting to a player and pressing its button (default 0.1, 0 loses presses)")
     ap.add_argument("--observer-number", type=int, default=None,
                     help="observer identity, announced at once. By default a free 1 to 4 after 5 s of listening while track info or waveforms are read by itself, else 7")
     ap.add_argument("--decks", type=int, default=4, help="how many decks, numbered 1.. (default 4)")

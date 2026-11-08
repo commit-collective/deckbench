@@ -6,8 +6,8 @@ Newest first. A release is a tagged commit.
 
 - PLAY or a held CUE from a stop starts the strip where the player stood, not a beat behind, and a beat from before
   the stop is no longer taken for the new start.
-- `--press-settle SECONDS` sets the wait between connecting to a player and pressing its button (0.25 s by default,
-  as first tested), to try a shorter delay before a press takes effect.
+- PLAY/PAUSE and CUE take effect sooner: the wait between connecting to a player and pressing is 0.1 s, down from
+  0.25 s. `--press-settle SECONDS` changes it. With none, CUE was missed. 0.05 s worked.
 - A player held on CUE sends its beats with its play flag off. The bench hid them at each status, so the strip
   switched between the beats and an estimate and the beat lamps flashed. They now stay, as while it plays.
 - A loaded track's title no longer disappears for a moment every minute: its track info stays while it is loaded.

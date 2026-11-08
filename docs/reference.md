@@ -34,8 +34,9 @@ Options (`python -m deckbench --help`):
 
 - `--decks N` or `--numbers N,N,...`: the players (default 1 to 4)
 - `--no-track-info`, `--no-waveforms`: start with Read track info by itself, or Read waveforms by itself, off.
-- `--press-settle SECONDS`: the wait between connecting to a real player and pressing its button, 0.25 s by
-  default as first tested. Most of the delay before PLAY/PAUSE or CUE takes effect. A shorter one is untried.
+- `--press-settle SECONDS`: the wait between connecting to a real player and pressing its button, 0.1 s by
+  default. Most of the delay before PLAY/PAUSE or CUE takes effect. With none a CDJ-2000NXS2 setup missed CUE,
+  0.05 s worked.
   Neither setting is kept from one run to the next, so these are how to have them off from the start.
 - `--observe`: announce an observer, with no simulated playback decks, beat packets or database servers.
   `--observer-number N` selects its unused identity, announced at once. Without it, the number is a free 1 to 4,

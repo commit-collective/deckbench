@@ -212,7 +212,7 @@ class Buttons(unittest.TestCase):
         # cue-up comes while the press is on its way (during the settle): it is kept, and sent once CUE is down
         def pause(seconds):
             waits.append(seconds)
-            if seconds == transport.SETTLE:
+            if len(waits) == 1:                         # the settle, the first wait
                 self.assertEqual(self.call("command", "cue-up"), (200, {"released": True}))
         with unittest.mock.patch.object(sender, "send", lambda sock, data, addr: sent.append(data.hex())),              unittest.mock.patch.object(self.net.runtime.stopping, "wait", pause):
             self.assertEqual(self.call("command", "cue-down")[1]["held"], False)
