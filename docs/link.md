@@ -71,3 +71,4 @@ arrives twice within 30 ms.
 
 The Listen button plays the bench's decks, each with its own voice (bass, drums, keys, percussion). The settings choose whether the
 bench's own decks and other devices are heard. A device is heard while it plays, and with a mixer known, while it is on air.
+A bench deck is silenced only by the bench's own mixer, not by a real one on the network.

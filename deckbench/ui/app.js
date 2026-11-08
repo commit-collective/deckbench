@@ -813,7 +813,9 @@ function render() {
     const mixer = mixerOf(s);
     fill(q("tags"), d.on && d.loop ? h("span", {class: "tag loop"}, "LOOP " + d.loop) : null,
          d.unplugged ? h("span", {class: "tag cable"}, "UNPLUGGED") : null,
-         mixer && mixer.on && d.on ? h("span", {class: "tag " + (d.on_air ? "air-tag" : "off-air")}, d.on_air ? "ON AIR" : "OFF AIR") : null);
+         (mixer && mixer.on || d.air_said) && d.on ? h("span", {class: "tag " + (d.on_air ? "air-tag" : "off-air"),
+           title: mixer && mixer.on ? "What the bench's mixer says" : "What a mixer on the network says of its channel " + n + ". It does not silence the deck's sound here"},
+           d.on_air ? "ON AIR" : "OFF AIR") : null);
 
     setText(q("lcd").firstChild, d.on ? d.bpm.toFixed(1) : "--");
     const power = q("num");                  /* the number: the deck's on / off switch */
@@ -1157,8 +1159,8 @@ $("sound").addEventListener("click", async () => {
     $("sound").setAttribute("aria-pressed", String(on));
     $("sound").textContent = on ? "Listening" : "Listen";
     if (on && S.state && !Sound.sources(S.state, Sound.options).length) {
-      toast("Listening. Nothing plays now: a deck is heard once it plays, and with a mixer only while it is on air. " +
-            "A real player is heard as a beat, not its music. If one plays and is not heard, check the Sound settings.", "warn");
+      toast("Listening. Nothing plays now: a deck is heard once it plays (with the bench's mixer on, while it is on air). " +
+            "A real player is heard as a beat, not its music, while a mixer says it is on air. If one plays and is not heard, check the Sound settings.", "warn");
     }
   } catch (e) {
     toast(e.message || "The browser would not start the sound.");

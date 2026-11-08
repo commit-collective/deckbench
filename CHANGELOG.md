@@ -23,6 +23,10 @@ Newest first. A release is a tagged commit.
   port. Settings has a switch for it. Not yet tried against a player. The files read are kept only while the bench
   runs, unless Keep a loaded track's audio is on.
 - Listen says what it waits for when nothing plays yet, and that a real player is heard as a beat, not its music.
+- A bench deck is heard in Listen whatever a real mixer on the network says of its channel. A DJM said a deck off the
+  air when the channel of its number was down, and the page went silent, though the mixer does not carry the
+  bench's sound. Only the bench's own mixer silences a deck now, as on the sound port. The deck's card shows what a
+  real mixer says.
 
 - A real player's loop is steadier, from a capture of 2- and 4-beat loops on a CDJ-2000NXS2. The beats ahead of
   the playhead take their place in the bar from the loop, so a 2-beat loop's numbers no longer move every pass. A

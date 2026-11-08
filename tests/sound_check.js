@@ -70,9 +70,10 @@ state.protocols.prolink.devices[0].status.on_air = true;
 check("a device on air is heard", keys({own: true, other: true}) === "1,ext:10.0.0.5");
 state.protocols.prolink.mixer.on = false;
 state.protocols.prolink.devices.push({ip: "10.0.0.8", number: 33, kind: "mixer", online: true, status: null, phase: null});
-check("a mixer on the link: only what is on air", keys({own: true, other: true}) === "1,ext:10.0.0.5", keys({own: true, other: true}));
+check("a mixer on the link: the devices on air, and every bench deck that plays, which its faders do not carry",
+      keys({own: true, other: true}) === "1,3,ext:10.0.0.5", keys({own: true, other: true}));
 state.protocols.prolink.devices[0].status.on_air = false;
-check("and a device off the air is silent", keys({own: true, other: true}) === "1", keys({own: true, other: true}));
+check("and a device off the air is silent", keys({own: true, other: true}) === "1,3", keys({own: true, other: true}));
 state.protocols.prolink.devices[0].status = null;
 state.protocols.prolink.devices[0].bar_phase = [0, 0, 124];
 check("broadcast-only devices can be auditioned before a virtual deck is enabled", keys({own: false, other: true}) === "ext:10.0.0.5");

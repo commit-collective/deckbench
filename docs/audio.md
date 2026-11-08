@@ -61,8 +61,9 @@ A file that will not do is answered with 400 and `{"error": ...}`, and nothing c
 
 The **Listen** button of the page plays something like it in the browser, with no stream and no port: for each deck that plays, a kick
 on the beats 1 and 3, a snare on 2 and 4 and a hat between, made with Web Audio from the deck's tempo and place in its bar (the
-page counts the beats on from the bench's `phase`, as it does for the beat squares). Each deck has its place in the stereo field. With a
-mixer on only the decks that are on the air are heard. A browser starts sound only after a click, so it is off when the page opens.
+page counts the beats on from the bench's `phase`, as it does for the beat squares). Each deck has its place in the stereo field. With the
+bench's mixer on, only its decks that are on the air are heard. A real mixer on the network does not silence them, since its
+faders do not carry their sound. A browser starts sound only after a click, so it is off when the page opens.
 It is for hearing the decks. The stream above is what a device under test is fed.
 
 For physical CDJs this is a synthesized beat reference, not the audio playing on their USB sticks. Fresh broadcast beats

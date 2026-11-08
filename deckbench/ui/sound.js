@@ -57,8 +57,11 @@ const Sound = (() => {
     const mixer = prolink && prolink.mixer;
     const mixerOn = !!(mixer && mixer.on) || devices.some((d) => d.kind === "mixer" && d.online);
     if (options.own) {
-      /* a deck's on air is what a mixer told it, and while it plays when none did: the bench says so in its state */
-      for (const [n, d] of Object.entries(state.decks)) if (s.audible(d, true)) out.push({key: n, number: Number(n), deck: d});
+      /* a bench deck's sound goes through the bench's own mixer only: a real mixer on the link may say it is off the air
+         (its channel of that number is down), but its faders do not carry the bench's sound, so only the bench's mixer
+         silences it, as on the bench's sound port */
+      const own = !!(mixer && mixer.on);
+      for (const [n, d] of Object.entries(state.decks)) if (s.audible(d, own)) out.push({key: n, number: Number(n), deck: d});
     }
     if (options.other) {
       for (const d of devices) {

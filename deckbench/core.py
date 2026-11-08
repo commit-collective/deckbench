@@ -193,6 +193,7 @@ class World:
             for n, d in self.decks.items():
                 entry = {"on": d.enabled, "play": d.playing, "sync": d.sync, "cue": d.cueing or d.at_cue(),
                          "on_air": d.on_air if d.on_air is not None else d.playing,
+                         "air_said": d.on_air is not None,                     # a mixer said it, the bench's or a real one
                          "at": None if d.playing else round(d.position(time.time()), 3),    # where a stopped deck is, in beats
                          "master": d.master and d.enabled, "bpm": round(d.tempo(), 2),
                          "name": d.name, "loop": d.loop[1] if d.loop else 0, "loop_from": d.loop[0] if d.loop else 0,
