@@ -81,15 +81,40 @@ function apply(state) {
   render();
 }
 
+/* The bench's stream. A browser retries a dropped one by itself, but not one it closed: a phone that suspends the page
+   (another app, the screen off) often comes back to a closed stream, which then never reconnects. So the page opens a
+   new one when its stream is closed, when nothing came for a while (the bench sends its state every second), and when
+   the page is shown again after nothing came. */
+const live = {stream: null, heard: 0, retry: null};
 function connect() {
   if (!window.EventSource && !transport.demo) return poll();
-  const es = transport.eventSource("api/stream");
-  es.onopen = () => { S.connected = true; renderChips(); };
-  es.onerror = () => { S.connected = false; renderChips(); };
-  es.addEventListener("state", (e) => apply(JSON.parse(e.data)));
-  es.addEventListener("event", (e) => addEvent(JSON.parse(e.data)));
-  es.addEventListener("cleared", () => clearEvents());
-  es.addEventListener("scenario", (e) => { S.scenario = JSON.parse(e.data); renderScenario(); });
+  if (live.stream && live.stream.close) live.stream.close();
+  if (live.retry) clearTimeout(live.retry);
+  live.retry = null;
+  const es = live.stream = transport.eventSource("api/stream");
+  live.heard = Date.now();
+  const heard = () => {
+    live.heard = Date.now();
+    if (!S.connected) { S.connected = true; renderChips(); }
+  };
+  es.onopen = heard;
+  es.onerror = () => {
+    S.connected = false; renderChips();
+    if (es.readyState === 2 && live.stream === es && !live.retry) live.retry = setTimeout(connect, 1000);   /* closed: no retry of its own */
+  };
+  es.addEventListener("state", (e) => { heard(); apply(JSON.parse(e.data)); });
+  es.addEventListener("event", (e) => { heard(); addEvent(JSON.parse(e.data)); });
+  es.addEventListener("cleared", () => { heard(); clearEvents(); });
+  es.addEventListener("scenario", (e) => { heard(); S.scenario = JSON.parse(e.data); renderScenario(); });
+}
+
+/* a stream that went quiet, or a page shown again after it did: a new one */
+function keepConnected() {
+  if (transport.demo || !window.EventSource) return;
+  const stale = (seconds) => Date.now() - live.heard > seconds * 1000;
+  setInterval(() => { if (!document.hidden && stale(5)) connect(); }, 2000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && stale(2.5)) connect(); });
+  window.addEventListener("pageshow", (e) => { if (e.persisted) connect(); });          /* back from the browser's page cache */
 }
 
 /* for a browser with no EventSource */
@@ -1411,6 +1436,7 @@ function start() {
   loadExamples();
   initPhone();
   connect();
+  keepConnected();
   requestAnimationFrame(frame);
   const change = $("changebench");
   if (transport.demo || transport.remote()) {

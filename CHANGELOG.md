@@ -4,6 +4,10 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- A page that a phone suspended (another app, the screen off) reconnects when it comes back. The browser had closed
+  its stream for good, so it said reconnecting until the page was reloaded. The page now opens a new stream when its
+  stream is closed, quiet for 5 seconds, or quiet when the page is shown again.
+
 - **Phone**, at the top of the page on the bench's machine, shares the bench with phones on demand: it listens on an
   address of the local network too, with a token of its own, and shows the QR code and the link in the page. **Stop
   sharing** closes it. Started with `--phone`, the button shows the existing link and QR. `--phone-address` now also
