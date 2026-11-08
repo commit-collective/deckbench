@@ -49,5 +49,16 @@ Implement protocol facts independently and check the license before reusing any 
 - macOS hardware and local-software interoperability validation
 - NFS audio serving only as a separate, explicitly reviewed project
 
+## A deck API of its own, eventually
+
+The protocol layer could become a library apart from the bench: one model of a deck (state, beats, track, tempo) and
+its commands over Pro DJ Link, StagelinQ and others. Beat Link is the reference for Pro DJ Link, but it is Java and
+covers that protocol only. Reading state abstracts well. Control does not, since each protocol allows different
+commands, so the model needs per-device capabilities rather than one command set for all.
+
+- Keep `deckbench/protocols` free of page logic now, with its device model treated as an internal API
+- Shape the shared model only once a second protocol works behind it
+- Move it to its own repository when something besides the bench uses it
+
 Remote loading must reject a playing target and report sent versus confirmed state separately.
 It must not imply that files uploaded to the bench are available as a physical player's USB library.
