@@ -269,11 +269,13 @@ card's CUE switch does this while you hold it. `cue-up` is never refused. While
 the finger stays down the page sends `cue-hold` each second, which presses nothing.
 A CUE that nobody keeps for 3 seconds is let go by the bench (a page that went away),
 and so is one held when the bench stops or reconnects. CUE keeps the finger or the
-mouse wherever it goes until it is let go. Let go on the card's PLAY/PAUSE, marked
+mouse wherever it goes until it is let go. Let go on the card's PLAY, marked
 while CUE is held, and PLAY/PAUSE is pressed first through the same connection,
-while CUE is still down, so the player plays on, as with its own buttons (untried
-on hardware). While CUE is held the player sends no beats, so the card's beat lamps
-follow the strip's estimate.
+while CUE is still down, so the player plays on, as with its own buttons. The card's
+button reads PLAY or PAUSE by what the player does, and PLAY while CUE is held. A
+bench deck's CUE works the same way on the page, and `POST /api/deck/<n>/play/1`
+while it is held plays on. While CUE is held the player sends no beats, so the card's
+beat lamps follow the strip's estimate.
 
 ## Package layout
 

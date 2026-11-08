@@ -4,6 +4,10 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- A bench deck's CUE works as a real player's on the page: held, it plays from the cue point, and let go on PLAY
+  it plays on (PLAY pressed while CUE is held plays on, as on a CDJ). Both kinds of deck say PLAY or PAUSE by what
+  the deck does, and PLAY while CUE is held.
+
 - Load a track takes one kind of track at a time. A player's track fills in its player, slot, ID and title and
   clears the sound file. A sound file puts the database back to the deck's own. The track picked stays shown, and
   Clear empties the form.

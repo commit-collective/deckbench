@@ -536,7 +536,8 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                     return self.send(200, json.dumps(world.snapshot()))
                 if len(parts) == 5:             # set, not toggle
                     want = parts[4] == "1"
-                    current = {"on": deck.enabled, "play": deck.playing, "sync": deck.sync,
+                    # a deck held on CUE is not playing for PLAY: play/1 then plays on, as on a CDJ
+                    current = {"on": deck.enabled, "play": deck.playing and not deck.cueing, "sync": deck.sync,
                                "master": deck.master}.get(what)
                     if current is None:
                         return self.send(400, '{"error": "no such switch"}')

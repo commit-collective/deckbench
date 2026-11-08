@@ -22,6 +22,24 @@ def call(url, method="GET", headers=None):
         return e.code, json.loads(e.read() or b"null"), dict(e.headers)
 
 
+class PlayWhileCueHeld(unittest.TestCase):
+    """play/1 while CUE is held plays on (the page's let go on PLAY), rather than doing nothing as for a playing deck."""
+
+    def test_play_1_while_cue_is_held_plays_on(self):
+        world = World()
+        deck = world.decks[1] = Deck(world, 1, 120.0)
+        deck.enabled = True
+        server = serve(world, "127.0.0.1", 0)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = "http://127.0.0.1:%d/" % server.server_address[1]
+        self.assertEqual(call(base + "api/deck/1/cue/1", "POST")[0], 200)
+        self.assertTrue(deck.cueing)
+        self.assertEqual(call(base + "api/deck/1/play/1", "POST")[0], 200)
+        self.assertEqual(call(base + "api/deck/1/cue/0", "POST")[0], 200)
+        self.assertTrue(deck.playing and not deck.cueing)
+
+
 class Share(unittest.TestCase):
     def setUp(self):
         self.address = phone.route_address()

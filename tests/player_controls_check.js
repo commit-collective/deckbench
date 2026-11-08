@@ -27,7 +27,7 @@ assert.strictEqual(calls.length, 0, "Building controls must never send a command
 // the switches, as a bench deck's: SYNC asks for the opposite of what it shows
 const switches = find(card, node => node.attrs && node.attrs.class === "switches player-switches");
 assert.strictEqual(switches.attrs.hidden, true, "Switches stay hidden until the backend reports eligibility");
-for (const [label, command, pressed] of [["PLAY/PAUSE", "play-pause", "false"], ["START", "start", "false"],
+for (const [label, command, pressed] of [["PLAY", "play-pause", "false"], ["START", "start", "false"],
   ["STOP", "stop", "false"], ["SYNC", "sync-on", "false"],
   ["SYNC", "sync-off", "true"], ["MASTER", "master", "false"]]) {
   const button = find(switches, node => node.tag === "button" && node.children[0] === label);

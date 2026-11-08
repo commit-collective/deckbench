@@ -75,6 +75,15 @@ class Cue(unittest.TestCase):
         world.set_cue(deck, False)
         self.assertTrue(deck.playing)
 
+    def test_a_play_click_while_cue_is_held_plays_on(self):
+        world, deck = bench()
+        world.set_cue(deck, True)
+        self.assertTrue(world.snapshot()["decks"]["1"]["cueing"])
+        world.toggle(deck, "play")                  # PLAY pressed while CUE is held: it plays on, it does not pause
+        world.set_cue(deck, False)
+        self.assertTrue(deck.playing and not deck.cueing)
+        self.assertFalse(world.snapshot()["decks"]["1"]["cueing"])
+
     def test_the_snapshot_and_the_status_say_cued_and_cue_playing(self):
         world, deck = bench()
         self.assertTrue(world.snapshot()["decks"]["1"]["cue"])        # paused on it

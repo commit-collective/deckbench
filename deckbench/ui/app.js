@@ -223,13 +223,14 @@ function buildDeck(n, numbers) {
     h("div", {class: "switches", role: "group", "aria-label": "Deck " + n + " switches"},
       SWITCHES.map(([what, label]) => what === "cue"
         /* CUE is held: down plays from the cue point when the deck is paused on it, and up goes back */
-        ? h("button", {class: "sw", "data-what": what, "aria-pressed": "false",
-            title: "Playing: back to the cue point. Paused on it: plays while held. Paused elsewhere: sets the cue point",
-            onpointerdown: (e) => { e.currentTarget.setPointerCapture(e.pointerId); act(clicked("api/deck/" + n + "/cue/1")); },
-            onpointerup: () => act("api/deck/" + n + "/cue/0"),
-            onpointercancel: () => act("api/deck/" + n + "/cue/0"),
-            onkeydown: (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); act(clicked("api/deck/" + n + "/cue/1")); } },
-            onkeyup: (e) => { if (e.key === " " || e.key === "Enter") act("api/deck/" + n + "/cue/0"); }}, label)
+        ? h("button", {class: "sw", "data-what": what, "aria-pressed": "false", oncontextmenu: (e) => e.preventDefault(),
+            title: "Playing: back to the cue point. Paused on it: plays while held, and let go on PLAY it plays on. Paused elsewhere: sets the cue point",
+            onpointerdown: (e) => { e.currentTarget.setPointerCapture(e.pointerId); deckCue(n, e.currentTarget, true); },
+            onpointermove: (e) => { if (deckCues.has(n)) cueOver(e.currentTarget, e); },
+            onpointerup: (e) => deckCue(n, e.currentTarget, false, e),
+            onpointercancel: (e) => deckCue(n, e.currentTarget, false),
+            onkeydown: (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); deckCue(n, e.currentTarget, true); } },
+            onkeyup: (e) => { if (e.key === " " || e.key === "Enter") deckCue(n, e.currentTarget, false); }}, label)
         : h("button", {class: "sw", "data-what": what, "aria-pressed": "false",
             onclick: () => act(clicked("api/deck/" + n + "/" + what))}, label))),
     h("div", {class: "row"}, h("label", {for: "tempo" + n}, "Tempo"),
@@ -619,7 +620,7 @@ function cueHold(d, button, down, play = null) {
 
 /* CUE keeps the pointer (a finger or the mouse) until it is let go, wherever it goes. While it is held, the card's
    PLAY/PAUSE is marked as a place to let go on, and lit when the pointer is over it */
-const playOf = (cue) => cue.closest(".player-switches").querySelector('[data-command="play-pause"]');
+const playOf = (cue) => cue.closest(".switches").querySelector('[data-command="play-pause"], [data-what="play"]');
 function cueOver(cue, e) {
   const play = playOf(cue), at = document.elementFromPoint(e.clientX, e.clientY);
   const over = !!play && !play.disabled && !play.hidden && !!at && play.contains(at);
@@ -637,6 +638,26 @@ window.addEventListener("pagehide", () => {
   for (const [ip, number] of heldCues)
     fetch(transport.url("api/player/" + ip + "/command/cue-up?number=" + number), {method: "POST", keepalive: true}).catch(() => {});
 });
+
+/* A bench deck's CUE, as a real player's: down while held, up when let go. Paused on its cue point, it plays while held, and
+   PLAY is marked as a place to let go on: let go there, it plays on (PLAY first, then CUE up). The up waits for the down. */
+const deckCues = new Map();             // bench deck: its CUE down on its way, while it is held from this page
+function deckCue(n, cue, down, e = null) {
+  if (down) {
+    if (deckCues.has(n)) return;
+    const d = S.state && S.state.decks[n], play = playOf(cue);
+    if (d && d.cue && !d.play && play && !play.disabled) play.classList.add("drop-ready");   /* the hold will play */
+    deckCues.set(n, api(clicked("api/deck/" + n + "/cue/1")).catch(() => {}));
+    return;
+  }
+  if (!deckCues.has(n)) return;
+  const pressed = deckCues.get(n), play = playOf(cue);
+  deckCues.delete(n);
+  const on = !!e && !!play && play.classList.contains("drop-ready") && !!cueOver(cue, e);
+  if (play) play.classList.remove("drop-ready", "drop-over");
+  pressed.then(() => on ? api(clicked("api/deck/" + n + "/play/1")).catch(() => {}) : null)
+    .then(() => act("api/deck/" + n + "/cue/0"));
+}
 
 function playerCommand(d, button, command) {
   api("api/player/" + d.ip + "/command/" + command + "?number=" + button.dataset.number).catch(() => {});
@@ -679,7 +700,7 @@ function buildDevice(d) {
        from what it reports. A model that takes no presses has fader start's START and STOP instead */
     mixer ? null : h("div", {class: "switches player-switches", role: "group", "aria-label": "Player switches", hidden: true},
       h("button", {class: "sw", "data-command": "play-pause", "data-method": "buttons", "aria-pressed": "false",
-        onclick: (e) => playerCommand(d, e.currentTarget, "play-pause")}, "PLAY/PAUSE"),
+        onclick: (e) => playerCommand(d, e.currentTarget, "play-pause")}, "PLAY"),
       /* CUE follows the finger, as the player's own: down while pressed, up when let go (the bench lets go by itself if
          this page stops saying it is held). Let go on PLAY/PAUSE, it presses PLAY first and the player plays on */
       h("button", {class: "sw", "data-command": "cue", "data-method": "buttons", "aria-pressed": "false", oncontextmenu: (e) => e.preventDefault(),
@@ -749,6 +770,8 @@ function renderDevices() {
         button.dataset.number = d.number;
         const pressed = String(lit[button.dataset.command]);
         if (button.getAttribute("aria-pressed") !== pressed) button.setAttribute("aria-pressed", pressed);
+        /* PLAY or PAUSE by what the player does: held on CUE (cue playing) its play flag is off, so it reads PLAY */
+        if (button.dataset.command === "play-pause") setText(button, live && st.play ? "PAUSE" : "PLAY");
         const tip = why || button.dataset.tip || "";
         if (button.title !== tip) button.title = tip;
       }
@@ -866,7 +889,10 @@ function render() {
       const what = b.dataset.what;
       b.setAttribute("aria-pressed", String(!!d[what] && d.on));
       b.disabled = !d.on;
-      if (what === "play") setText(b, d.play ? "PAUSE" : "PLAY");
+      if (what === "play") {                  /* held on CUE it is not playing yet: PLAY, until it plays on */
+        setText(b, d.play && !d.cueing ? "PAUSE" : "PLAY");
+        b.setAttribute("aria-pressed", String(!!d.play && !d.cueing && d.on));
+      }
     }
     const range = q("tempo-range"), num = q("tempo-num");
     if (active !== range) range.value = d.bpm;

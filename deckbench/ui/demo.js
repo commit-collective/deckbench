@@ -176,7 +176,7 @@ class DemoBench {
     const decks = {};
     for (const d of Object.values(this.decks)) {
       const bpm = Math.round(this.tempo(d) * 100) / 100;
-      decks[d.number] = {on: d.on, play: d.play, sync: d.sync, cue: d.cueing || (!d.play && Math.abs(this.position(d) - d.cue) < 0.02), on_air: this.onAir(d), master: d.master && d.on, bpm,
+      decks[d.number] = {on: d.on, play: d.play, sync: d.sync, cueing: d.cueing, cue: d.cueing || (!d.play && Math.abs(this.position(d) - d.cue) < 0.02), on_air: this.onAir(d), master: d.master && d.on, bpm,
         name: "deck " + d.number, loop: d.loop ? d.loop[1] : 0, loop_from: d.loop ? d.loop[0] : 0, unplugged: d.unplugged,
         at: d.play ? null : Math.round(this.position(d) * 1000) / 1000,
         phase: d.on && d.play ? [d.anchorT, d.anchorPos, bpm] : null,
@@ -222,7 +222,7 @@ class DemoBench {
     } else if (!d.on) {
       return;
     } else if (what === "play") {
-      this.settle(() => { d.play = want ?? !d.play; d.cueing = false; if (d.play) d.anchorT = this.now(); });      /* pause keeps the place, play goes on from it */
+      this.settle(() => { d.play = want ?? (d.cueing || !d.play); d.cueing = false; if (d.play) d.anchorT = this.now(); });      /* pause keeps the place, play goes on from it, and plays on from a held CUE */
     } else if (what === "sync") {
       this.settle(() => { d.sync = want ?? !d.sync; });
     } else if (what === "master") {
