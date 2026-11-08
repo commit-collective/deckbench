@@ -79,6 +79,9 @@ class Ports:
 
 DEFAULT_PORTS = Ports()
 PITCH_NORMAL = 0x100000
+# what is broadcast on the beat port and is no command to a deck: a beat, fader start, the mixer's on-air report, a
+# CDJ-3000's precise position
+BROADCAST_KINDS = (0x28, 0x02, 0x03, 0x0B)
 
 
 def header(ptype, name):
@@ -194,6 +197,7 @@ class LinkDeck:
         # of a bench deck's database, and the key of the grid it has taken (once per load)
         self.linked = None
         self.linked_applied = None
+        self.unknown_said = set()           # (packet type, sender) of the unknown packets already logged
         self.linked_audio = None            # reading its audio from the player: {state, done, total, reason, file}
         self.audio_key = None               # the key of the track whose audio it has
 
@@ -440,8 +444,12 @@ class LinkDeck:
             if not deck.enabled or deck.unplugged or len(data) < 0x25 or data[:10] != MAGIC:
                 continue
             kind, sender = data[0x0A], data[0x21]
-            if kind not in (0x26, 0x2A):
-                log("%s: packet type %#04x from %d, %d bytes: %s"
+            # The broadcasts on this port reach this socket too on some systems (Windows): every player's beats, the
+            # mixer's on-air report, a CDJ-3000's position, fader start. They are not for this deck, and the monitor
+            # keeps them. Another kind is said once for each sender, not at each packet.
+            if kind not in (0x26, 0x2A) + BROADCAST_KINDS and (kind, sender) not in self.unknown_said:
+                self.unknown_said.add((kind, sender))
+                log("%s: packet type %#04x from %d, %d bytes (said once): %s"
                     % (deck.name, kind, sender, len(data), data[0x1F:].hex()))
             if kind == 0x26:                                     # master hand-off request
                 with world.lock:

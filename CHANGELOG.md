@@ -4,6 +4,10 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- A bench deck no longer logs every beat of every player. On Windows its socket for commands also gets the broadcasts
+  of that port (beats, the mixer's on-air report, position, fader start), and each was logged. They are left to the
+  packet log now, and a packet of another kind is logged once for each sender.
+
 - Listen plays only the bench's decks. A real player was heard as a beat made up for it, which only stood in the way of
   its own music, out of the mixer. The Sound settings keep the volume, and a Metronome switch: while Listen is on, a
   click on each beat of the tempo master, a bench deck or a real player, higher on the first beat of the bar.
