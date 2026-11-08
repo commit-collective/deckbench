@@ -99,26 +99,26 @@ const Strip = (() => {
       if (history.length) bounds.checked = history[history.length - 1].t;
     }
     if (!list.length) return {ticks: [], stopped: true, loop: 0, looping};
-    /* not looping, only its beats since it last started: beats from before a pause or a jump (CUE, a seek) are not the
-       past of where it plays now */
-    if (!looping) {
+    /* a loop is drawn once its length is known, at its first jump back: until then the player is drawn as it plays */
+    const {from, length} = bounds;
+    const known = looping && from != null && length > 0;
+    /* not in a known loop, only its beats since it last started: beats from before a pause or a jump (CUE, a seek) are
+       not the past of where it plays now */
+    if (!known) {
       let i = list.length - 1;
       while (i > 0 && list[i].pos === list[i - 1].pos + 1 && list[i].t - list[i - 1].t < 1.5 * 60 / list[i - 1].bpm) i--;
       list.splice(0, i);
     }
     const ticks = [];
-    const {from, length} = bounds;
     /* before the first beat it was told of, as since PLAY: the track's beats before it, at its tempo, so the strip's past
        is not empty for its first seconds */
     const first = list[0];
-    if (status && status.track_beat != null && !looping) {
+    if (status && status.track_beat != null) {
       const r = first.bpm / 60;
       for (let n = Math.ceil((first.t - (now - BEHIND - 1)) * r); n >= 1; n--)
         ticks.push({dt: first.t - n / r - now, at: first.pos - n, beat: ((first.bar - 1 - n) % 4 + 4) % 4 + 1, inLoop: false, wrap: false});
     }
-    const loopPlace = (pos) => looping && from != null && length > 0 && pos >= from + length
-      ? from + ((pos - from) % length) : pos;
-    const known = looping && from != null && length > 0;
+    const loopPlace = (pos) => known && pos >= from + length ? from + ((pos - from) % length) : pos;
     const inLoopAt = (at) => known && at >= from && at < from + length;
     /* a beat's place in the bar, from another beat's: by its own place in the track, so a beat ahead of a loop's jump back
        is the bar's beat it is when it comes, not the count straight on */
@@ -145,8 +145,7 @@ const Strip = (() => {
         wrap = (at - from) % length === 0;
         at = wrapped;
       }
-      /* looping before its first jump back: its length is not known, so neither are the beats to come */
-      ticks.push({dt: last.t + n / rate - now, at, beat: barOf(at, last), inLoop: known, wrap, unsure: looping && !known});
+      ticks.push({dt: last.t + n / rate - now, at, beat: barOf(at, last), inLoop: known, wrap});
     }
     return {ticks, stopped: false, loop: looping ? length : 0, looping};
   };
@@ -178,8 +177,7 @@ const Strip = (() => {
     g.globalAlpha = 0.28;
     for (let from = 0; from < ticks.length;) {
       let to = from;
-      if (ticks[from].unsure) { from++; continue; }                                        /* not known: no waveform */
-      while (to + 1 < ticks.length && ticks[to + 1].at === ticks[to].at + 1 && !ticks[to + 1].unsure) to++;   /* a loop's jump back ends the run */
+      while (to + 1 < ticks.length && ticks[to + 1].at === ticks[to].at + 1) to++;           /* a loop's jump back ends the run */
       const x0 = x(ticks[from].dt), x1 = x(ticks[to].dt) + gap;
       if (x1 >= 0 && x0 <= w && x1 > x0) {
         /* each beat between its tick and the next one's: the ticks of a real player are where its beats came */
@@ -258,14 +256,14 @@ const Strip = (() => {
     ticks.forEach((t) => {
       const px = x(t.dt), past = t.dt < 0;
       if (px < -2 || px > w + 2) return;
-      g.globalAlpha = t.unsure ? 0.2 : past ? 0.45 : 1;
+      g.globalAlpha = past ? 0.45 : 1;
       g.strokeStyle = t.beat === 1 ? first : muted;
       g.lineWidth = t.beat === 1 ? 2 : 1;
       g.beginPath();
       g.moveTo(px + 0.5, t.beat === 1 ? 3 : h * 0.5);
       g.lineTo(px + 0.5, h - 3);
       g.stroke();
-      if (gap >= 15 && !t.unsure) {
+      if (gap >= 15) {
         g.fillStyle = t.beat === 1 ? text : muted;
         g.fillText(String(options.bars ? t.beat : Math.round(t.at) + 1), px + 3, t.beat === 1 ? 4 : h * 0.5 - 10);
       }

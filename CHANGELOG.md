@@ -7,8 +7,9 @@ Newest first. A release is a tagged commit.
 - A real player's loop is steadier, from a capture of 2- and 4-beat loops on a CDJ-2000NXS2. The beats ahead of
   the playhead take their place in the bar from the loop, so a 2-beat loop's numbers no longer move every pass. A
   status sent in the middle of the jump back (its bar moved on, its beat not yet) no longer puts a beat in the wrong
-  place, and a beat whose packet did not come is drawn. Before its first jump back, a loop's length is not known:
-  the beats to come are drawn faint.
+  place, and a beat whose packet did not come is drawn.
+- A track started in a loop keeps its grid and waveform, past and to come, as it plays until its first jump back,
+  when the loop's length is known and the loop is drawn. The grid no longer disappears for that moment.
 - The loop is easier to read: a lighter tint, and each jump back one solid marker with a flag, the same everywhere.
 - A track's title and waveform are forgotten once no player has it loaded, so a USB or SD swapped for another
   whose track has the same ID in the same slot no longer shows the old ones.

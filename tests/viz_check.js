@@ -101,9 +101,11 @@ check("a two-beat loop's first beat is a bar's first ahead too", two.filter((t) 
 const twoPast = two.filter((t) => t.dt < 0).map((t) => t.at);
 check("a beat whose packet did not come is drawn", twoPast.slice(-5).join() === "92,93,92,93,92", twoPast);
 Strip.observe("fresh", [500 + offset, 40, 120], offset);
-const fresh = Strip.layoutDevice("fresh", {status: {loop: true, track_beat: 41}, online: true}, 500.1).ticks;
-check("before its first jump back a loop's beats to come are not known", fresh.filter((t) => t.dt > 0).every((t) => t.unsure)
-  && fresh.filter((t) => t.dt < 0).every((t) => !t.unsure), fresh.map((t) => [t.at, !!t.unsure]));
+const fresh = Strip.layoutDevice("fresh", {status: {loop: true, track_beat: 41}, online: true}, 500.1);
+const freshAt = fresh.ticks.map((t) => t.at);
+check("before its first jump back a loop is drawn as the player plays, its past too", fresh.loop === 0
+  && freshAt.every((at, i) => !i || at === freshAt[i - 1] + 1) && fresh.ticks.filter((t) => t.dt < 0).length >= 4
+  && fresh.ticks.every((t) => !t.inLoop), freshAt);
 
 // An eight-beat loop outlasts the visible history. Its tint must survive at every beat, including the wrap.
 const longLoop = {status: {loop: true, source: 1, slot: 3, rbid: 10}};
