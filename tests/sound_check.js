@@ -111,6 +111,34 @@ const made = Sound.voices.map((voice) => {
 });
 check("the voices are not the same", new Set(made).size === 4, made.map((m) => m.length));
 
+// a deck's file: a nudge back onto the beat (a synced deck) and a new tempo keep the sound playing, a jump fades over to the new place
+{
+  const started = [];
+  const prm = () => ({value: 1, sets: [], setValueAtTime(v, t) { this.sets.push(["set", v, t]); },
+                      linearRampToValueAtTime(v, t) { this.sets.push(["ramp", v, t]); }, cancelScheduledValues() {}});
+  const fake = {state: "running", currentTime: 10, destination: {},
+    createBufferSource: () => { const n = {playbackRate: prm(), connect() {}, disconnect() {}, start(at, from) { started.push({at, from, n}); }, stop(t) { n.stopped = t; }}; return n; },
+    createGain: () => ({gain: prm(), connect() {}, disconnect() {}}), createStereoPanner: () => ({pan: prm(), connect() {}, disconnect() {}})};
+  Sound.ctx = fake; Sound.master = {};
+  Sound.buffers["2/x.wav/30"] = {duration: 30};
+  const fd = {on: true, play: true, phase: [1000, 4.0, 100], loop: 0, loop_from: 0, on_air: true, audio: {file: "x.wav", bpm: 100, offset: 0.5, seconds: 30}};
+  sandbox.S = {state: {decks: {2: fd}, protocols: {}}, offset: 1005 - Date.now() / 1000};     // the bench's time is 1005
+  Sound.tick();
+  check("the file starts", started.length === 1 && near(started[0].from, 0.5 + (4 + 5 * 100 / 60) * 0.6, 0.01), started.map((x) => x.from));
+  fd.phase = [1000, 4.0 + 0.02 * 100 / 60, 100];                       // put back 20 ms
+  Sound.tick();
+  check("a nudge of 20 ms does not start it again", started.length === 1);
+  fd.phase = [1005, 4 + 5 * 100 / 60 + 0.02 * 100 / 60, 110];          // the pitch fader: the same place, faster
+  Sound.tick();
+  check("a new tempo is a new speed for the same sound", started.length === 1 &&
+        started[0].n.playbackRate.sets.some(([kind, v]) => kind === "set" && near(v, 1.1)), started[0].n.playbackRate.sets);
+  fd.phase = [1005, 20, 110];                                            // a jump in the track
+  Sound.tick();
+  check("a jump starts it at the new place, fading over", started.length === 2 && near(started[1].from, 0.5 + 20 * 0.6, 0.01) &&
+        near(started[0].n.stopped, 10 + 0.017, 1e-9), started.map((x) => [x.from, x.n.stopped]));
+  Sound.files = {}; Sound.ctx = null; Sound.master = null; delete sandbox.S;
+}
+
 // a browser with no Web Audio says so
 Sound.toggle().then(() => check("no Web Audio", false), (e) => check("no Web Audio says why", /Web Audio/.test(e.message), e.message)).then(async () => {
   sandbox.window.AudioContext = class {

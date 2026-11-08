@@ -4,6 +4,10 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- A deck's sound file no longer crackles in Listen. The page started it again at every change of the deck's phase,
+  with no fade: each time a synced deck was put back on its beat and each step of the pitch fader. It now plays on
+  when it is within 40 ms of the deck, takes a new tempo as a new speed, and fades over a jump.
+
 - A page that a phone suspended (another app, the screen off) reconnects when it comes back. The browser had closed
   its stream for good, so it said reconnecting until the page was reloaded. The page now opens a new stream when its
   stream is closed, quiet for 5 seconds, or quiet when the page is shown again.

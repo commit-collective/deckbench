@@ -193,25 +193,46 @@ const Sound = (() => {
     return s.buffers[id];
   }
 
+  /* seconds: a file that must jump fades out and in over FADE, so the jump is not a click, and one that is within NEAR of where
+   * the deck is goes on as it is. A deck synced to a real master is put back on its beat now and then (each time it drifts
+   * 20 ms), and the pitch fader changes its tempo as it moves: neither is a reason to start the sound again. */
+  const FADE = 0.012, NEAR = 0.04;
+
   function stopFile(key) {
     const f = s.files[key];
     if (!f) return;
-    try { f.node.stop(); } catch (e) { /* it had not started */ }
-    f.node.disconnect();
     delete s.files[key];
+    const t = s.ctx.currentTime, {node, gain, pan} = f;
+    node.onended = () => { node.disconnect(); gain.disconnect(); if (pan) pan.disconnect(); };
+    try {
+      gain.gain.cancelScheduledValues(t);
+      gain.gain.setValueAtTime(gain.gain.value, t);
+      gain.gain.linearRampToValueAtTime(0, t + FADE);
+      node.stop(t + FADE + 0.005);
+    } catch (e) { node.onended(); }                                   /* it had not started */
   }
 
-  /* A deck's file: started where the deck is when its phase (or its file, or its loop) changes, and left to play from there. */
+  /* A deck's file: started where the deck is, and left to play from there. When its phase changes, the sound goes on if it is where
+   * the deck is (a new tempo is a new speed for it), and fades over to the deck's new place if not, as it does for a new file or loop. */
   function playFile(key, number, d, now, offset) {
     const buffer = fileBuffer(number, d.audio), plan = s.filePlan(d, now, offset);
     if (!buffer || !plan) return;
     const sig = [d.phase.join(","), d.audio.bpm, d.audio.offset, d.audio.file, d.loop, d.loop_from].join("|"), cur = s.files[key];
     if (cur && cur.sig === sig) return;
+    const ctx = s.ctx, t = ctx.currentTime, file = [d.audio.file, d.audio.bpm, d.audio.offset].join("|");
+    if (cur && cur.file === file && !cur.loop && !plan.loop && t >= cur.at) {
+      const heard = cur.from + (t - cur.at) * cur.rate;               /* where in the file the sound is now */
+      if (Math.abs(heard - plan.from) < NEAR) {
+        if (cur.rate !== plan.rate) cur.node.playbackRate.setValueAtTime(plan.rate, t);
+        Object.assign(cur, {sig, from: heard, at: t, rate: plan.rate});
+        return;
+      }
+    }
     stopFile(key);
     let from = plan.from, delay = 0;
     if (from < 0) { delay = -from / plan.rate; from = 0; }            /* the deck is before the file's first sound */
     if (from >= buffer.duration && !plan.loop) return;                /* after its end: silence */
-    const ctx = s.ctx, node = ctx.createBufferSource(), pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    const node = ctx.createBufferSource(), gain = ctx.createGain(), pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
     node.buffer = buffer;
     node.playbackRate.value = plan.rate;
     if (plan.loop) {
@@ -219,10 +240,14 @@ const Sound = (() => {
       node.loopStart = plan.loop.start;
       node.loopEnd = Math.min(buffer.duration, plan.loop.end);
     }
-    if (pan) { pan.pan.value = Math.max(-0.8, Math.min(0.8, (number - 2.5) * 0.4)); node.connect(pan); pan.connect(s.master); }
-    else node.connect(s.master);
-    node.start(ctx.currentTime + delay, Math.min(from, buffer.duration));
-    s.files[key] = {sig, node};
+    node.connect(gain);
+    if (pan) { pan.pan.value = Math.max(-0.8, Math.min(0.8, (number - 2.5) * 0.4)); gain.connect(pan); pan.connect(s.master); }
+    else gain.connect(s.master);
+    const at = t + delay;
+    gain.gain.setValueAtTime(0, at);
+    gain.gain.linearRampToValueAtTime(1, at + FADE);
+    node.start(at, Math.min(from, buffer.duration));
+    s.files[key] = {sig, node, gain, pan, file, loop: !!plan.loop, from: Math.min(from, buffer.duration), at, rate: plan.rate};
   }
 
   function tick() {
