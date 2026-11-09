@@ -1296,11 +1296,12 @@ function renderSettings() {
     ["Sound port", b.audio || "off"]]));
 }
 
+/* the colours: dark (the default), light, or auto, which follows the system */
 function theme(value) {
-  if (value === "dark" || value === "light") document.documentElement.setAttribute("data-theme", value);
-  else document.documentElement.removeAttribute("data-theme");
+  document.documentElement.setAttribute("data-theme", ["light", "auto"].includes(value) ? value : "dark");
 }
-$("theme").value = store.get("deckbench.theme", "auto");
+$("theme").value = store.get("deckbench.theme", "dark");
+if (!$("theme").value) $("theme").value = "dark";
 theme($("theme").value);
 $("theme").addEventListener("change", (e) => { store.set("deckbench.theme", e.target.value); theme(e.target.value); });
 /* Cards per row, in both grids: as the width allows (the default), or a fixed count, kept in this browser */

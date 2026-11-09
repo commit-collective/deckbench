@@ -4,6 +4,11 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- The page is dark by default. Light and Follow the system stay in Settings, Appearance, Colours, and a choice made
+  there before is kept.
+- The Classic look in light shows the strips again: their waveform, numbers and playhead were drawn dark on its dark
+  display.
+
 - Cards can be put in another order: drag one by the grip at its top (or move it with the arrow keys) within its grid,
   the bench decks or the real players. The order is kept in this browser, and Settings, Appearance, Card order resets it.
 - Settings, Appearance, Cards per row sets how many cards sit side by side, 1 to 4, or as the width allows (the default).

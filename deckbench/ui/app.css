@@ -1,4 +1,5 @@
-/* deckbench. Two looks, each in dark and light, chosen in Settings (data-style and data-theme on the root).
+/* deckbench. Two looks, each in dark and light, chosen in Settings (data-style and data-theme on the root). Dark is the
+ * default: light only with data-theme light, or auto on a system set to light.
  *
  *  commit   (the default) the look of commitcollective.cc: black and white, thin lines, square corners, Space Grotesk and JetBrains Mono.
  *           A control that is on is filled. Colour is kept for what it means: green for on and on air, blue for sync, amber for the
@@ -13,6 +14,9 @@
   --text: #fff; --muted: rgba(255,255,255,.55); --accent: #fff; --on: #4cc38a; --play: #4cc38a; --sync: #5b9cf5;
   --master: #f0a03c; --loop: #b98af0; --danger: #ff6b6b; --warn: #e8c14a; --first: #ef4444; --beat: rgba(255,255,255,.6);
   --lcd-bg: #000; --lcd: #fff; --unlit: rgba(255,255,255,.08); --log: rgba(255,255,255,.75); --log-k: #fff; --ev-k: #fff;
+  /* what is drawn on the strips (the waveform, the numbers, the playhead), on --lcd-bg: the text's colours unless a look's
+     display stays dark in light, as classic's does */
+  --strip-fg: var(--text); --strip-muted: var(--muted);
   /* shape and type */
   --sans: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
@@ -30,7 +34,7 @@
   color-scheme: dark;
 }
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
+  :root[data-theme="auto"] {
     --bg: #fff; --surface: #fff; --surface-2: rgba(0,0,0,.04); --line: rgba(0,0,0,.2); --line-2: rgba(0,0,0,.4);
     --text: #000; --muted: rgba(0,0,0,.6); --accent: #000; --on: #168a55; --play: #168a55; --sync: #2563eb;
     --master: #b45f06; --loop: #7c3aed; --danger: #c62828; --warn: #a16207; --first: #dc2626; --beat: rgba(0,0,0,.5);
@@ -66,7 +70,8 @@
   color-scheme: dark;
 }
 @media (prefers-color-scheme: light) {
-  :root[data-style="classic"]:not([data-theme="dark"]) {
+  :root[data-style="classic"][data-theme="auto"] {
+    --strip-fg: #e6e8ec; --strip-muted: #8f95a1;
     --bg: #f2f3f5; --surface: #ffffff; --surface-2: #f6f7f9; --line: #dcdfe5; --line-2: #c4c8d0;
     --text: #1a1c20; --muted: #596070; --accent: #2563eb; --on: #168a55; --play: #168a55; --sync: #2563eb;
     --master: #b45f06; --loop: #7c3aed; --danger: #c62828; --warn: #a16207; --first: #dc2626; --beat: #2563eb;
@@ -75,6 +80,7 @@
   }
 }
 :root[data-style="classic"][data-theme="light"] {
+  --strip-fg: #e6e8ec; --strip-muted: #8f95a1;
   --bg: #f2f3f5; --surface: #ffffff; --surface-2: #f6f7f9; --line: #dcdfe5; --line-2: #c4c8d0;
   --text: #1a1c20; --muted: #596070; --accent: #2563eb; --on: #168a55; --play: #168a55; --sync: #2563eb;
   --master: #b45f06; --loop: #7c3aed; --danger: #c62828; --warn: #a16207; --first: #dc2626; --beat: #2563eb;

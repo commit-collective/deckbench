@@ -226,7 +226,7 @@ const Strip = (() => {
     g.setTransform(ratio, 0, 0, ratio, 0, 0);
     g.clearRect(0, 0, w, h);
     const head = w * BEHIND / (BEHIND + AHEAD), pps = w / (BEHIND + AHEAD);
-    const first = color("--first", "#ef4444"), muted = color("--muted", "#8f95a1"), loopColor = color("--loop", "#b98af0"), text = color("--text", "#e6e8ec");
+    const first = color("--first", "#ef4444"), muted = color("--strip-muted", "#8f95a1"), loopColor = color("--loop", "#b98af0"), text = color("--strip-fg", "#e6e8ec");
     const x = (dt) => head + dt * pps;
     const ticks = plan.ticks;
     /* a beat's width: the middle of the spacings, since a real player's beats are timed as they arrived and two of them can be
@@ -368,7 +368,7 @@ const Strip = (() => {
       canvas.width = Math.round(w * ratio);
       canvas.height = Math.round(h * ratio);
     }
-    const g = canvas.getContext("2d"), text = color("--text", "#e6e8ec"), muted = color("--muted", "#8f95a1");
+    const g = canvas.getContext("2d"), text = color("--strip-fg", "#e6e8ec"), muted = color("--strip-muted", "#8f95a1");
     g.setTransform(ratio, 0, 0, ratio, 0, 0);
     g.clearRect(0, 0, w, h);
     const cols = wave.overview, at = place ? Math.max(0, Math.min(1, place.seconds / wave.duration)) * w : -1, mid = h / 2;
