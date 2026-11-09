@@ -288,6 +288,14 @@ class Runner:
     def stop(self):
         self.stopping = True
 
+    def clear(self):
+        """Forgets the last scenario's results. RuntimeError while one plays: stop it first."""
+        with self.lock:
+            if self.state["running"]:
+                raise RuntimeError("a scenario is playing: stop it first")
+            self.state = {"running": False, "name": None, "total": 0, "results": [], "failed": 0, "stopped": False,
+                          "skipped": None}
+
     def snapshot(self):
         with self.lock:
             return dict(self.state, results=list(self.state["results"]))

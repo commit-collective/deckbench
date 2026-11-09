@@ -337,6 +337,16 @@ class Faults(unittest.TestCase):
         self.assertTrue(done["stopped"])
         self.assertEqual(len(done["results"]), 1)
 
+    def test_the_results_of_a_scenario_can_be_cleared_once_it_ends(self):
+        self.post_json("api/scenario", json.dumps({"name": "long", "steps": [
+            {"at": 0, "do": "log", "text": "begin"}, {"at": 30, "do": "log", "text": "end"}]}))
+        self.assertEqual(self.post_json("api/scenario/clear", "")[0], 409)     # not while it plays
+        self.api("api/scenario/stop")
+        self.wait_for_scenario(3.0)
+        code, state = self.post_json("api/scenario/clear", "")
+        self.assertEqual(code, 200)
+        self.assertEqual((state["name"], state["results"], state["stopped"]), (None, [], False))
+
     def test_a_scenario_drives_the_bench_and_checks_an_event(self):
         scenario = Scenario({"steps": [
             {"at": 0, "deck": 4, "do": "play"},

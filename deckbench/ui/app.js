@@ -1145,6 +1145,7 @@ function renderScenario() {
   $("scrun").disabled = s.running;
   $("scstop").disabled = !s.running;
   $("sccopy").disabled = s.running || !s.name;
+  $("scclear").disabled = s.running || !s.name;
   const done = s.results.length, bar = $("scbar");
   bar.firstChild.style.width = s.total ? Math.round(100 * done / s.total) + "%" : "0";
   bar.classList.toggle("failed", !s.running && s.failed > 0);
@@ -1221,6 +1222,10 @@ $("scrun").addEventListener("click", async () => {
   await act("api/scenario", {body: $("scenario").value});
 });
 $("scstop").addEventListener("click", () => act("api/scenario/stop"));
+$("scclear").addEventListener("click", async () => {
+  const got = await act("api/scenario/clear");
+  if (got && Array.isArray(got.results)) { S.scenario = got; renderScenario(); }
+});
 $("sccopy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(JSON.stringify(S.scenario, null, 1)); toast("Result copied.", "ok"); }
   catch (e) { toast("The browser would not let the page copy."); }

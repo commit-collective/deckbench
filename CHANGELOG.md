@@ -4,6 +4,9 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- The Scenario tab has a Clear button for the results of the last run, as Events and the link log have. It waits for a
+  run to end or be stopped.
+
 - The link log keeps its height in a short window, such as at a high display scale: it had shrunk to a thin line.
 
 - The page is dark by default. Light and Follow the system stay in Settings, Appearance, Colours, and a choice made

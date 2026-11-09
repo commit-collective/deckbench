@@ -335,6 +335,11 @@ class DemoBench {
     if (parts[1] === "unit") return fail(400, "no adapter: the demo has no device under test");
     if (parts[1] === "scenario") {
       if (parts[2] === "stop") { this.stopping = true; return ok({}); }
+      if (parts[2] === "clear") {
+        if (this.scenario.running) return fail(409, "a scenario is playing: stop it first");
+        this.scenario = {running: false, name: null, total: 0, results: [], failed: 0, stopped: false, skipped: null};
+        return ok(Object.assign({}, this.scenario, {results: []}));
+      }
       return this.startScenario(body, ok, fail);
     }
     return fail(404, "not found");

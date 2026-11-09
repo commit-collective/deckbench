@@ -23,6 +23,7 @@
     POST /api/loss/<percent>         that share of the datagrams is lost (0 for none)
     POST /api/scenario               plays the scenario in the body (JSON, see scenario.py); 409 if one plays
     POST /api/scenario/stop          ends it
+    POST /api/scenario/clear         forgets the last one's results (409 while one plays)
     GET  /api/scenario               how far it is: running, name, total, results, failed, stopped
     GET  /api/events?since=<n>       what the device under test did, from the n-th event on (see events.py)
     POST /api/events/clear           forget them
@@ -453,6 +454,12 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 return self.send(200, json.dumps(runner.snapshot()))
             if parts == ["api", "scenario", "stop"]:
                 runner.stop()
+                return self.send(200, json.dumps(runner.snapshot()))
+            if parts == ["api", "scenario", "clear"]:
+                try:
+                    runner.clear()
+                except RuntimeError as e:
+                    return self.send(409, json.dumps({"error": str(e)}))
                 return self.send(200, json.dumps(runner.snapshot()))
             if parts == ["api", "events", "clear"]:
                 world.events.clear()

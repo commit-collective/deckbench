@@ -74,8 +74,9 @@ track's rekordbox id on that USB: a player's card shows the id of the track it h
 
 On the page: the **Scenario** tab has the JSON in an editor that says what is wrong with it and where, the examples that come with
 the bench (`deckbench/examples`, which `--scenario` plays too), the scenarios kept in the browser, OPEN and DOWNLOAD for files, RUN and
-STOP. It shows a progress bar and lists each step as it is done, with the expectations that failed. The API behind it is `POST /api/scenario` (the
-scenario as the body, 409 while one plays, 400 with the reason if it is not one), `POST /api/scenario/stop` and `GET /api/scenario`.
+STOP. It shows a progress bar and lists each step as it is done, with the expectations that failed. CLEAR empties that list once the run
+ends. The API behind it is `POST /api/scenario` (the scenario as the body, 409 while one plays, 400 with the reason if it is not one),
+`POST /api/scenario/stop`, `POST /api/scenario/clear` (409 while one plays) and `GET /api/scenario`.
 
 The same things can be done by hand: the page's API ([README](../README.md)) has them, and `Scenario.run(world)` plays one from
 Python.
