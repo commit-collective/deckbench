@@ -63,6 +63,8 @@ as a scenario, then replay it on the same players, which load each track and pla
 - Replay only when the setup matches: the same players and numbers, the same media with the same track ids, else say what differs
 - Reach a position by what the players allow (cue, play, seek by beat jumps if a model takes them), and check it with
   expect_player after each step
+- Time steps in bars and beats of a deck or the tempo master as well as in seconds, so a step lands on a beat
+  whatever the tempo, which a recorded mix needs
 - Leave the mixer out: its faders and EQs are not controlled from the network, so a replay sets the players and the
   mix is done by hand
 

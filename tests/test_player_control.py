@@ -42,6 +42,16 @@ class PlayerControl(unittest.TestCase):
         self.assertEqual((st["bpm"], st["track_bpm"]), (None, None))
         self.assertIsNone(self.net.external_master_bpm())
 
+    def test_a_cue_on_the_first_beat_keeps_its_place(self):
+        """Before the first beat a player with a track reports beat 0: the track is there, not gone."""
+        status = bytearray(self.player.status())
+        status[0xA0:0xA4] = bytes(4)
+        for rbid, beat in ((102, 0), (0, None)):
+            status[0x2C:0x30] = rbid.to_bytes(4, "big")
+            self.net.monitor.recent.clear()
+            self.net.monitor.feed(bytes(status), self.ip, self.net.ports.update)
+            self.assertEqual(self.net.info()["devices"][0]["status"]["track_beat"], beat, rbid)
+
     def test_default_denies_commands_and_arm_sends_nothing(self):
         with patch.object(self.net.decks[3], "send") as send:
             self.assertEqual(self.call("command", "stop")[0], 403)

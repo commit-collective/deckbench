@@ -4,6 +4,9 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- A real player cued on its first beat keeps its waveform and grid on the card. It reports beat 0 there, which
+  read as no track, so the strip went blank until it played.
+
 - A real player with no track shows no tempo. It said about 655 BPM, from the empty tempo field it sends.
 
 - A scenario can play real players: a `player` step presses a button (CUE held for a while too) or loads a track on a

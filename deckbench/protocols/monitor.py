@@ -32,6 +32,7 @@ def tempo_of(field):
     return None if raw in (0, 0xFFFF) else raw / 100.0
 
 
+AT_CUE = (5, 6, 7, 8)                           # paused, cued, cue playing, cue scratching: where beat 0 is a place
 NOISY = ("status", "beat", "position")           # many a second: kept apart from the rest
 
 STATE_NAMES = {0: "no track", 2: "loading", 3: "playing", 4: "looping", 5: "paused", 6: "cued", 7: "cue playing", 8: "cue scratching",
@@ -341,12 +342,16 @@ class Monitor:
         d["firmware"] = text(data, 0x7C, 0x80)
         state = data[0x7B]
         playing = bool(flags & 0x40)
+        rbid = struct.unpack(">I", data[0x2C:0x30])[0]
         st = {"play": playing, "master": bool(flags & 0x20), "sync": bool(flags & 0x10), "on_air": bool(flags & 0x08),
               "state": STATE_NAMES.get(state, "state %d" % state), "loop": state == 4,
               "bpm": round(track_bpm * pitch / PITCH_NORMAL, 2) if track_bpm else None, "track_bpm": track_bpm,
               "pitch": round((pitch / PITCH_NORMAL - 1) * 100, 2), "bar": data[0xA6] or None,
-              "track_beat": beat_in_track if beat_in_track not in (0, 0xFFFFFFFF) else None,     # counted from 1: 0 is a player with no track (a sampler)
-              "source": data[0x28], "slot": data[0x29], "track_type": data[0x2A], "rbid": struct.unpack(">I", data[0x2C:0x30])[0],
+              # counted from 1. 0 is a player stopped before the first beat of its track (paused, cued or held on CUE
+              # there: a cue on the first beat), and otherwise a player with no count, as a sampler playing patterns
+              "track_beat": (None if beat_in_track == 0xFFFFFFFF or (beat_in_track == 0 and not (rbid and state in AT_CUE))
+                             else beat_in_track),
+              "source": data[0x28], "slot": data[0x29], "track_type": data[0x2A], "rbid": rbid,
               "sync_counter": struct.unpack(">I", data[0x84:0x88])[0], "handoff": data[0x9F], "seen": now}
         previous = d.get("status") or {}
         # When its beat changed: after the last status with the old beat, before this one. A page that runs a player
