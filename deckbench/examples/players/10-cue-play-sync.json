@@ -1,0 +1,13 @@
+{"name": "Real player 1: cue, play, pause and sync", "steps": [
+  {"at": 0, "do": "log", "text": "Player 1 needs a track loaded, and Player control on in Settings. Change the player number to try another."},
+  {"at": 0, "do": "expect_player", "player": 1, "match": {"online": true, "play": false}, "within": 5},
+  {"at": 1, "do": "player", "player": 1, "press": "cue", "hold": 2},
+  {"at": 4, "do": "player", "player": 1, "press": "play-pause"},
+  {"at": 4, "do": "expect_player", "player": 1, "match": {"play": true}, "within": 3},
+  {"at": 12, "do": "player", "player": 1, "press": "play-pause"},
+  {"at": 12, "do": "expect_player", "player": 1, "match": {"play": false}, "within": 3},
+  {"at": 13, "do": "player", "player": 1, "press": "sync-on"},
+  {"at": 13, "do": "expect_player", "player": 1, "match": {"sync": true}, "within": 3},
+  {"at": 15, "do": "player", "player": 1, "press": "sync-off"},
+  {"at": 15, "do": "expect_player", "player": 1, "match": {"sync": false}, "within": 3}
+]}

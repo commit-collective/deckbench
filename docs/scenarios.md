@@ -54,7 +54,8 @@ from the start), `do`, and what the action needs. `deck` is the player number.
 A `player` step is sent, never confirmed: the player may ignore it (a button it does not take, a track it is playing), so
 follow it with an `expect_player` when the result matters. Its button presses are experimental and were tried on the
 CDJ-2000NXS2 and XDJ-1000MK2 (see [link.md](link.md)). A step with `hold` lasts as long as the hold, and the steps after it
-wait for it. For example, a player loads a track from its own USB, cues and plays, and the scenario checks that it plays:
+wait for it. The **Real players** group of the examples has one that cues, plays, pauses and syncs player 1. For example, a
+player loads a track from its own USB, cues and plays, and the scenario checks that it plays:
 
 ```json
 {"name": "a real player plays a track",

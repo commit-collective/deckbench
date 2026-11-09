@@ -7,7 +7,8 @@ Newest first. A release is a tagged commit.
 - A real player with no track shows no tempo. It said about 655 BPM, from the empty tempo field it sends.
 
 - A scenario can play real players: a `player` step presses a button (CUE held for a while too) or loads a track on a
-  player by its number, with Player control on, and `expect_player` checks what that player says of itself.
+  player by its number, with Player control on, and `expect_player` checks what that player says of itself. An example in the new Real players group cues,
+  plays, pauses and syncs player 1.
 
 - A bench deck's header is a player's: it opens to all of it, with where its track comes from, its grid and its audio
   on a line of their own and the state under. Opening moves neither the number nor the name. The state is in one order

@@ -95,11 +95,13 @@ KINDS = {".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".s
 
 
 def examples():
-    """The scenarios that come with the bench (deckbench/examples, and its folder `unit` for a device under test):
+    """The scenarios that come with the bench (deckbench/examples, its folder `unit` for a device under test and
+    `players` for real players on the network):
     [{file, group, name, text}]."""
     out = []
     base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples")
-    for group, folder in (("Examples", base), ("Unit under test", os.path.join(base, "unit"))):
+    for group, folder in (("Examples", base), ("Unit under test", os.path.join(base, "unit")),
+                          ("Real players", os.path.join(base, "players"))):
         for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
             if name.endswith(".json"):
                 with open(os.path.join(folder, name), encoding="utf-8") as f:

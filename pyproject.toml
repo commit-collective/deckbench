@@ -28,4 +28,4 @@ version = { attr = "deckbench.__version__" }   # the one place the version is wr
 include = ["deckbench", "deckbench.*"]
 
 [tool.setuptools.package-data]
-deckbench = ["ui/*", "examples/*.json", "examples/unit/*.json"]
+deckbench = ["ui/*", "examples/*.json", "examples/unit/*.json", "examples/players/*.json"]

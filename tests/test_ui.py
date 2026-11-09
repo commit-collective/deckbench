@@ -86,10 +86,10 @@ class Page(unittest.TestCase):
     def test_the_examples_are_scenarios(self):
         listed = self.api("api/examples", post=False)
         files = glob.glob(os.path.join(ROOT, "deckbench", "examples", "*.json")) \
-            + glob.glob(os.path.join(ROOT, "deckbench", "examples", "unit", "*.json"))
+            + glob.glob(os.path.join(ROOT, "deckbench", "examples", "unit", "*.json"))             + glob.glob(os.path.join(ROOT, "deckbench", "examples", "players", "*.json"))
         self.assertEqual(len(listed), len(files))
         self.assertGreaterEqual(len(listed), 10)
-        self.assertEqual({e["group"] for e in listed}, {"Examples", "Unit under test"})
+        self.assertEqual({e["group"] for e in listed}, {"Examples", "Unit under test", "Real players"})
         for example in listed:
             Scenario(json.loads(example["text"]))                   # raises if it is not one
             self.assertEqual(json.loads(example["text"])["name"], example["name"])
