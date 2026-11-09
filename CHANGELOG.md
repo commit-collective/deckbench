@@ -4,6 +4,9 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- A bench on a real network in Linux or WSL starts again. It stopped while reading the adapters' MAC addresses,
+  which it never found there, and on an adapter without one.
+
 - The Scenario tab has a Clear button for the results of the last run, as Events and the link log have. It waits for a
   run to end or be stopped.
 

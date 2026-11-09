@@ -130,7 +130,7 @@ def interface_macs():
                    '[pscustomobject]@{ip=$ip.IPAddress;mac=$_.NetAdapter.MacAddress} '
                    '} } | ConvertTo-Json -Compress']
     elif sys.platform.startswith('linux'):
-        command = ['ip', '-j', '-4', 'address', 'show']
+        command = ['ip', '-j', 'address', 'show']           # not -4: it leaves the MAC out
     else:
         return {}
     try:
@@ -143,7 +143,8 @@ def interface_macs():
         rows = data if isinstance(data, list) else [data]
         pairs = [(row['ip'], row['mac']) for row in rows if row.get('mac')]
     else:
-        pairs = [(ip['local'], iface['address']) for iface in data
+        # WSL lists adapters without a link address (its mirrored loopback and tunnels): they have no MAC to give
+        pairs = [(ip['local'], iface.get('address') or '') for iface in data
                  for ip in iface.get('addr_info', []) if ip.get('family') == 'inet']
     return {ip: bytes.fromhex(mac.replace(':', '').replace('-', ''))
             for ip, mac in pairs if len(mac.replace(':', '').replace('-', '')) == 12}

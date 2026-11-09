@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 """Mac adapter fixtures and native unicast checks, without loopback aliases or broadcasts."""
 import io
+import json
 import socket
 import subprocess
 import unittest
@@ -67,6 +68,16 @@ class MacAdapters(unittest.TestCase):
         with patch("sys.platform", "darwin"), patch("deckbench.net.subprocess.run", return_value=result):
             with self.assertRaisesRegex(ValueError, "permission denied"):
                 interface_macs()
+
+    def test_a_linux_adapter_without_a_mac_is_left_out(self):
+        listing = json.dumps([
+            {"ifname": "lo", "addr_info": [{"family": "inet", "local": "127.0.0.1"}]},
+            {"ifname": "loopback0", "address": "00:11:22:33:44:55", "addr_info": [{"family": "inet", "local": "10.0.0.1"}]},
+            {"ifname": "eth1", "address": "02:10:20:30:40:50", "addr_info": [{"family": "inet", "local": "169.254.10.5"}]}])
+        result = subprocess.CompletedProcess([], 0, listing, "")
+        with patch("sys.platform", "linux"), patch("deckbench.net.subprocess.run", return_value=result):
+            macs = interface_macs()
+        self.assertEqual(macs, {"10.0.0.1": bytes.fromhex("001122334455"), "169.254.10.5": bytes.fromhex("021020304050")})
 
     def test_port_reuse_options_on_macos(self):
         from unittest.mock import Mock
