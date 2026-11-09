@@ -132,6 +132,15 @@ button { cursor: pointer; }
 .deck { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px;
   display: flex; flex-direction: column; gap: 14px; transition: opacity .15s, border-color .15s; }
 .deck.off { opacity: .6; }
+/* The grip at the top of a card, to drag it to another place in its grid */
+.deck { position: relative; }
+.grip { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 48px; height: 16px; padding: 0; border: 0;
+  background: transparent; border-radius: var(--r); cursor: grab; touch-action: none; opacity: .35; transition: opacity .15s; }
+.grip::before { content: ""; position: absolute; inset: 5px 14px; background: radial-gradient(circle, var(--muted) 1px, transparent 1.5px) 0 0 / 5px 3px; }
+.deck:hover .grip, .grip:focus-visible { opacity: 1; }
+.grip:focus-visible { outline: 1px solid var(--text); outline-offset: 1px; }
+.deck.dragging { opacity: 1; border-color: var(--text); cursor: grabbing; box-shadow: 0 6px 24px rgba(0, 0, 0, .35); z-index: 1; }
+.deck.dragging .grip { cursor: grabbing; }
 /* A deck that is off has nothing to drive but its ON switch: the rest is out of the way until it is switched on (a device of the link is not a deck) */
 .deck.off:not(.device) .live, .deck.off:not(.device) .strip, .deck.off:not(.device) .row, .deck.off:not(.device) .fold,
 .deck.off:not(.device) .switches { display: none; }

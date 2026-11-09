@@ -4,6 +4,9 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- Cards can be put in another order: drag one by the grip at its top (or move it with the arrow keys) within its grid,
+  the bench decks or the real players. The order is kept in this browser, and Settings, Appearance, Card order resets it.
+
 - A real player cued on its first beat keeps its waveform and grid on the card. It reports beat 0 there, which
   read as no track, so the strip went blank until it played.
 

@@ -200,6 +200,7 @@ function buildDecks() {
   root.textContent = "";
   if (!numbers.length) root.append(h("div", {class: "empty"}, "No decks. Start the bench with --decks or --numbers."));
   for (const n of numbers) root.append(buildDeck(n, numbers));
+  arrange(root);
 }
 
 function beatIndicators() {
@@ -215,6 +216,59 @@ function identity() {
   return h("details", {class: "deck-id", ontoggle: (e) => fitTags(e.currentTarget.parentNode.querySelector(".flags"), true)},
     h("summary", {class: "identity", title: "Show all of it"},
     h("span", {class: "model"}), h("span", {class: "track"}), h("span", {class: "track where", hidden: true})));
+}
+
+/* Cards in the order the viewer put them in, for each grid (bench decks, players), kept in this browser. The order is CSS
+   `order`, so the page keeps building and updating the cards where they are. A card the saved order does not know comes
+   after the others, as it was built. */
+const orderKey = (box) => "deckbench.order." + box.id;
+function savedOrder(box) {
+  try { const ids = JSON.parse(store.get(orderKey(box), "[]")); return Array.isArray(ids) ? ids : []; } catch (e) { return []; }
+}
+const cardsOf = (box) => [...box.children].filter((c) => c.matches("article.deck"));
+const shownOrder = (box) => cardsOf(box).sort((a, b) => Number(a.style.order) - Number(b.style.order));
+function arrange(box) {
+  const saved = savedOrder(box);
+  cardsOf(box).forEach((card, i) => {
+    const at = saved.indexOf(card.id), order = String(at < 0 ? saved.length + i : at);
+    if (card.style.order !== order) card.style.order = order;
+  });
+}
+function moveCard(card, to) {
+  const box = card.parentNode, list = shownOrder(box).filter((c) => c !== card);
+  list.splice(Math.max(0, Math.min(list.length, to)), 0, card);
+  const ids = list.map((c) => c.id);
+  store.set(orderKey(box), JSON.stringify(ids.concat(savedOrder(box).filter((id) => !ids.includes(id)))));
+  arrange(box);
+}
+/* The grip at the top of a card: drag it onto another card's place, or move it with the arrow keys */
+function grip() {
+  let card = null, last = null;
+  const end = () => { if (card) card.classList.remove("dragging"); card = last = null; };
+  return h("button", {class: "grip", type: "button", title: "Drag to move this card, or use the arrow keys", "aria-label": "Move this card",
+    onpointerdown: (e) => {
+      if (e.button) return;
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      card = e.currentTarget.closest("article.deck");
+      card.classList.add("dragging");
+    },
+    onpointermove: (e) => {
+      if (!card) return;
+      const under = document.elementFromPoint(e.clientX, e.clientY), over = under && under.closest("article.deck");
+      if (!over || over === card) { last = null; return; }      /* back over itself: the next card may be the same one again */
+      if (over === last || over.parentNode !== card.parentNode) return;
+      last = over;
+      moveCard(card, shownOrder(card.parentNode).indexOf(over));
+    },
+    onpointerup: end, onpointercancel: end, onlostpointercapture: end,
+    onkeydown: (e) => {
+      const step = {ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1}[e.key];
+      if (!step) return;
+      e.preventDefault();
+      const self = e.currentTarget.closest("article.deck");
+      moveCard(self, shownOrder(self.parentNode).indexOf(self) + step);
+    }});
 }
 
 /* Folded tags that wrap keep the full width of their box: a browser does not narrow a box to its balanced rows. This
@@ -264,6 +318,7 @@ function stateTags(t) {
 function buildDeck(n, numbers) {
   const q = (cls) => card.querySelector("." + cls);
   const card = h("article", {class: "deck off", id: "deck" + n, "aria-label": "Deck " + n},
+    grip(),
     h("div", {class: "deck-head"},
       h("button", {class: "num", type: "button", "aria-pressed": "false", title: "Switch deck " + n + " on or off",
         "aria-label": "Deck " + n + " on", onclick: () => act("api/deck/" + n + "/on")}, n),
@@ -738,6 +793,7 @@ function buildPlayerLoad(d) {
 function buildDevice(d) {
   const mixer = d.kind === "mixer";
   return h("article", {class: "deck device off", id: devId(d.ip), "aria-label": (d.model || "Device") + " on the link"},
+    grip(),
     h("div", {class: "deck-head"},
       h("div", {class: "num", "aria-hidden": "true"}),
       identity(),
@@ -884,6 +940,7 @@ function renderDevices() {
     fill(q("facts"), facts);
   }
   for (const card of Array.from(box.children)) if (!keep.has(card.id)) card.remove();
+  arrange(box);
 }
 
 function render() {
@@ -1246,6 +1303,9 @@ function theme(value) {
 $("theme").value = store.get("deckbench.theme", "auto");
 theme($("theme").value);
 $("theme").addEventListener("change", (e) => { store.set("deckbench.theme", e.target.value); theme(e.target.value); });
+$("resetorder").addEventListener("click", () => {
+  for (const box of [$("decks"), $("devices")]) { store.set(orderKey(box), "[]"); arrange(box); }
+});
 
 /* the look: commit (commitcollective.cc) or classic, which is the first look of the page */
 function look(value) {
