@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- A real player with no track shows no tempo. It said about 655 BPM, from the empty tempo field it sends.
+
 - A scenario can play real players: a `player` step presses a button (CUE held for a while too) or loads a track on a
   player by its number, with Player control on, and `expect_player` checks what that player says of itself.
 

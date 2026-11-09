@@ -24,6 +24,14 @@ from . import startup
 from .mixer import parse_on_air
 
 PITCH_NORMAL = 0x100000
+
+
+def tempo_of(field):
+    """A track tempo field (BPM x 100) in BPM, or None for 0xFFFF and 0: a player with no track says it has none."""
+    raw = struct.unpack(">H", field)[0]
+    return None if raw in (0, 0xFFFF) else raw / 100.0
+
+
 NOISY = ("status", "beat", "position")           # many a second: kept apart from the rest
 
 STATE_NAMES = {0: "no track", 2: "loading", 3: "playing", 4: "looping", 5: "paused", 6: "cued", 7: "cue playing", 8: "cue scratching",
@@ -324,7 +332,7 @@ class Monitor:
         d["beat_since_status"] = False
         flags = data[0x89]
         pitch = struct.unpack(">I", data[0x8C:0x90])[0]
-        track_bpm = struct.unpack(">H", data[0x92:0x94])[0] / 100.0
+        track_bpm = tempo_of(data[0x92:0x94])
         beat_in_track = struct.unpack(">I", data[0xA0:0xA4])[0]
         d["name"] = text(data, 0x0B, 0x1F) or d["name"]
         d["number"] = data[0x21]
@@ -335,7 +343,7 @@ class Monitor:
         playing = bool(flags & 0x40)
         st = {"play": playing, "master": bool(flags & 0x20), "sync": bool(flags & 0x10), "on_air": bool(flags & 0x08),
               "state": STATE_NAMES.get(state, "state %d" % state), "loop": state == 4,
-              "bpm": round(track_bpm * pitch / PITCH_NORMAL, 2), "track_bpm": track_bpm,
+              "bpm": round(track_bpm * pitch / PITCH_NORMAL, 2) if track_bpm else None, "track_bpm": track_bpm,
               "pitch": round((pitch / PITCH_NORMAL - 1) * 100, 2), "bar": data[0xA6] or None,
               "track_beat": beat_in_track if beat_in_track not in (0, 0xFFFFFFFF) else None,     # counted from 1: 0 is a player with no track (a sampler)
               "source": data[0x28], "slot": data[0x29], "track_type": data[0x2A], "rbid": struct.unpack(">I", data[0x2C:0x30])[0],
@@ -397,14 +405,16 @@ class Monitor:
                 d["phase"] = [phase[0], corrected, phase[2]]
         if not playing and st["track_beat"] is not None:
             d["at"] = st["track_beat"] - 1
-        return "%s #%d: %s%s%s%s, %.1f BPM, beat %s%s" % (
+        return "%s #%d: %s%s%s%s, %s, beat %s%s" % (
             d["name"], d["number"], st["state"], ", master" if st["master"] else "", ", synced" if st["sync"] else "",
-            ", on air" if st["on_air"] else "", st["bpm"], st["bar"] if st["bar"] else "-",
+            ", on air" if st["on_air"] else "", "%.1f BPM" % st["bpm"] if st["bpm"] else "no tempo", st["bar"] if st["bar"] else "-",
             ", track %d:%d:%d" % (st["source"], st["slot"], st["rbid"]) if st["rbid"] else "")
 
     def beat(self, d, data, now):
         bar = data[0x5C]
-        track_bpm = struct.unpack(">H", data[0x5A:0x5C])[0] / 100.0
+        track_bpm = tempo_of(data[0x5A:0x5C])
+        if not track_bpm:                       # no tempo: no beat to place
+            return "%s #%d: beat with no tempo" % (d["name"] or "?", d["number"] if d["number"] is not None else 0)
         pitch = int.from_bytes(data[0x55:0x58], "big")
         bpm = round(track_bpm * (pitch / PITCH_NORMAL if pitch else 1.0), 2)
         d["name"] = d["name"] or text(data, 0x0B, 0x1F)

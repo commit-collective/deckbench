@@ -33,6 +33,15 @@ class PlayerControl(unittest.TestCase):
     def call(self, action, value, number="2"):
         return self.net.player_api(["player", self.ip, action, value], {"number": [number]})
 
+    def test_a_player_with_no_track_has_no_tempo(self):
+        status = bytearray(self.player.status())
+        status[0x92:0x94] = bytes((0xFF, 0xFF))      # what an idle player sends: not 655.35 BPM
+        self.net.monitor.recent.clear()
+        self.net.monitor.feed(bytes(status), self.ip, self.net.ports.update)
+        st = self.net.info()["devices"][0]["status"]
+        self.assertEqual((st["bpm"], st["track_bpm"]), (None, None))
+        self.assertIsNone(self.net.external_master_bpm())
+
     def test_default_denies_commands_and_arm_sends_nothing(self):
         with patch.object(self.net.decks[3], "send") as send:
             self.assertEqual(self.call("command", "stop")[0], 403)
