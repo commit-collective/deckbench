@@ -1788,8 +1788,13 @@ class Prolink(Protocol):
         occupied = {d['number'] for d in peers if d['online']}
         sender = next((d for d in self.decks.values() if 1 <= d.number <= 4 and d.number not in occupied
                        and not d.deck.unplugged and (d.deck.enabled or self.observer)), None)
-        if sender is None:
-            return 400, {'error': 'enable an unused bench player 1 to 4, or use an announced observer in that range'}
+        if sender is None:                  # a player takes a load only from a player 1 to 4
+            free = sorted({1, 2, 3, 4} - occupied)
+            if not free:
+                return 400, {'error': 'a player takes a load only from a player 1 to 4, and real devices use all four '
+                                      'numbers: free one to load from the bench'}
+            return 400, {'error': 'a player takes a load only from a player 1 to 4: switch on a bench deck numbered %s '
+                                  '(unused on the link) to send it' % " or ".join(map(str, free))}
         try:
             packet = load_track_packet(sender.name, sender.number, *packet_args)
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:

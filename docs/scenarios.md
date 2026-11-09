@@ -51,11 +51,15 @@ from the start), `do`, and what the action needs. `deck` is the player number.
 
 `load` can also take `source` (the player whose database the track is in) and `slot`.
 
-A `player` step is sent, never confirmed: the player may ignore it (a button it does not take, a track it is playing), so
-follow it with an `expect_player` when the result matters. Its button presses are experimental and were tried on the
+A `player` step is sent, never confirmed: the player may ignore it (a button it does not take, a track it is playing, CUE
+or PLAY with no track loaded), so follow it with an `expect_player` when the result matters. A `load` is sent from a bench
+deck: players take one only from a player 1 to 4, so a bench deck with a number from 1 to 4 that no real device uses must
+be on. With four real players there is no such number, and a scenario can only press the buttons of tracks loaded by
+hand. Its button presses are experimental and were tried on the
 CDJ-2000NXS2 and XDJ-1000MK2 (see [link.md](link.md)). A step with `hold` lasts as long as the hold, and the steps after it
 wait for it. The **Real players** group of the examples has one that cues, plays, pauses and syncs player 1. For example, a
-player loads a track from its own USB, cues and plays, and the scenario checks that it plays:
+player loads a track from its own USB, cues and plays, and the scenario checks that it plays. Here 205 stands for a
+track's rekordbox id on that USB: a player's card shows the id of the track it has loaded, as `rbid` in its status.
 
 ```json
 {"name": "a real player plays a track",
