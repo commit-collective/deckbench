@@ -68,6 +68,15 @@ as a scenario, then replay it on the same players, which load each track and pla
 - Leave the mixer out: its faders and EQs are not controlled from the network, so a replay sets the players and the
   mix is done by hand
 
+## A stacked view for phones
+
+A phone held next to the decks could show every player at once, without scrolling: a view that only watches.
+
+- Stack each playing deck as one thin row: its number, track title, tempo, its place in the track (the overview and
+  the playhead) and its state tags, all players fitting one phone screen
+- No controls in it, so nothing can be pressed by mistake, and a phone opened on it needs no Player control
+- Switch to it from the page, and keep the choice per phone, as the other per-viewer settings are kept
+
 ## The hosted page with an installed runtime
 
 A browser cannot speak Pro DJ Link (it has no UDP broadcasts or fixed ports), so something always runs on the machine
