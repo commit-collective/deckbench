@@ -126,6 +126,10 @@ button { cursor: pointer; }
 .layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); padding: 16px; max-width: 1560px; margin: 0 auto; }
 @media (min-width: 1040px) { .layout { grid-template-columns: minmax(0, 1fr) 440px; align-items: start; } }
 #decks { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--gap); align-items: start; }
+/* A count of cards per row chosen in Settings: it holds at any width, a phone's too */
+:root[data-columns] #decks, :root[data-columns] #devices { grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); }
+:root[data-columns="1"] { --columns: 1; } :root[data-columns="2"] { --columns: 2; }
+:root[data-columns="3"] { --columns: 3; } :root[data-columns="4"] { --columns: 4; }
 .empty { padding: 40px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line-2); border-radius: var(--r-lg); font-family: var(--lab); font-size: 12px; }
 
 /* ---- a deck ---- */

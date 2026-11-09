@@ -6,6 +6,7 @@ Newest first. A release is a tagged commit.
 
 - Cards can be put in another order: drag one by the grip at its top (or move it with the arrow keys) within its grid,
   the bench decks or the real players. The order is kept in this browser, and Settings, Appearance, Card order resets it.
+- Settings, Appearance, Cards per row sets how many cards sit side by side, 1 to 4, or as the width allows (the default).
 
 - A real player cued on its first beat keeps its waveform and grid on the card. It reports beat 0 there, which
   read as no track, so the strip went blank until it played.

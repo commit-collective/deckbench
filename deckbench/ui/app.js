@@ -1303,6 +1303,15 @@ function theme(value) {
 $("theme").value = store.get("deckbench.theme", "auto");
 theme($("theme").value);
 $("theme").addEventListener("change", (e) => { store.set("deckbench.theme", e.target.value); theme(e.target.value); });
+/* Cards per row, in both grids: as the width allows (the default), or a fixed count, kept in this browser */
+function columns(value) {
+  if (["1", "2", "3", "4"].includes(value)) document.documentElement.setAttribute("data-columns", value);
+  else document.documentElement.removeAttribute("data-columns");
+}
+$("columns").value = store.get("deckbench.columns", "auto");
+if (!$("columns").value) $("columns").value = "auto";
+columns($("columns").value);
+$("columns").addEventListener("change", (e) => { store.set("deckbench.columns", e.target.value); columns(e.target.value); });
 $("resetorder").addEventListener("click", () => {
   for (const box of [$("decks"), $("devices")]) { store.set(orderKey(box), "[]"); arrange(box); }
 });
