@@ -284,6 +284,9 @@ details.fold[open] summary::before { transform: rotate(90deg); }
 .tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); background: var(--surface); }
 .tabs .count { margin-left: 4px; font-size: 10px; color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
 .panel { padding: 14px; overflow: auto; display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+/* The panel scrolls, so what is in it keeps its height: a box with its own scroll, such as the link log, would
+   otherwise shrink to nothing in a short window. The events list sets its own flex and still fills its panel. */
+.panel > * { flex-shrink: 0; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .toolbar .grow { flex: 1; }
 .filters { display: flex; flex-wrap: wrap; gap: 4px; }

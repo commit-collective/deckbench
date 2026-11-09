@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- The link log keeps its height in a short window, such as at a high display scale: it had shrunk to a thin line.
+
 - The page is dark by default. Light and Follow the system stay in Settings, Appearance, Colours, and a choice made
   there before is kept.
 - The Classic look in light shows the strips again: their waveform, numbers and playhead were drawn dark on its dark
