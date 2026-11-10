@@ -201,6 +201,7 @@ function buildDecks() {
   if (!numbers.length) root.append(h("div", {class: "empty"}, "No decks. Start the bench with --decks or --numbers."));
   for (const n of numbers) root.append(buildDeck(n, numbers));
   arrange(root);
+  stackLock();
 }
 
 function beatIndicators() {
@@ -1361,6 +1362,35 @@ if (!$("theme").value) $("theme").value = "dark";
 theme($("theme").value);
 $("theme").addEventListener("change", (e) => { store.set("deckbench.theme", e.target.value); theme(e.target.value); });
 /* Cards per row, in both grids: as the width allows (the default), or a fixed count, kept in this browser */
+/* The stacked view: every deck on and every player on the link as a thin row (its number, track, tags, tempo, strip and
+   overview), all on one phone screen, for watching. Its controls are hidden, and a bench deck's number (its power
+   switch) cannot be pressed. Kept per browser, or asked for with ?view=stack */
+function stackView(on) {
+  if (on) document.documentElement.setAttribute("data-view", "stack");
+  else document.documentElement.removeAttribute("data-view");
+  const b = $("stackview");
+  b.setAttribute("aria-pressed", String(on));
+  setText(b, on ? "Cards" : "Stack");
+  b.title = on ? "Back to the cards, with their controls" : "Stack: every playing deck as a thin row, to watch them all on a phone. Nothing in it can be pressed";
+  stackLock();
+}
+function stackLock() {
+  const on = document.documentElement.getAttribute("data-view") === "stack";
+  for (const b of document.querySelectorAll("#decks .num, .deck .grip")) {
+    if (on) b.setAttribute("tabindex", "-1"); else b.removeAttribute("tabindex");
+  }
+}
+{
+  const asked = new URLSearchParams(location.search).get("view");
+  if (asked === "stack" || asked === "cards") store.set("deckbench.view", asked);
+  stackView(store.get("deckbench.view", "cards") === "stack");
+}
+$("stackview").addEventListener("click", () => {
+  const on = document.documentElement.getAttribute("data-view") !== "stack";
+  store.set("deckbench.view", on ? "stack" : "cards");
+  stackView(on);
+});
+
 function columns(value) {
   if (["1", "2", "3", "4"].includes(value)) document.documentElement.setAttribute("data-columns", value);
   else document.documentElement.removeAttribute("data-columns");

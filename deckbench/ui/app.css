@@ -114,7 +114,7 @@ button { cursor: pointer; }
 .chip.ok .dot { --c: var(--on); background: var(--c); box-shadow: 0 0 6px color-mix(in srgb, var(--c) var(--glow), transparent); }
 .chip.warn .dot { --c: var(--master); background: var(--c); box-shadow: 0 0 6px color-mix(in srgb, var(--c) var(--glow), transparent); }
 .chip.bad .dot { --c: var(--danger); background: var(--c); box-shadow: 0 0 6px color-mix(in srgb, var(--c) var(--glow), transparent); }
-.actions { display: flex; gap: 6px; align-items: center; }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
 /* ---- buttons: a line, filled when pressed ---- */
 .btn { height: 30px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r); background: transparent; color: var(--text);
@@ -133,6 +133,30 @@ button { cursor: pointer; }
 @media (min-width: 1040px) { .layout { grid-template-columns: minmax(0, 1fr) 440px; align-items: start; } }
 #decks { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--gap); align-items: start; }
 /* A count of cards per row chosen in Settings: it holds at any width, a phone's too */
+/* The stacked view (data-view="stack"): each deck on and each player a thin row, one column, nothing to press. The
+   header keeps its status and the button back. Cards that are off, mixers and the side panel are left out */
+:root[data-view="stack"] .side, :root[data-view="stack"] .bar .actions > :not(#stackview),
+:root[data-view="stack"] #others > h2, :root[data-view="stack"] #others > .hint,
+:root[data-view="stack"] .deck.off:not(.device), :root[data-view="stack"] .deck.device[data-kind="mixer"],
+:root[data-view="stack"] .deck > :not(.deck-head):not(.live):not(.strip):not(.overview),
+:root[data-view="stack"] .live > :not(.lcd), :root[data-view="stack"] .deck-id .where { display: none !important; }
+:root[data-view="stack"] .layout { padding: 8px; gap: 6px; grid-template-columns: minmax(0, 1fr); }
+:root[data-view="stack"] .bar { padding-top: 6px; padding-bottom: 6px; }
+:root[data-view="stack"] #decks, :root[data-view="stack"] #devices { grid-template-columns: minmax(0, 1fr); gap: 6px; margin-top: 0; }
+:root[data-view="stack"] #others { margin-top: 0; }
+:root[data-view="stack"] #decks:not(:has(.deck.on)) { display: none; }
+:root[data-view="stack"] .deck { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 6px 8px;
+  opacity: 1; }
+:root[data-view="stack"] .deck-head { grid-column: 1; gap: 8px; align-items: center; }
+:root[data-view="stack"] .deck-head .num { width: 28px; height: 28px; pointer-events: none; }
+:root[data-view="stack"] .identity { min-height: 0; pointer-events: none; }
+:root[data-view="stack"] .live { grid-column: 2; align-self: center; }
+:root[data-view="stack"] .lcd { min-width: 0; padding: 1px 6px; }
+:root[data-view="stack"] .lcd b { font-size: 17px; }
+:root[data-view="stack"] .strip { grid-column: 1 / -1; height: 34px; }
+:root[data-view="stack"] .overview { grid-column: 1 / -1; height: 16px; }
+:root[data-view="stack"] .tags { max-width: 45%; }
+
 :root[data-columns] #decks, :root[data-columns] #devices { grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); }
 :root[data-columns="1"] { --columns: 1; } :root[data-columns="2"] { --columns: 2; }
 :root[data-columns="3"] { --columns: 3; } :root[data-columns="4"] { --columns: 4; }

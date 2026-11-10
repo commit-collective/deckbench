@@ -13,6 +13,7 @@ Newest first. A release is a tagged commit.
 ### The page
 
 - Welcome the demo's first visit with what it shows and where to follow Deckbench.
+- Watch every deck and player as a thin row with STACK in the header, or `?view=stack`. CARDS goes back.
 
 ### Scenarios
 

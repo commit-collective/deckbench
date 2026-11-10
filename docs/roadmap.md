@@ -69,12 +69,11 @@ master) as a scenario that replays it on them, and notes what they cannot be mad
 
 ## A stacked view for phones
 
-A phone held next to the decks could show every player at once, without scrolling: a view that only watches.
+STACK, in the page's header, shows each deck that is on and each player as one thin row: its number, track, state
+tags, tempo, strip and overview, with nothing to press. The choice is kept per browser, and `?view=stack` opens a
+page on it. Left to do:
 
-- Stack each playing deck as one thin row: its number, track title, tempo, its place in the track (the overview and
-  the playhead) and its state tags, all players fitting one phone screen
-- No controls in it, so nothing can be pressed by mistake, and a phone opened on it needs no Player control
-- Switch to it from the page, and keep the choice per phone, as the other per-viewer settings are kept
+- Open the phone's pairing link on the stacked view, as a choice when making the QR code
 
 ## The hosted page with an installed runtime
 
