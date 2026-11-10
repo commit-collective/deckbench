@@ -22,9 +22,12 @@ import json
 import threading
 import time
 
+from .protocols.monitor import model_title
+from .protocols.prolink import Prolink
+
 RUNNING = ("playing", "looping")
 HELD = ("cue playing", "cue scratching")
-SLOT_NAMES = {2: "sd", 3: "usb"}
+SLOT_NAMES = {2: "sd", 3: "usb"}     # what a player can be told to load from: another player's (1 to 6) SD or USB
 JOINED = 1.5            # a player first heard this many seconds into a recording joined the link then
 SETUP = 12.0            # the setup's seconds before the first recorded event, with loads to wait for
 SETUP_PLAIN = 3.0       # the same when no player loads a track before the mix
@@ -52,15 +55,15 @@ class MixRecorder:
             self.began = self.clock() if now is None else now
             self.players, self.events = {}, []
 
-    def observe(self, number, model, st, now):
-        """A status of player `number` (the monitor's status dict) heard at `now`."""
+    def observe(self, number, name, st, now):
+        """A status of player `number`, whose device name is `name` (the monitor's status dict), heard at `now`."""
         with self.lock:
             if self.began is None or not number or st.get("state") == "loading":
                 return
             t = max(0.0, now - self.began)
             p = self.players.get(number)
             if p is None:
-                self.players[number] = {"model": model, "first": dict(st), "first_t": t, "last": dict(st), "last_t": t,
+                self.players[number] = {"name": name, "model": model_title(name), "first": dict(st), "first_t": t, "last": dict(st), "last_t": t,
                                         "hold": None, "pitch": st.get("pitch")}
                 if t > JOINED and st.get("rbid"):
                     self.events.append((t, number, "joined", {"rbid": st["rbid"], "state": st["state"]}))
@@ -139,6 +142,17 @@ def slot_of(slot):
     return SLOT_NAMES.get(slot, slot)
 
 
+def loadable(source, slot):
+    """Whether the bench can tell a player to load a track from there: a player's SD or USB, not a computer's
+    rekordbox (a source above 6) or a CD."""
+    return 1 <= (source or 0) <= 6 and slot in SLOT_NAMES
+
+
+def transport(p):
+    """How a player is played: 'buttons' (PLAY/PAUSE and CUE), 'fader' (fader start's start and stop only) or ''."""
+    return Prolink.transport_method({"name": p.get("name") or p.get("model") or ""})
+
+
 def build(players, events, name):
     """The scenario of a recording: `players` as MixRecorder keeps them, `events` its (t, number, kind, details)."""
     notes, setup, steps = [], [], []
@@ -156,12 +170,19 @@ def build(players, events, name):
         match = {"online": True, "play": False}
         if p.get("model"):
             match["model"] = p["model"]
-        setup.append({"at": 0, "do": "expect_player", "player": n, "match": match, "within": 5})
+        setup.append({"at": 0, "do": "expect_player", "player": n, "match": match, "within": 5, "required": True})
     for n, p in loads.items():
         st = p["first"]
+        if not loadable(st["source"], st["slot"]):
+            note(0.5, "player %d: load track %d by hand (from player %d, slot %d: the bench cannot load from there)"
+                 % (n, st["rbid"], st["source"], st["slot"]))
+            setup.append({"at": 0.5, "do": "expect_player", "player": n, "match": {"rbid": st["rbid"]}, "within": 10,
+                          "required": True})
+            continue
         setup.append({"at": 0.5, "do": "player", "player": n, "load": st["rbid"], "source": st["source"],
                       "slot": slot_of(st["slot"])})
-        setup.append({"at": 0.5, "do": "expect_player", "player": n, "match": {"rbid": st["rbid"]}, "within": 10})
+        setup.append({"at": 0.5, "do": "expect_player", "player": n, "match": {"rbid": st["rbid"]}, "within": 10,
+                      "required": True})
     for n, p in sorted(players.items()):
         st = p["first"]
         if p["first_t"] > JOINED:
@@ -183,7 +204,29 @@ def build(players, events, name):
     actions = []                    # (at, step, expectation, default within)
     for t, n, kind, d in events:
         at = round(lead + t, 2)
+        how = transport(players.get(n, {}))
+        if kind in ("play", "pause", "cue", "cue_hold") and how != "buttons":
+            fader = how == "fader"
+            if kind == "play" and fader:
+                actions.append((at, {"do": "player", "player": n, "press": "start"}, {"play": True}, 2))
+            elif kind == "cue" and fader:          # fader start's stop takes the player back to its cue
+                actions.append((at, {"do": "player", "player": n, "press": "stop"}, {"play": False}, 2))
+            elif kind == "pause" and fader:
+                actions.append((at, {"do": "player", "player": n, "press": "stop"}, {"play": False}, 2))
+                note(at, "player %d: paused here, which fader start cannot do: it goes back to its cue instead" % n)
+            else:
+                note(at, "player %d (%s): %s by hand (the bench cannot press it on this model)"
+                     % (n, players.get(n, {}).get("model") or "?", {"play": "PLAY", "pause": "PAUSE", "cue": "CUE",
+                                                                    "cue_hold": "CUE held"}[kind]))
+            if kind == "play" and d.get("already"):
+                note(at, "player %d was playing when the recording began: it starts from where it loads, not from "
+                         "where it was" % n)
+            continue
         if kind == "load":
+            if not loadable(d["source"], d["slot"]):
+                note(at, "player %d: load track %d by hand (from player %d, slot %d: the bench cannot load from there)"
+                     % (n, d["rbid"], d["source"], d["slot"]))
+                continue
             actions.append((at, {"do": "player", "player": n, "load": d["rbid"], "source": d["source"], "slot": slot_of(d["slot"])},
                             {"rbid": d["rbid"]}, 10))
         elif kind == "play":

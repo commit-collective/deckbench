@@ -210,6 +210,64 @@ class Recording(unittest.TestCase):
                          [(2, 99), (2, "play-pause")])
 
 
+class Limits(unittest.TestCase):
+    def test_an_older_player_is_played_with_fader_start(self):
+        s = Session()
+        old = Player(3, b"CDJ-2000")
+        old.track, old.state, old.beat = (3, 3, 41), "cued", 1
+        s.hear(old)
+        s.wait(1, old)
+        old.state = "playing"
+        s.wait(2, old)
+        old.state = "paused"                                         # fader start cannot pause in place
+        s.wait(1, old)
+        old.state = "playing"
+        s.wait(1, old)
+        old.state = "cued"
+        s.wait(1, old)
+        scenario = s.recorder.stop()
+        Scenario(scenario)
+        self.assertEqual([x for _, _, x in actions(scenario)], ["load 41", "start", "stop", "start", "stop"])
+        self.assertIn("goes back to its cue instead", " / ".join(scenario["notes"]))
+
+    def test_a_player_that_takes_neither_is_left_to_do_by_hand(self):
+        players = {2: {"name": "XDJ-XZ", "model": "XDJ-XZ", "first_t": 0.0,
+                       "first": {"rbid": 0, "source": 0, "slot": 0, "state": "no track", "sync": False, "master": False}}}
+        scenario = build(players, [(3.0, 2, "play", {"from": 1})], "xz")
+        self.assertEqual(actions(scenario), [])
+        self.assertIn("PLAY by hand", scenario["notes"][0])
+
+    def test_a_track_from_a_computer_is_loaded_by_hand(self):
+        s = Session()
+        one = Player(1)
+        one.track, one.state, one.beat = (17, 4, 3001), "cued", 1     # rekordbox on a laptop, player 17
+        s.hear(one)
+        s.wait(1, one)
+        one.track = (1, 3, 12)
+        s.wait(1, one)
+        one.track = (18, 4, 3002)
+        s.wait(1, one)
+        scenario = s.recorder.stop()
+        Scenario(scenario)
+        self.assertEqual([x for _, _, x in actions(scenario)], ["load 12"])
+        notes = " / ".join(scenario["notes"])
+        self.assertIn("load track 3001 by hand", notes)
+        self.assertIn("load track 3002 by hand", notes)
+        check = next(x for x in scenario["steps"] if x["do"] == "expect_player" and x["match"] == {"rbid": 3001})
+        self.assertTrue(check["required"])                           # the setup waits for it, by hand
+
+    def test_a_setup_that_is_not_right_ends_the_replay(self):
+        world = World()
+        scenario = Scenario({"steps": [
+            {"at": 0, "do": "expect_player", "player": 9, "match": {"online": True}, "within": 0.1, "required": True},
+            {"at": 0, "do": "log", "text": "never"}]})
+        results = scenario.run(world)
+        self.assertEqual(len(results), 1)
+        self.assertIn("required: the scenario ends here", results[0][2])
+        with self.assertRaises(Exception):
+            Scenario({"steps": [{"at": 0, "do": "log", "text": "x", "required": True}]})
+
+
 class Build(unittest.TestCase):
     def test_steps_come_in_time_order_and_a_player_heard_later_is_noted(self):
         players = {4: {"model": "CDJ-3000", "first": {"rbid": 5, "source": 4, "slot": 3, "state": "cued", "sync": False,

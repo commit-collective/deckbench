@@ -91,8 +91,10 @@ A replay begins with a setup. Each player is checked: on the link, the same mode
 when the recording began, and SYNC and MASTER are set as they were. The recorded changes follow, each a `player` step
 then an `expect_player` that checks it, at their seconds after the start of the recording plus the setup's 12 seconds:
 
-- a track loaded, from the same player's media and slot
-- PLAY, a pause, CUE pressed or held
+- a track loaded, from the same player's media and slot. A track from rekordbox on a computer, or from a CD, cannot be
+  loaded by the bench: it is noted, for loading by hand
+- PLAY, a pause, CUE pressed or held. A model that takes no button presses but has fader start (an older CDJ) gets
+  its START and STOP instead, and its pauses become a return to the cue, as STOP does. A model with neither is noted
 - SYNC on or off, MASTER taken
 
 The network does not let the bench move a pitch fader, make a loop, use a hot cue, jump in a track or eject it. These are
@@ -101,8 +103,9 @@ track starts from where the player puts it when it loads, its cue or first beat.
 or was playing when the recording began, is noted. The mixer is not recorded: its faders and EQs are done by hand.
 
 Replaying needs what any `player` step needs: Player control on, and for the loads a bench deck with a number from 1 to
-4 that no real player uses. The media must hold the same tracks with the same ids. An expectation that fails says where
-the replay went another way.
+4 that no real player uses. The media must hold the same tracks with the same ids. The setup's checks are `required`:
+when one fails (a player missing, another model, a track that does not load) the replay ends there. Later, an
+expectation that fails says where the replay went another way, and the replay goes on.
 
 A capture of the link gives the same scenario offline: `python -m deckbench.mixrecord CAPTURE.json --out mix.json`
 reads Export capture's file or what `--capture` wrote. The API is `POST /api/mix/start`, `POST /api/mix/stop`, which
@@ -123,6 +126,9 @@ it) or one of these:
 What is known of the device is the network's word (`heard`, `master`, `synced`, `playing`, `bpm`...) and what an adapter adds
 (`lamp.sync`...): the list is in [adapters.md](adapters.md). A key that is not known never matches. When an expectation fails the
 message says what was wrong: `bpm is 126.0 (wanted near 130 +-0.5)`.
+
+An expectation can be `required`: when it fails, the scenario ends there, as one whose start is not right would only
+go further wrong: `{"do": "expect_player", "player": 2, "match": {"online": true}, "required": true}`.
 
 Any step can have `when`, a match against the device: the step is done only if it holds at that moment. It brings a device that
 keeps its state to where a scenario starts: `{"do": "unit", "press": "sync", "when": {"synced": true}}`.

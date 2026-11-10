@@ -406,8 +406,11 @@ class DemoBench {
         await new Promise((r) => setTimeout(r, 50));
       }
       const [good, message] = await this.doStep(step, firstEvent);
-      this.scenario.results.push({at: step.at || 0, what: this.describe(step), ok: good, message});
+      const ends = !good && step.required;
+      this.scenario.results.push({at: step.at || 0, what: this.describe(step), ok: good,
+        message: message + (ends ? " (required: the scenario ends here)" : "")});
       if (!good) this.scenario.failed++;
+      if (ends) break;
     }
     this.scenario.running = false;
   }

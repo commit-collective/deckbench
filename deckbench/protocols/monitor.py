@@ -412,7 +412,7 @@ class Monitor:
             st["stands"] = self.stands(st)
         mix = self.mix
         if mix is not None and not d["ours"] and not d["unit"]:
-            mix.observe(d["number"], model_title(d["name"]), st, now)
+            mix.observe(d["number"], d["name"], st, now)
         if not d["ours"]:
             changed = {k: st[k] for k in ("play", "master", "sync", "on_air", "state", "source", "slot", "rbid", "handoff")
                        if previous.get(k) != st[k]}

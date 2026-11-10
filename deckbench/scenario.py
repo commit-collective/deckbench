@@ -44,6 +44,9 @@ What a step does (`deck` is the player number where a deck is meant):
   expect_player    what that player says of itself (`play`, `sync`, `master`, `on_air`, `state`, `loop`, `bpm`, `rbid`,
                    `online`...) matches `match` within `within` seconds (default 5), as expect_unit
 
+An expectation (expect, expect_unit, expect_deck, expect_player) can be `required`: when it fails, the scenario ends
+there, as a replay whose setup is not right would only go further wrong.
+
 Any step can have `when`, a match against the device under test (as in `expect_unit`): the step is done only if it holds
 at that moment, so a scenario can bring a device that keeps its state to where it starts: {"do": "unit", "press": "sync",
 "when": {"synced": false}}.
@@ -113,6 +116,8 @@ class Scenario:
                     number(step[field], *bounds)
         except ValueError as error:
             raise ScenarioError(str(error)) from error
+        if step.get("required") and not do.startswith("expect"):
+            raise ScenarioError("step %r: only an expectation can be required" % (step,))
         if do == "player" and ("press" in step) == ("load" in step):
             raise ScenarioError("step %r: player needs press or load" % (step,))
 
@@ -134,11 +139,15 @@ class Scenario:
                     break
                 sleep(min(wait, 0.2))
             ok, message = self.do(world, step, first_event)
+            if not ok and step.get("required"):
+                message += " (required: the scenario ends here)"
             results.append((step, ok, message))
             if on_step:
                 on_step(step, ok, message)
             if log:
                 log("%6.2f s  %s: %s%s" % (clock() - begin, step["do"], message or "ok", "" if ok else "  FAILED"))
+            if not ok and step.get("required"):
+                break
         return results
 
     def unmet(self, world, clock=time.time, sleep=time.sleep, cancel=None):

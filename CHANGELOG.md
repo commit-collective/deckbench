@@ -18,6 +18,7 @@ Newest first. A release is a tagged commit.
 
 - Record what the real players do as a scenario that plays it again on them, with RECORD MIX in the Scenario tab
   or `python -m deckbench.mixrecord` from a capture. What the network cannot do is noted at its time.
+- End a scenario at a failed `required` expectation, as a recorded mix's setup does.
 
 ### Observation and diagnostics
 
