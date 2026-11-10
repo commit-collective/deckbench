@@ -59,7 +59,6 @@ RECORD MIX records what the players do during a mix (the tracks they load, when 
 master) as a scenario that replays it on them, and notes what they cannot be made to do (see
 [Recording a mix](scenarios.md#recording-a-mix)). Left to do:
 
-- Say before a replay what differs from the recording: the players, their numbers, the media and its track ids
 - Reach a position by what the players allow (cue, play, seek by beat jumps if a model takes them), and check it with
   expect_player after each step
 - Time a whole scenario in bars and beats, not only a step: `on_beat` puts one step on a beat of a deck, a player or
@@ -70,10 +69,10 @@ master) as a scenario that replays it on them, and notes what they cannot be mad
 ## A stacked view for phones
 
 STACK, in the page's header, shows each deck that is on and each player as one thin row: its number, track, state
-tags, tempo, strip and overview, with nothing to press. The choice is kept per browser, and `?view=stack` opens a
-page on it. Left to do:
+tags, tempo, strip and overview, with nothing to press. The choice is kept per browser, `?view=stack` opens a page
+on it, and the Phone dialog can make a link that does. Left to do:
 
-- Open the phone's pairing link on the stacked view, as a choice when making the QR code
+- Make a phone opened on it watch-only for real: today its CARDS button gives the controls back
 
 ## The hosted page with an installed runtime
 

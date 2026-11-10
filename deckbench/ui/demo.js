@@ -337,6 +337,7 @@ class DemoBench {
     if (parts[1] === "mix") return fail(400, "recording a mix needs real players: the demo has none");
     if (parts[1] === "scenario") {
       if (parts[2] === "stop") { this.stopping = true; return ok({}); }
+      if (parts[2] === "check") return ok({ok: true, items: [{ok: false, text: "the demo has no real players to check"}]});
       if (parts[2] === "clear") {
         if (this.scenario.running) return fail(409, "a scenario is playing: stop it first");
         this.scenario = {running: false, name: null, total: 0, results: [], failed: 0, stopped: false, skipped: null};

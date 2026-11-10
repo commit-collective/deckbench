@@ -41,6 +41,10 @@ token of its own and the hosted site allowed, and the dialog shows the QR code a
 computer keeps working as before, without a token. **Stop sharing** closes the phones' connections and forgets the
 token. A new share has a new one.
 
+**Open it on the stacked view** in the dialog makes the link and the QR open the phone on the stacked view: every
+player as a thin row, to watch them all at once (`?view=stack`). The phone keeps that choice. Its **Cards** button
+goes back to the cards and their controls.
+
 Only the page on the bench's own machine, opened through `127.0.0.1` or `localhost`, sees the button and the link,
 and can start or stop sharing. A phone cannot, and neither can another site's page. Started with `--phone`, the bench
 already shares: the button shows the link and the QR, and sharing lasts until the bench stops. The QR needs the

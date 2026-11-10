@@ -319,6 +319,9 @@ details.fold[open] summary::before { transform: rotate(90deg); }
 .filters button:hover:not([aria-pressed="true"]) { color: var(--text); }
 .filters button[aria-pressed="true"] { color: var(--on-fg); background: var(--on-bg); border-color: var(--on-bd); }
 
+.checks { font: 400 11px/1.6 var(--lab); }
+.checks .good { color: var(--muted); }
+.checks .bad { color: var(--danger); }
 .events { font-size: 11px; line-height: 1.6; flex: 1; min-height: 120px; overflow: auto; }
 .events div { display: flex; gap: 8px; padding: 1px 0; border-bottom: 1px solid var(--line); }
 .events .t { flex: none; width: 56px; color: var(--muted); text-align: right; }

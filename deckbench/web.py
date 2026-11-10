@@ -26,6 +26,8 @@
     GET  /api/mix                    a recording of the real players' mix: recording, seconds, players, events
     POST /api/mix/start              begins one (409 if one runs)
     POST /api/mix/stop               ends it: {"scenario": ...}, the scenario that plays it again (see mixrecord.py)
+    POST /api/scenario/check         is everything there that the scenario in the body needs of the real players?
+                                     {"ok", "items": [{"ok", "text"}]}: the players, Player control, the tracks on their media
     POST /api/scenario/clear         forgets the last one's results (409 while one plays)
     GET  /api/scenario               how far it is: running, name, total, results, failed, stopped
     GET  /api/events?since=<n>       what the device under test did, from the n-th event on (see events.py)
@@ -92,7 +94,7 @@ from . import uploads as upload_store
 from .core import log
 from .journal import Journal
 from .mixrecord import MixRecorder
-from .scenario import Runner, ScenarioError
+from .scenario import Runner, Scenario, ScenarioError
 
 UI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
 UPLOAD_LIMIT = 300 * 1024 * 1024          # bytes of one uploaded sound file
@@ -162,7 +164,9 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
     share_lock = threading.Lock()
     runner = Runner(world)
     journal = Journal()
-    mix = MixRecorder()
+    mix = MixRecorder(titles=lambda source, slot, rbid: next(
+        (found for found in (p.known_track(source, slot, rbid) for p in world.protocols if hasattr(p, "known_track"))
+         if found), None))
     mutation_lock = threading.RLock()
     folder = tracks or upload_store.default_dir()
 
@@ -301,7 +305,8 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
             elif path == "/api/share":
                 if not self.local_page():
                     return self.send(403, encode_json({"error": "only a page on the bench's own machine sees how it is shared"}))
-                self.send(200, encode_json(share_state(listing=True)))
+                view = parse_qs(urlparse(self.path).query).get("view", [""])[0]
+                self.send(200, encode_json(share_state(listing=True, view=view)))
             elif re.fullmatch(r"/api/player/[\d.]+/waveform", path):
                 number = parse_qs(urlparse(self.path).query).get("number", [None])[0]
                 answer = next((p.waveform_asset(path.split("/")[3], number) for p in world.protocols
@@ -371,8 +376,10 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
             if self.path.split("?")[0] in ("/api/share/on", "/api/share/off"):
                 if not self.local_page():
                     return self.send(403, encode_json({"error": "only a page on the bench's own machine can share it"}))
-                address = parse_qs(urlparse(self.path).query).get("address", [""])[0].strip()
-                code, body = answer(share_on(address) if self.path.split("?")[0].endswith("/on") else share_off())
+                asked = parse_qs(urlparse(self.path).query)
+                address = asked.get("address", [""])[0].strip()
+                code, body = answer(share_on(address) if self.path.split("?")[0].endswith("/on") else share_off(),
+                                    asked.get("view", [""])[0])
                 return self.send(code, encode_json(body))
             if self.path.split('?')[0] == '/api/upload':
                 return self.post()
@@ -478,6 +485,14 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 except RuntimeError as e:
                     return self.send(409, encode_json({"error": str(e)}))
                 return self.send(200, encode_json(runner.snapshot()))
+            if parts == ["api", "scenario", "check"]:
+                try:
+                    length = int(self.headers.get("Content-Length") or 0)
+                    scenario = Scenario(json.loads(self.rfile.read(length).decode("utf-8")))
+                except (ValueError, UnicodeDecodeError) as e:
+                    return self.send(400, encode_json({"error": "not a scenario: %s" % e}))
+                items = [{"ok": ok, "text": text} for ok, text in world.check_steps(scenario.steps)]
+                return self.send(200, encode_json({"ok": all(i["ok"] for i in items), "items": items}))
             if parts == ["api", "scenario", "stop"]:
                 runner.stop()
                 return self.send(200, encode_json(runner.snapshot()))
@@ -603,13 +618,20 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 return self.send(200, encode_json(world.snapshot()))
             self.send(404, '{"error": "not found"}')
 
-    def share_state(listing=False):
+    def with_view(url, view):
+        """`url` that opens the page on the stacked view (?view=stack before its fragment), for `view` "stack"."""
+        if not url or view != "stack":
+            return url
+        base, mark, fragment = url.partition("#")
+        return base + ("&" if "?" in base else "?") + "view=stack" + mark + fragment
+
+    def share_state(listing=False, view=""):
         """What the page on this machine is told of sharing. With `listing`, the addresses it can share on (asking the system
-        can take a moment) and the QR of the link."""
+        can take a moment) and the QR of the link. With `view` "stack", the links open the phone on the stacked view."""
         from . import phone
         with share_lock:
-            out = {"on": bool(share["fixed"] or share["server"]), "fixed": share["fixed"], "url": share["url"],
-                   "direct": share["direct"], "address": share["address"], "port": share["port"]}
+            out = {"on": bool(share["fixed"] or share["server"]), "fixed": share["fixed"], "url": with_view(share["url"], view),
+                   "direct": with_view(share["direct"], view), "address": share["address"], "port": share["port"]}
         if listing:
             route = phone_address or phone.route_address()
             try:
@@ -673,9 +695,9 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
             world.changed()
         return 200, None
 
-    def answer(result):
+    def answer(result, view=""):
         code, body = result
-        return code, body if body is not None else share_state(listing=True)
+        return code, body if body is not None else share_state(listing=True, view=view)
 
     def set_phone_link(url, direct, address, port_):
         with share_lock:

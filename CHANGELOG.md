@@ -14,14 +14,18 @@ Newest first. A release is a tagged commit.
 
 - Welcome the demo's first visit with what it shows and where to follow Deckbench.
 - Watch every deck and player as a thin row with STACK in the header, or `?view=stack`. CARDS goes back.
+- Open a phone on the stacked view with a link Phone makes.
 
 ### Scenarios
 
 - Record what the real players do as a scenario that plays it again on them, with RECORD MIX in the Scenario tab
-  or `python -m deckbench.mixrecord` from a capture. What the network cannot do is noted at its time.
+  or `python -m deckbench.mixrecord` from a capture. It names the tracks, and notes what the network cannot do and
+  the on-air changes a mixer reports. Its replay says how far each PLAY on a beat came from the master's.
 - End a scenario at a failed `required` expectation, as a recorded mix's setup does.
 - Wait for a beat of a deck, a real player or the tempo master with `on_beat`. A recorded mix starts each player
   on the master's beat.
+- Check the players, Player control and the tracks on RUN before a scenario with real players, and list what
+  is not ready.
 
 ### Observation and diagnostics
 

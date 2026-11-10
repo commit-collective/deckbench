@@ -1191,6 +1191,25 @@ class Prolink(Protocol):
                 return t0 + n * period
         return None
 
+    def beat_offset(self, number, target, since=0.0):
+        """How far real player `number`'s beats are from those of `target` ({"player": n} or {"master": true}), in
+        milliseconds: positive when they come after them. From beat packets of both, the player's sent at or after
+        `since`. None until there are."""
+        with self.monitor.lock:
+            mine = [list(d["bar_phase"]) for d in self.monitor.devices.values() if not d["ours"] and d["kind"] == "player"
+                    and d.get("bar_phase") and d["number"] == number]
+            theirs = [list(d["bar_phase"]) for d in self.monitor.devices.values() if not d["ours"]
+                      and d["kind"] == "player" and d.get("bar_phase") and d["status"] and d["number"] != number
+                      and (d["number"] == target.get("player") if "player" in target else d["status"]["master"])]
+        if not mine or not theirs:
+            return None
+        t_mine, t_theirs = max(mine)[0], max(theirs)
+        if t_mine < since or not t_theirs[2]:
+            return None
+        period = 60.0 / t_theirs[2]
+        part = ((t_mine - t_theirs[0]) / period) % 1.0
+        return (part - 1.0 if part >= 0.5 else part) * period * 1000.0
+
     def external_master(self):
         """The freshest external player with a live master status."""
         now = time.time()
@@ -2092,6 +2111,101 @@ class Prolink(Protocol):
         if code >= 300:
             return False, body.get("error", "refused (%d)" % code)
         return True, "sent to player %d (not confirmed: expect_player checks what it does)" % number
+
+    def known_track(self, source, slot, rbid):
+        """What the bench has read of a track (title, artist...) from a player that had it loaded, or None."""
+        with self._metadata_lock:
+            for key, (_, metadata) in self.track_metadata.items():
+                if tuple(key[-3:]) == (source, slot, rbid):
+                    return dict(metadata)
+        return None
+
+    def check_steps(self, steps):
+        """Before a scenario plays real players: is everything there that its player steps need? [(ok, what)]. The
+        players on the link, their models (as the setup expects them), Player control, the presses each model takes,
+        a stopped player, a bench deck to send loads from, and each track on its player's media (its title asked of
+        that player's database, and compared with the one the step names)."""
+        items = []
+        devices = self.control_devices()
+        players = {d["number"]: d for d in devices if d["online"] and d["kind"] == "player"}
+        mine = [s for s in steps if s.get("do") in ("player", "expect_player")]
+        if not mine:
+            return items
+        wanted = {}
+        for s in mine:
+            if s["do"] == "expect_player" and isinstance(s.get("match"), dict) and "model" in s["match"]:
+                wanted.setdefault(int(s["player"]), s["match"]["model"])
+        for n in sorted({int(s["player"]) for s in mine}):
+            d = players.get(n)
+            if d is None:
+                items.append((False, "player %d is not on the link" % n))
+                continue
+            if n in wanted and wanted[n] != d["model"]:
+                items.append((False, "player %d is a %s, the scenario wants a %s" % (n, d["model"], wanted[n])))
+            else:
+                items.append((True, "player %d: %s" % (n, d["model"])))
+            acts = [s for s in mine if s["do"] == "player" and int(s["player"]) == n]
+            presses = {s.get("press") for s in acts if "press" in s}
+            if acts and not d.get("transport_available"):
+                items.append((False, "player %d cannot be controlled from the bench (its number, or a bench deck on it)" % n))
+            elif acts and not d.get("transport_armed"):
+                items.append((False, "player %d: Player control is off, in Settings" % n))
+            if presses & {"play-pause", "cue"} and d.get("transport_method") != "buttons":
+                items.append((False, "player %d takes no button presses (PLAY, CUE): this %s has fader start only"
+                              % (n, d["model"]) if d.get("fader_start_supported") else
+                              "player %d takes no button presses (PLAY, CUE)" % n))
+            if presses & {"start", "stop"} and not d.get("fader_start_supported"):
+                items.append((False, "player %d has no fader start (START, STOP)" % n))
+            st = d.get("status") or {}
+            if st.get("play"):
+                items.append((False, "player %d is playing: stop it before the replay" % n))
+        loads = []
+        for s in mine:
+            if s["do"] == "player" and "load" in s:
+                slot = s.get("slot", "usb")
+                slot = self.SLOTS.get(str(slot).lower(), slot)
+                try:
+                    loads.append((int(s.get("source", s["player"])), int(slot), int(s["load"]), s.get("title")))
+                except (TypeError, ValueError):
+                    items.append((False, "a load that is not understood: %r" % (s,)))
+        if not loads:
+            return items
+        occupied = {d["number"] for d in devices if d["online"]}
+        sender = next((l for l in self.decks.values() if 1 <= l.number <= 4 and l.number not in occupied
+                       and not l.deck.unplugged and (l.deck.enabled or self.observer)), None)
+        if sender is None:
+            free = sorted({1, 2, 3, 4} - occupied)
+            items.append((False, "the loads need a bench deck numbered %s switched on: a player takes a load only from a "
+                                 "player 1 to 4" % " or ".join(map(str, free)) if free else
+                                 "the loads need a free number from 1 to 4, and real devices use all four"))
+        asker = sender or self.query_sender(devices)
+        from ..metadata import read_track_metadata
+        seen = set()
+        for source, slot, rbid, title in loads:
+            if (source, slot, rbid) in seen:
+                continue
+            seen.add((source, slot, rbid))
+            where = "player %d's %s" % (source, {2: "SD", 3: "USB"}.get(slot, "slot %d" % slot))
+            peer = players.get(source)
+            if peer is None:
+                items.append((False, "track %d: %s is not on the link" % (rbid, where)))
+                continue
+            if asker is None:
+                items.append((False, "track %d on %s: not checked (no bench deck 1 to 4 to ask with)" % (rbid, where)))
+                continue
+            try:
+                found = read_track_metadata(peer["ip"], asker.address, asker.number, slot, rbid, self.ports.query, timeout=3)
+            except (OSError, EOFError, ValueError) as error:
+                items.append((False, "track %d is not on %s (%s)" % (rbid, where, error)))
+                continue
+            name = found.get("title") or "?"
+            if found.get("artist"):
+                name += " (%s)" % found["artist"]
+            if title and title != name:
+                items.append((False, "track %d on %s is %s, the scenario had %s" % (rbid, where, name, title)))
+            else:
+                items.append((True, "track %d on %s: %s" % (rbid, where, name)))
+        return items
 
     def player_state(self, number):
         """What a real player says of itself, for a scenario's expect_player: its status (play, sync, master, on_air,

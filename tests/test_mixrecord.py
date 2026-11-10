@@ -27,12 +27,14 @@ class Player:
         self.ip = "127.0.0.%d" % (20 + number)
         self.track = (0, 0, 0)
         self.state, self.beat, self.pitch = "no track", 0, 0.0
-        self.master = self.sync = False
+        self.master = self.sync = self.on_air = False
 
     def packet(self):
         data = bytearray(self.link.status())
         data[0x7B] = STATES[self.state]
-        flags = data[0x89] & ~0x70
+        flags = data[0x89] & ~0x78
+        if self.on_air:
+            flags |= 0x08
         if self.state in ("playing", "looping"):
             flags |= 0x40
         if self.master:
@@ -318,6 +320,59 @@ class OnBeat(unittest.TestCase):
         for target in ({}, {"deck": 1, "player": 2}, {"deck": 1, "beat": 5}, "master"):
             with self.subTest(target=target), self.assertRaises(Exception):
                 Scenario({"steps": [{"at": 0, "do": "log", "text": "x", "on_beat": target}]})
+
+
+class Replay(unittest.TestCase):
+    def test_titles_and_the_on_air_changes_go_with_the_recording(self):
+        s = Session()
+        s.recorder.titles = lambda source, slot, rbid: {"title": "Night Drive", "artist": "Someone"} if rbid == 205 else None
+        one = Player(2)
+        one.track, one.state, one.beat = (2, 3, 205), "cued", 1
+        s.hear(one)
+        s.wait(1, one)
+        one.track = (2, 3, 206)
+        s.wait(1, one)
+        one.on_air = True                                            # a mixer brings it in
+        s.wait(1, one)
+        scenario = s.recorder.stop()
+        Scenario(scenario)
+        loads = {x["load"]: x for x in scenario["steps"] if x.get("load")}
+        self.assertEqual(loads[205]["title"], "Night Drive (Someone)")
+        self.assertNotIn("title", loads[206])
+        self.assertTrue(any("player 2 on air" in n for n in scenario["notes"]), scenario.get("notes"))
+
+    def test_a_play_on_a_beat_is_then_measured_against_it(self):
+        s = Session()
+        one, two = Player(1), Player(2)
+        one.track, one.state, one.beat, one.master = (1, 3, 7), "playing", 1, True
+        two.track, two.state, two.beat = (2, 3, 8), "cued", 1
+        s.hear(one, two)
+        s.wait(2, one, two)
+        two.state = "playing"
+        s.wait(1, one, two)
+        scenario = s.recorder.stop()
+        Scenario(scenario)
+        check = next(x for x in scenario["steps"] if x["do"] == "expect_player" and x.get("phase_to"))
+        self.assertEqual((check["player"], check["phase_to"]), (2, {"player": 1}))
+
+    def test_the_offset_between_two_players_beats(self):
+        import time
+        net = Prolink(World())
+        now = time.time()
+        for number, at in ((1, now - 0.5), (2, now - 0.5 + 0.03)):  # player 2's beats 30 ms after player 1's
+            d = net.monitor.device("127.0.0.%d" % (40 + number), now, False, "CDJ-2000NXS2", number)
+            d["kind"], d["number"], d["status"] = "player", number, {"master": number == 1, "seen": now}
+            d["bar_phase"] = [at, 0.0, 120.0]
+        self.assertAlmostEqual(net.beat_offset(2, {"player": 1}), 30.0, places=3)
+        self.assertAlmostEqual(net.beat_offset(2, {"master": True}), 30.0, places=3)
+        self.assertIsNone(net.beat_offset(2, {"player": 1}, since=now))  # none of its beats since then
+
+    def test_the_check_before_a_replay_says_what_is_missing(self):
+        net = Prolink(World())
+        steps = [{"at": 0, "do": "expect_player", "player": 3, "match": {"online": True, "model": "CDJ-3000"}},
+                 {"at": 1, "do": "player", "player": 3, "press": "play-pause"}]
+        self.assertEqual(net.check_steps(steps), [(False, "player 3 is not on the link")])
+        self.assertEqual(net.check_steps([{"at": 0, "do": "log", "text": "x"}]), [])
 
 
 class Build(unittest.TestCase):

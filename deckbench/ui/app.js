@@ -1268,9 +1268,23 @@ $("mixrec").addEventListener("click", async () => {
 });
 (async () => { try { showMix(await (await transport.fetch("api/mix")).json()); } catch (e) { /* an older bench */ } })();
 
+/* Before a scenario that plays real players runs, the bench checks what it needs of them (the players, Player control,
+   the tracks on their media): what is not ready is listed, and it runs only if asked to anyway */
 $("scrun").addEventListener("click", async () => {
   const r = validate();
   if (r.error) return toast("Not a scenario yet: " + r.error);
+  const box = $("sccheck");
+  box.hidden = true;
+  if (r.data.steps.some((s) => s.do === "player" || s.do === "expect_player")) {
+    const got = await act("api/scenario/check", {body: $("scenario").value});
+    if (got && got.items) {
+      const bad = got.items.filter((i) => !i.ok);
+      fill(box, got.items.map((i) => h("div", {class: i.ok ? "good" : "bad"}, (i.ok ? "✓ " : "✗ ") + i.text)));
+      box.hidden = !got.items.length;
+      if (bad.length && !window.confirm(bad.length + " thing" + (bad.length > 1 ? "s are" : " is") + " not ready for this scenario:\n\n" +
+          bad.map((i) => "- " + i.text).join("\n") + "\n\nRun it anyway?")) return;
+    }
+  }
   await act("api/scenario", {body: $("scenario").value});
 });
 $("scstop").addEventListener("click", () => act("api/scenario/stop"));
@@ -1748,8 +1762,10 @@ function welcome() {
    an address of the local network, with a token of its own. The QR opens the hosted page with that address and token. A bench
    started with --phone already shares: the dialog shows its link, and it cannot be stopped from here. Only the page on the
    bench's machine is answered, so the button shows only there. */
+/* the phone's link opens on the stacked view when asked: kept in this browser */
+const phoneView = () => ($("phoneview").checked ? "stack" : "");
 async function phoneState() {
-  const r = await transport.fetch("api/share");
+  const r = await transport.fetch("api/share" + (phoneView() ? "?view=" + phoneView() : ""));
   return r.ok ? r.json() : null;
 }
 
@@ -1804,11 +1820,16 @@ async function initPhone() {
 }
 
 $("phone").addEventListener("click", openPhone);
+$("phoneview").checked = store.get("deckbench.phoneview", "") === "stack";
+$("phoneview").addEventListener("change", async () => {
+  store.set("deckbench.phoneview", phoneView());
+  try { renderPhone(await phoneState()); } catch (e) { /* the dialog keeps what it had */ }
+});
 $("phoneclose").addEventListener("click", () => { $("phonebox").hidden = true; });
 $("phonebox").addEventListener("click", (e) => { if (e.target === $("phonebox")) $("phonebox").hidden = true; });
 $("phoneon").addEventListener("click", async () => {
   $("phoneon").disabled = true;
-  try { renderPhone(await api("api/share/on?address=" + encodeURIComponent($("phoneaddr").value || ""))); } catch (e) { /* a toast said why */ }
+  try { renderPhone(await api("api/share/on?address=" + encodeURIComponent($("phoneaddr").value || "") + (phoneView() ? "&view=" + phoneView() : ""))); } catch (e) { /* a toast said why */ }
   $("phoneon").disabled = false;
 });
 $("phoneoff").addEventListener("click", async () => {

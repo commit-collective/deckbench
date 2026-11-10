@@ -8,7 +8,9 @@ with the one before. What changed becomes an event: a track loaded, PLAY, a paus
 SYNC on or off, MASTER taken. `MixRecorder.stop` turns them into scenario steps: `player` to do it again, then
 `expect_player` to check that the player did it.
 
-The network lets the bench load a track and press PLAY/PAUSE, CUE, SYNC and MASTER, nothing more. What a player cannot be
+The network lets the bench load a track and press PLAY/PAUSE, CUE, SYNC and MASTER, nothing more. A track's title and
+artist, when the bench has read them, go with its load. When a mixer reports what is on air, the changes are noted, for
+bringing each channel in by hand. What a player cannot be
 made to do (a pitch moved by hand, a loop, a hot cue or a jump to another place in the track, an eject) is kept as a `log`
 step at its time and in the scenario's `notes`, so that whoever replays it does it by hand or knows where it differs.
 
@@ -44,8 +46,9 @@ STATUS_LAG = 0.1        # a status says a player started about this long after P
 class MixRecorder:
     """Keeps the changes of the real players between `start` and `stop`. `observe` is called with each status."""
 
-    def __init__(self, clock=time.time):
+    def __init__(self, clock=time.time, titles=None):
         self.clock = clock
+        self.titles = titles        # (source, slot, rbid): what the bench read of that track ({"title", "artist"}), or None
         self.lock = threading.Lock()
         self.began = None
         self.players = {}           # number: {"model", "first", "first_t", "last", "last_t", "hold", "pitch"}
@@ -133,6 +136,8 @@ class MixRecorder:
             expected = prev["track_beat"] + (t - prev_t) * st["bpm"] / 60.0
             if abs(st["track_beat"] - expected) > JUMP_BEATS:
                 add("jump", **{"from": prev["track_beat"], "to": st["track_beat"]})
+        if bool(st.get("on_air")) != bool(prev.get("on_air")):      # set by a mixer on the link: none, no change
+            add("on_air" if st.get("on_air") else "off_air")
         if st["sync"] != prev["sync"]:
             add("sync_on" if st["sync"] else "sync_off")
         if st["master"] and not prev["master"]:
@@ -156,7 +161,7 @@ class MixRecorder:
             began, players, events = self.began, self.players, list(self.events)
             self.began = None
         stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(began if began else time.time()))
-        return build(players, events, name or "Mix recorded %s" % stamp)
+        return build(players, events, name or "Mix recorded %s" % stamp, self.titles)
 
 
 def slot_of(slot):
@@ -174,9 +179,23 @@ def transport(p):
     return Prolink.transport_method({"name": p.get("name") or p.get("model") or ""})
 
 
-def build(players, events, name):
-    """The scenario of a recording: `players` as MixRecorder keeps them, `events` its (t, number, kind, details)."""
+def build(players, events, name, titles=None):
+    """The scenario of a recording: `players` as MixRecorder keeps them, `events` its (t, number, kind, details).
+    `titles(source, slot, rbid)` names the tracks the bench read."""
     notes, setup, steps = [], [], []
+
+    def named(source, slot, rbid):
+        """"Title (Artist)" of a track, or None."""
+        try:
+            found = titles(source, slot, rbid) if titles else None
+        except Exception:
+            found = None
+        if not found or not found.get("title"):
+            return None
+        return found["title"] + (" (%s)" % found["artist"] if found.get("artist") else "")
+
+    def track(rbid, title):
+        return "track %d%s" % (rbid, " (%s)" % title if title else "")
     loads = {n: p for n, p in sorted(players.items()) if p["first_t"] <= JOINED and p["first"].get("rbid")}
     lead = SETUP if loads else SETUP_PLAIN
 
@@ -194,14 +213,15 @@ def build(players, events, name):
         setup.append({"at": 0, "do": "expect_player", "player": n, "match": match, "within": 5, "required": True})
     for n, p in loads.items():
         st = p["first"]
+        title = named(st["source"], st["slot"], st["rbid"])
         if not loadable(st["source"], st["slot"]):
-            note(0.5, "player %d: load track %d by hand (from player %d, slot %d: the bench cannot load from there)"
-                 % (n, st["rbid"], st["source"], st["slot"]))
+            note(0.5, "player %d: load %s by hand (from player %d, slot %d: the bench cannot load from there)"
+                 % (n, track(st["rbid"], title), st["source"], st["slot"]))
             setup.append({"at": 0.5, "do": "expect_player", "player": n, "match": {"rbid": st["rbid"]}, "within": 10,
                           "required": True})
             continue
-        setup.append({"at": 0.5, "do": "player", "player": n, "load": st["rbid"], "source": st["source"],
-                      "slot": slot_of(st["slot"])})
+        setup.append(dict({"at": 0.5, "do": "player", "player": n, "load": st["rbid"], "source": st["source"],
+                           "slot": slot_of(st["slot"])}, **({"title": title} if title else {})))
         setup.append({"at": 0.5, "do": "expect_player", "player": n, "match": {"rbid": st["rbid"]}, "within": 10,
                       "required": True})
     for n, p in sorted(players.items()):
@@ -244,11 +264,13 @@ def build(players, events, name):
                          "where it was" % n)
             continue
         if kind == "load":
+            title = named(d["source"], d["slot"], d["rbid"])
             if not loadable(d["source"], d["slot"]):
-                note(at, "player %d: load track %d by hand (from player %d, slot %d: the bench cannot load from there)"
-                     % (n, d["rbid"], d["source"], d["slot"]))
+                note(at, "player %d: load %s by hand (from player %d, slot %d: the bench cannot load from there)"
+                     % (n, track(d["rbid"], title), d["source"], d["slot"]))
                 continue
-            actions.append((at, {"do": "player", "player": n, "load": d["rbid"], "source": d["source"], "slot": slot_of(d["slot"])},
+            actions.append((at, dict({"do": "player", "player": n, "load": d["rbid"], "source": d["source"],
+                                      "slot": slot_of(d["slot"])}, **({"title": title} if title else {})),
                             {"rbid": d["rbid"]}, 10))
         elif kind == "play":
             actions.append(on_beat(at, {"do": "player", "player": n, "press": "play-pause"}, d.get("on")) + ({"play": True}, 2))
@@ -282,6 +304,10 @@ def build(players, events, name):
                  % (n, d["from"], d["to"]))
         elif kind == "search":
             note(at, "player %d: searched in its track (by hand)" % n)
+        elif kind == "on_air":
+            note(at, "player %d on air (its channel fader up)" % n)
+        elif kind == "off_air":
+            note(at, "player %d off air (its channel fader down)" % n)
         elif kind == "eject":
             note(at, "player %d: its track was ejected (by hand)" % n)
         elif kind == "stopped":
@@ -295,8 +321,11 @@ def build(players, events, name):
         if match is None:
             continue
         gap = actions[i + 1][0] - at if i + 1 < len(actions) else within
-        steps.append({"at": at, "do": "expect_player", "player": step["player"], "match": match,
-                      "within": round(max(0.5, min(within, gap - 0.1)), 2)})
+        check = {"at": at, "do": "expect_player", "player": step["player"], "match": match,
+                 "within": round(max(0.5, min(within, gap - 0.1)), 2)}
+        if "on_beat" in step:                           # and how close to that beat it came
+            check["phase_to"] = {"player": step["on_beat"]["player"]}
+        steps.append(check)
     steps = setup + sorted(steps, key=lambda s: s["at"])
     scenario = {"name": name, "steps": steps}
     if notes:

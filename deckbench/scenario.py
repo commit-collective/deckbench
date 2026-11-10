@@ -52,6 +52,10 @@ place in the bar. When its `at` comes, the step waits for the next such beat of 
 (a bar at most) and is done on it, `early` milliseconds before it if given (for a player that takes a moment to start).
 If that one is not playing, the step is done at once and says so.
 
+An `expect_player` that holds can then measure how far that player's beats are from another's: `phase_to` is
+{"player": n} or {"master": true}. Its message says it in milliseconds, after the player's next beat (2.5 s at most).
+A recorded mix puts it after each PLAY done on a beat, to see how close the replay came.
+
 Any step can have `when`, a match against the device under test (as in `expect_unit`): the step is done only if it holds
 at that moment, so a scenario can bring a device that keeps its state to where it starts: {"do": "unit", "press": "sync",
 "when": {"synced": false}}.
@@ -127,6 +131,10 @@ class Scenario:
                 raise ScenarioError("step %r: on_beat is {\"deck\": n}, {\"player\": n} or {\"master\": true}" % (step,))
             if "beat" in target and target["beat"] not in (1, 2, 3, 4):
                 raise ScenarioError("step %r: on_beat's beat is 1 to 4" % (step,))
+        target = step.get("phase_to")
+        if target is not None and (do != "expect_player" or not isinstance(target, dict)
+                                   or sum(k in target for k in ("player", "master")) != 1):
+            raise ScenarioError("step %r: phase_to is {\"player\": n} or {\"master\": true}, on an expect_player" % (step,))
         if step.get("required") and not do.startswith("expect"):
             raise ScenarioError("step %r: only an expectation can be required" % (step,))
         if do == "player" and ("press" in step) == ("load" in step):
@@ -149,12 +157,15 @@ class Scenario:
                 if wait <= 0:
                     break
                 sleep(min(wait, 0.2))
+            began_step = time.time()
             timed = self.wait_beat(world, step, cancel)
             if timed is False:
                 return results
             ok, message = self.do(world, step, first_event)
             if timed:
                 message = ("%s. %s" % (timed, message)) if message else timed
+            if ok and step.get("phase_to"):
+                message += ". " + self.measure_phase(world, step, began_step, cancel)
             if not ok and step.get("required"):
                 message += " (required: the scenario ends here)"
             results.append((step, ok, message))
@@ -165,6 +176,22 @@ class Scenario:
             if not ok and step.get("required"):
                 break
         return results
+
+    @staticmethod
+    def measure_phase(world, step, since, cancel=None):
+        """How far a player's beats are from those `phase_to` names, in words, once both have sent one."""
+        target = step["phase_to"]
+        who = "player %s" % target["player"] if "player" in target else "the master"
+        end = time.time() + 2.5
+        while True:
+            offset = world.beat_offset(int(step["player"]), target, since)
+            if offset is not None:
+                if abs(offset) < 1:
+                    return "on %s's beat" % who
+                return "%.0f ms %s %s's beat" % (abs(offset), "after" if offset > 0 else "before", who)
+            if time.time() >= end or (cancel and cancel()):
+                return "its beat against %s's not measured (no beats from both)" % who
+            time.sleep(0.05)
 
     @staticmethod
     def wait_beat(world, step, cancel=None):

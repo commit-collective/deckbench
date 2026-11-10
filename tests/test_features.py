@@ -337,6 +337,16 @@ class Faults(unittest.TestCase):
         self.assertTrue(done["stopped"])
         self.assertEqual(len(done["results"]), 1)
 
+    def test_a_scenario_is_checked_against_the_real_players_before_it_runs(self):
+        body = json.dumps({"steps": [{"at": 0, "do": "player", "player": 9, "press": "play-pause"}]})
+        code, got = self.post_json("api/scenario/check", body)
+        self.assertEqual(code, 200)
+        self.assertFalse(got["ok"])
+        self.assertIn({"ok": False, "text": "player 9 is not on the link"}, got["items"])
+        code, got = self.post_json("api/scenario/check", json.dumps({"steps": [{"at": 0, "do": "log", "text": "x"}]}))
+        self.assertEqual((code, got), (200, {"ok": True, "items": []}))       # nothing of real players to check
+        self.assertEqual(self.post_json("api/scenario/check", "not json")[0], 400)
+
     def test_a_mix_is_recorded_from_the_page(self):
         self.assertFalse(self.api("api/mix", post=False)["recording"])
         self.assertEqual(self.post_json("api/mix/stop", "")[0], 409)          # none to stop

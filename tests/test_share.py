@@ -93,6 +93,9 @@ class Share(unittest.TestCase):
         self.assertEqual(call(self.base + "api/share/on", "POST")[0], 409)
         self.assertEqual(call(self.base + "api/share/off", "POST")[0], 409)
         self.assertTrue(call(self.base + "api/state")[1]["bench"]["phone"]["fixed"])   # what lights the Phone button
+        body = call(self.base + "api/share?view=stack")[1]                         # the phone opens on the stacked view
+        self.assertEqual((body["url"], body["direct"]), ("https://example/app/?view=stack#token=x",
+                                                         "http://10.0.0.2:8750/?view=stack#token=x"))
 
 
 if __name__ == "__main__":

@@ -149,6 +149,15 @@ class World:
                 return state
         return {}
 
+    def check_steps(self, steps):
+        """What a scenario's steps need of the real players, checked now: [(ok, what)]. Empty if it uses none."""
+        items = []
+        for protocol in self.protocols:
+            check = getattr(protocol, "check_steps", None)
+            if check:
+                items += check(steps)
+        return items
+
     def press_unit(self, control=None, line=None):
         """Presses a control of the device under test through an adapter that has it (or sends a raw command line).
         (True, "") or (False, why)."""
@@ -193,6 +202,24 @@ class World:
             when = find(target, beat, after) if find else None
             if when is not None:
                 return when
+        return None
+
+    def beat_offset(self, number, target, since=0.0):
+        """How far the beats of real player `number`, or of bench deck `number` with {"deck": ...} targets, are from
+        those of `target` (as in next_beat), in milliseconds: positive when they come after them. None if not known."""
+        if "deck" in target or (target.get("master") and self.master_deck() is not None):
+            mine = self.decks.get(int(number))
+            theirs = self.decks.get(int(target["deck"])) if "deck" in target else self.master_deck()
+            if not (mine and theirs and mine.playing and theirs.playing and theirs.tempo() > 0):
+                return None
+            now = time.time()
+            part = (mine.position(now) - theirs.position(now)) % 1.0
+            return -(part - 1.0 if part >= 0.5 else part) * 60000.0 / theirs.tempo()
+        for protocol in self.protocols:
+            measure = getattr(protocol, "beat_offset", None)
+            found = measure(number, target, since) if measure else None
+            if found is not None:
+                return found
         return None
 
     # -- what the decks are, together --

@@ -107,6 +107,16 @@ kept as `log` steps at their time, so the replay says when to do them by hand, a
 track starts from where the player puts it when it loads, its cue or first beat. A player that played from elsewhere,
 or was playing when the recording began, is noted. The mixer is not recorded: its faders and EQs are done by hand.
 
+A track's title and artist go with its load when the bench has read them (Read track info, or a player's card). When a
+mixer on the link reports which channels are on air, each change is noted too, "player 2 on air", for bringing its
+fader up by hand. After a PLAY done on a beat, the check that follows says how far the player's beats came from the
+master's, in milliseconds (`phase_to`): if they come late every time, `"early"` on the `on_beat` can make up for it.
+
+Before a scenario with real players runs, RUN asks the bench whether everything it needs is there: each player and its
+model, Player control, the presses each model takes, stopped players, a bench deck to send loads from, and each track
+on its player's media, with its title compared to the recording's. What is not ready is listed under the scenario's
+status, and it runs only if asked to anyway. `POST /api/scenario/check` does the same with the scenario as its body.
+
 Replaying needs what any `player` step needs: Player control on, and for the loads a bench deck with a number from 1 to
 4 that no real player uses. The media must hold the same tracks with the same ids. The setup's checks are `required`:
 when one fails (a player missing, another model, a track that does not load) the replay ends there. Later, an
