@@ -11,6 +11,7 @@ unit under test, for one), and can say what a deck shows besides this.
 """
 import os
 import sys
+import math
 import threading
 import time
 
@@ -163,6 +164,36 @@ class World:
                 continue
             return ok, why
         return False, why
+
+    # -- beats, to do a step on one --
+    def next_beat(self, target, beat=None, after=None):
+        """When (time.time()) the next beat of `target` comes, at or after `after` (default now): a bench deck
+        ({"deck": n}), a real player ({"player": n}) or the tempo master ({"master": true}, a deck or a player). With
+        `beat` (1 to 4), the next beat with that place in its bar. None if it is not playing or its beats are not known."""
+        now = time.time()
+        after = now if after is None else after
+        deck = None
+        if "deck" in target:
+            deck = self.decks.get(int(target["deck"]))
+        elif target.get("master"):
+            deck = self.master_deck()
+        if deck is not None:
+            if not (deck.enabled and deck.playing and deck.tempo() > 0):
+                return None
+            pos, period = deck.position(now), 60.0 / deck.tempo()
+            k = math.ceil(pos + (after - now) / period - 1e-9)
+            for n in range(k, k + 4):
+                if beat is None or deck.bar_beat(n) == int(beat):
+                    return now + (n - pos) * period
+            return None
+        if "deck" in target:
+            return None
+        for protocol in self.protocols:
+            find = getattr(protocol, "next_beat", None)
+            when = find(target, beat, after) if find else None
+            if when is not None:
+                return when
+        return None
 
     # -- what the decks are, together --
     def master_deck(self):

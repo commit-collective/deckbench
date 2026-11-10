@@ -47,6 +47,11 @@ What a step does (`deck` is the player number where a deck is meant):
 An expectation (expect, expect_unit, expect_deck, expect_player) can be `required`: when it fails, the scenario ends
 there, as a replay whose setup is not right would only go further wrong.
 
+Any step can be done on a beat: `on_beat` is {"deck": n}, {"player": n} or {"master": true}, with `beat` (1 to 4) for a
+place in the bar. When its `at` comes, the step waits for the next such beat of that deck, real player or tempo master
+(a bar at most) and is done on it, `early` milliseconds before it if given (for a player that takes a moment to start).
+If that one is not playing, the step is done at once and says so.
+
 Any step can have `when`, a match against the device under test (as in `expect_unit`): the step is done only if it holds
 at that moment, so a scenario can bring a device that keeps its state to where it starts: {"do": "unit", "press": "sync",
 "when": {"synced": false}}.
@@ -116,6 +121,12 @@ class Scenario:
                     number(step[field], *bounds)
         except ValueError as error:
             raise ScenarioError(str(error)) from error
+        target = step.get("on_beat")
+        if target is not None:
+            if not isinstance(target, dict) or sum(k in target for k in ("deck", "player", "master")) != 1:
+                raise ScenarioError("step %r: on_beat is {\"deck\": n}, {\"player\": n} or {\"master\": true}" % (step,))
+            if "beat" in target and target["beat"] not in (1, 2, 3, 4):
+                raise ScenarioError("step %r: on_beat's beat is 1 to 4" % (step,))
         if step.get("required") and not do.startswith("expect"):
             raise ScenarioError("step %r: only an expectation can be required" % (step,))
         if do == "player" and ("press" in step) == ("load" in step):
@@ -138,7 +149,12 @@ class Scenario:
                 if wait <= 0:
                     break
                 sleep(min(wait, 0.2))
+            timed = self.wait_beat(world, step, cancel)
+            if timed is False:
+                return results
             ok, message = self.do(world, step, first_event)
+            if timed:
+                message = ("%s. %s" % (timed, message)) if message else timed
             if not ok and step.get("required"):
                 message += " (required: the scenario ends here)"
             results.append((step, ok, message))
@@ -149,6 +165,29 @@ class Scenario:
             if not ok and step.get("required"):
                 break
         return results
+
+    @staticmethod
+    def wait_beat(world, step, cancel=None):
+        """Waits for a step's beat (`on_beat`): what it was, in words. None if the step has none, False if cancelled."""
+        target = step.get("on_beat")
+        if not target:
+            return None
+        who = ("deck %s" % target["deck"] if "deck" in target else "player %s" % target["player"] if "player" in target
+               else "the master")
+        place = "beat %d of %s" % (int(target["beat"]), who) if target.get("beat") else "a beat of %s" % who
+        when = world.next_beat(target, target.get("beat"))
+        if when is None:
+            return "no beat from %s: done at once" % who
+        when -= float(target.get("early", 0)) / 1000.0
+        began = time.time()
+        while True:
+            left = when - time.time()
+            if cancel and cancel():
+                return False
+            if left <= 0:
+                break
+            time.sleep(min(left, 0.05) if left > 0.06 else left)
+        return "on %s (waited %.2f s)" % (place, time.time() - began)
 
     def unmet(self, world, clock=time.time, sleep=time.sleep, cancel=None):
         """What the scenario requires that is not there (a sentence), or None."""

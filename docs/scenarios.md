@@ -97,6 +97,11 @@ then an `expect_player` that checks it, at their seconds after the start of the 
   its START and STOP instead, and its pauses become a return to the cue, as STOP does. A model with neither is noted
 - SYNC on or off, MASTER taken
 
+A PLAY pressed while another player was the tempo master and playing keeps its place on the master's beat: it becomes
+a step `on_beat` that beat of the master's bar, sent half a bar before its time, so it lands on the beat nearest to
+where it was even if the tempo is not quite the same. Which beat it was is read from the players' statuses, which
+come five times a second: a PLAY pressed far from a beat may be put on the next one.
+
 The network does not let the bench move a pitch fader, make a loop, use a hot cue, jump in a track or eject it. These are
 kept as `log` steps at their time, so the replay says when to do them by hand, and listed in the scenario's `notes`. A
 track starts from where the player puts it when it loads, its cue or first beat. A player that played from elsewhere,
@@ -129,6 +134,17 @@ message says what was wrong: `bpm is 126.0 (wanted near 130 +-0.5)`.
 
 An expectation can be `required`: when it fails, the scenario ends there, as one whose start is not right would only
 go further wrong: `{"do": "expect_player", "player": 2, "match": {"online": true}, "required": true}`.
+
+Any step can be done on a beat. `on_beat` names whose beat: `{"deck": 2}` (a bench deck), `{"player": 3}` (a real player)
+or `{"master": true}` (the tempo master, a deck or a player), with `"beat": 1` to 4 for a place in the bar. When the
+step's `at` comes, it waits for the next such beat, a bar at most, and is done on it. `"early": 20` does it that many
+milliseconds before the beat, for a player that takes a moment to start. The beat is foreseen from the deck's place and
+tempo, or from the player's last beat packet, not waited for. A deck or player that is not playing has no beat: the
+step is done at once and says so.
+
+```json
+{"at": 16, "do": "player", "player": 2, "press": "play-pause", "on_beat": {"master": true, "beat": 1}}
+```
 
 Any step can have `when`, a match against the device: the step is done only if it holds at that moment. It brings a device that
 keeps its state to where a scenario starts: `{"do": "unit", "press": "sync", "when": {"synced": true}}`.

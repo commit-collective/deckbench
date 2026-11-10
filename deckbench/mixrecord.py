@@ -12,6 +12,10 @@ The network lets the bench load a track and press PLAY/PAUSE, CUE, SYNC and MAST
 made to do (a pitch moved by hand, a loop, a hot cue or a jump to another place in the track, an eject) is kept as a `log`
 step at its time and in the scenario's `notes`, so that whoever replays it does it by hand or knows where it differs.
 
+A PLAY pressed while another player was the tempo master and playing is replayed on the same beat of the master's
+bar (`on_beat`): it is sent from half a bar before its time and waits for that beat, so it lands on the beat nearest
+to where it was, at the master's tempo of the replay.
+
 A replay begins with a setup: each player is checked (on the link, the same model, stopped) and loads the track it had
 when the recording began. The recorded events follow, at their seconds after the start of the recording plus the setup's
 time. A track starts from where the player puts it when it loads (its cue, or its first beat): a mix that played a track
@@ -34,6 +38,7 @@ SETUP_PLAIN = 3.0       # the same when no player loads a track before the mix
 PITCH_STEP = 0.1        # a pitch moved by less, in percent, is not noted
 JUMP_BEATS = 4          # a playing track whose beat is this far from where it should be has jumped
 MERGE = 3.0             # pitch moves of one player closer in time than this are one note
+STATUS_LAG = 0.1        # a status says a player started about this long after PLAY was pressed (they come each 0.2 s)
 
 
 class MixRecorder:
@@ -70,6 +75,21 @@ class MixRecorder:
                 return
             self._compare(number, p, p["last"], st, p["last_t"], t)
             p["last"], p["last_t"] = dict(st), t
+            window = st.get("beat_window")
+            if window and st.get("bar") and st.get("state") in RUNNING:     # its beat changed: when, and where in the bar
+                p["beat_t"], p["beat_bar"] = (window[0] + window[1]) / 2.0 - self.began, st["bar"]
+
+    def master_beat(self, number, t):
+        """The beat of the master's bar that player `number`'s start at `t` fell on: {"player", "beat", "period"}, or
+        None when no other player was the master and playing, with its beats known."""
+        for n, q in self.players.items():
+            st = q["last"]
+            if (n != number and st.get("master") and st.get("state") in RUNNING and st.get("bpm")
+                    and q.get("beat_t") is not None):
+                period = 60.0 / st["bpm"]
+                k = round((t - STATUS_LAG - q["beat_t"]) / period)
+                return {"player": n, "beat": int((q["beat_bar"] - 1 + k) % 4) + 1, "period": period}
+        return None
 
     def _compare(self, number, p, prev, st, prev_t, t):
         add = lambda kind, **details: self.events.append((t, number, kind, details))
@@ -87,11 +107,12 @@ class MixRecorder:
         elif was in HELD and now not in HELD:
             began, p["hold"] = p["hold"], None
             if now in RUNNING:                          # held on CUE, then PLAY: it plays on from the cue
-                self.events.append((began if began is not None else t, number, "play", {"from": prev.get("track_beat")}))
+                at = began if began is not None else t
+                self.events.append((at, number, "play", {"from": prev.get("track_beat"), "on": self.master_beat(number, at)}))
             elif began is not None:
                 self.events.append((began, number, "cue_hold", {"seconds": round(t - began, 2)}))
         elif was not in RUNNING and now in RUNNING:
-            add("play", **{"from": prev.get("track_beat")})
+            add("play", **{"from": prev.get("track_beat"), "on": self.master_beat(number, t)})
         elif was in RUNNING and now not in RUNNING:
             if now == "cued":
                 add("cue")
@@ -208,7 +229,7 @@ def build(players, events, name):
         if kind in ("play", "pause", "cue", "cue_hold") and how != "buttons":
             fader = how == "fader"
             if kind == "play" and fader:
-                actions.append((at, {"do": "player", "player": n, "press": "start"}, {"play": True}, 2))
+                actions.append(on_beat(at, {"do": "player", "player": n, "press": "start"}, d.get("on")) + ({"play": True}, 2))
             elif kind == "cue" and fader:          # fader start's stop takes the player back to its cue
                 actions.append((at, {"do": "player", "player": n, "press": "stop"}, {"play": False}, 2))
             elif kind == "pause" and fader:
@@ -230,7 +251,7 @@ def build(players, events, name):
             actions.append((at, {"do": "player", "player": n, "load": d["rbid"], "source": d["source"], "slot": slot_of(d["slot"])},
                             {"rbid": d["rbid"]}, 10))
         elif kind == "play":
-            actions.append((at, {"do": "player", "player": n, "press": "play-pause"}, {"play": True}, 2))
+            actions.append(on_beat(at, {"do": "player", "player": n, "press": "play-pause"}, d.get("on")) + ({"play": True}, 2))
             if d.get("already"):
                 note(at, "player %d was playing when the recording began: it starts from where it loads, not from "
                          "where it was" % n)
@@ -269,7 +290,8 @@ def build(players, events, name):
             note(at, "player %d came on the link with track %d loaded: not replayed" % (n, d["rbid"]))
     # an expectation waits until it holds, and the next steps wait for it: it waits no longer than the gap to the next
     for i, (at, step, match, within) in enumerate(actions):
-        steps.append(dict({"at": at}, **step))
+        sent = step.pop("send_at", at)                  # a step on a beat is sent before its time and waits for the beat
+        steps.append(dict({"at": sent}, **step))
         if match is None:
             continue
         gap = actions[i + 1][0] - at if i + 1 < len(actions) else within
@@ -280,6 +302,14 @@ def build(players, events, name):
     if notes:
         scenario["notes"] = notes
     return scenario
+
+
+def on_beat(at, step, on):
+    """(at, step) for an action, on the master's beat it was done on if `on` says one: sent half a bar early."""
+    if not on:
+        return (at, step)
+    step = dict(step, on_beat={"player": on["player"], "beat": on["beat"]}, send_at=round(max(0.0, at - 2 * on["period"]), 2))
+    return (at, step)
 
 
 def merge_pitch(events):

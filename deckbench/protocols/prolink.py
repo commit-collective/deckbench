@@ -45,6 +45,7 @@ import time
 import collections
 import ipaddress
 import json
+import math
 import types
 
 from ..core import Protocol, log
@@ -1163,6 +1164,31 @@ class Prolink(Protocol):
         peer = self.external_master()
         if peer and peer["status"]["bpm"] and 0 < peer["status"]["bpm"] < 655.35:
             return peer["status"]["bpm"]
+        return None
+
+    def next_beat(self, target, beat=None, after=None):
+        """World.next_beat for a real player ({"player": n}) or the master among them ({"master": true}), from its
+        last beat packet: its time, its place in the bar and its tempo. None if it sent none lately."""
+        now = time.time()
+        after = now if after is None else after
+        with self.monitor.lock:
+            found = [d for d in self.monitor.devices.values() if not d["ours"] and d["kind"] == "player"
+                     and d.get("bar_phase") and d["status"]
+                     and (d["number"] == target.get("player") if "player" in target else
+                          bool(target.get("master")) and d["status"]["master"])]
+            phases = [list(d["bar_phase"]) for d in found]
+        if not phases:
+            return None
+        t0, place, bpm = max(phases)
+        if not bpm or bpm <= 0:
+            return None
+        period = 60.0 / bpm
+        if now - t0 > 2 * period + 0.5:                 # it stopped, or its beats are not coming
+            return None
+        k = max(1, math.ceil((after - t0) / period - 1e-9))
+        for n in range(k, k + 4):
+            if beat is None or (int(place) + n) % 4 == int(beat) - 1:
+                return t0 + n * period
         return None
 
     def external_master(self):

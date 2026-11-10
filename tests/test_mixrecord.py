@@ -44,6 +44,7 @@ class Player:
         data[0x28], data[0x29] = source, slot
         data[0x2C:0x30] = rbid.to_bytes(4, "big")
         data[0xA0:0xA4] = self.beat.to_bytes(4, "big")
+        data[0xA6] = (self.beat - 1) % 4 + 1 if self.beat else 0      # its place in the bar, the track starting on a bar
         data[0x8C:0x90] = int(PITCH_NORMAL * (1 + self.pitch / 100)).to_bytes(4, "big")
         data[0x92:0x94] = (12800 if rbid else 0).to_bytes(2, "big")
         return bytes(data)
@@ -72,8 +73,12 @@ class Session:
         while self.now < end - 1e-9:
             self.now = round(self.now + 0.2, 3)
             for player in players:
-                if player.state == "playing":
-                    player.beat = int(round(player.beat + 0.2 * beats_per_second * (1 + player.pitch / 100)))
+                if player.state == "playing":                    # counted in fractions, said in whole beats
+                    pos = player.__dict__.get("pos")
+                    if pos is None or int(pos) != player.beat:      # a test moved it: from there
+                        pos = float(player.beat)
+                    player.pos = pos + 0.2 * beats_per_second * (1 + player.pitch / 100)
+                    player.beat = int(player.pos)
             self.hear(*players)
 
 
@@ -110,9 +115,13 @@ class Recording(unittest.TestCase):
             (13.2, 1, "play-pause"),
             (17.2, 2, "load 205"),
             (20.2, 2, "sync-on"),
-            (21.2, 2, "play-pause"),
+            (20.26, 2, "play-pause"),                               # half a bar early, to wait for its beat
             (23.2, 2, "master"),
             (24.2, 1, "cue")])
+        starts = [x for x in scenario["steps"] if x.get("press") == "play-pause"]
+        self.assertNotIn("on_beat", starts[0])                       # player 1 started with no master playing
+        self.assertEqual(starts[1]["on_beat"]["player"], 1)           # player 2 on player 1's beat
+        self.assertIn(starts[1]["on_beat"]["beat"], (1, 2, 3, 4))
         load = next(s for s in scenario["steps"] if s.get("load") == 205)
         self.assertEqual((load["source"], load["slot"]), (1, "usb"))
         setup = [s for s in scenario["steps"] if s["do"] == "expect_player" and s["at"] == 0]
@@ -266,6 +275,49 @@ class Limits(unittest.TestCase):
         self.assertIn("required: the scenario ends here", results[0][2])
         with self.assertRaises(Exception):
             Scenario({"steps": [{"at": 0, "do": "log", "text": "x", "required": True}]})
+
+
+class OnBeat(unittest.TestCase):
+    def test_a_step_waits_for_the_beat_of_a_bench_deck(self):
+        import time
+        world = World()
+        deck = world.decks[1] = Deck(world, 1, 240.0, "deck 1")       # a beat each 0.25 s
+        deck.enabled = deck.playing = True
+        deck.anchor_t, deck.anchor_pos = time.time(), 0.3
+        for beat in (1, 3, None):
+            with self.subTest(beat=beat):
+                target = {"deck": 1} if beat is None else {"deck": 1, "beat": beat}
+                (step, ok, message), = Scenario({"steps": [{"at": 0, "do": "log", "text": "x", "on_beat": target}]}).run(world)
+                pos = deck.position(time.time())
+                self.assertLess(pos - int(pos), 0.2, message)            # just after a beat
+                if beat:
+                    self.assertEqual(deck.bar_beat(pos), beat, message)
+                self.assertIn("on ", message)
+
+    def test_a_deck_that_does_not_play_is_not_waited_for(self):
+        world = World()
+        world.decks[1] = Deck(world, 1, 120.0, "deck 1")
+        (step, ok, message), = Scenario({"steps": [{"at": 0, "do": "log", "text": "x", "on_beat": {"deck": 1}}]}).run(world)
+        self.assertIn("no beat from deck 1: done at once", message)
+
+    def test_a_real_players_next_beat_comes_from_its_last_beat_packet(self):
+        import time
+        net = Prolink(World())
+        device = net.monitor.device("127.0.0.30", time.time(), False, "CDJ-2000NXS2", 3)
+        device["kind"], device["number"] = "player", 3
+        device["status"] = {"master": True, "seen": time.time()}
+        now = time.time()
+        device["bar_phase"] = [now - 0.1, 2.0, 120.0]                 # beat 3 of its bar 0.1 s ago, a beat each 0.5 s
+        when = net.next_beat({"player": 3}, 1)
+        self.assertAlmostEqual(when, now - 0.1 + 1.0, places=3)       # beat 4 at +0.5, beat 1 at +1.0
+        self.assertAlmostEqual(net.next_beat({"master": True}), now + 0.4, places=3)
+        device["bar_phase"] = [now - 5, 2.0, 120.0]                   # its beats stopped
+        self.assertIsNone(net.next_beat({"player": 3}))
+
+    def test_a_bad_on_beat_is_refused_when_it_is_read(self):
+        for target in ({}, {"deck": 1, "player": 2}, {"deck": 1, "beat": 5}, "master"):
+            with self.subTest(target=target), self.assertRaises(Exception):
+                Scenario({"steps": [{"at": 0, "do": "log", "text": "x", "on_beat": target}]})
 
 
 class Build(unittest.TestCase):

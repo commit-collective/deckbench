@@ -405,14 +405,34 @@ class DemoBench {
         if (this.stopping) { this.scenario.running = false; this.scenario.stopped = true; return; }
         await new Promise((r) => setTimeout(r, 50));
       }
+      const timed = await this.waitBeat(step);
       const [good, message] = await this.doStep(step, firstEvent);
       const ends = !good && step.required;
       this.scenario.results.push({at: step.at || 0, what: this.describe(step), ok: good,
-        message: message + (ends ? " (required: the scenario ends here)" : "")});
+        message: (timed ? timed + (message ? ". " : "") : "") + message + (ends ? " (required: the scenario ends here)" : "")});
       if (!good) this.scenario.failed++;
       if (ends) break;
     }
     this.scenario.running = false;
+  }
+
+  /* A step's on_beat, as the bench does it: the next beat (or the next with that place in the bar) of a deck, the
+     master deck or the demo's real player, then the step. What it was, in words, or null with no on_beat */
+  async waitBeat(step) {
+    const target = step.on_beat;
+    if (!target) return null;
+    const who = "deck" in target ? "deck " + target.deck : "player" in target ? "player " + target.player : "the master";
+    const now = this.now();
+    let pos = null, bpm = 0;
+    const d = "deck" in target ? this.decks[Number(target.deck)] : target.master ? Object.values(this.decks).find((x) => x.on && x.master) : null;
+    if (d && d.on && d.play) { pos = this.position(d, now); bpm = this.tempo(d); }
+    else if ("player" in target && Number(target.player) === this.ext.number) { pos = this.extPosition(now); bpm = this.extTempo(); }
+    if (pos === null || !(bpm > 0)) return "no beat from " + who + ": done at once";
+    let n = Math.ceil(pos - 1e-9);
+    while (target.beat && (n % 4) + 1 !== Number(target.beat)) n++;
+    const wait = (n - pos) * 60 / bpm - (Number(target.early) || 0) / 1000;
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait * 1000));
+    return "on " + (target.beat ? "beat " + target.beat + " of " : "a beat of ") + who + " (waited " + Math.max(0, wait).toFixed(2) + " s)";
   }
 
   async waitFor(read, match, within) {

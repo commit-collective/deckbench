@@ -62,8 +62,8 @@ master) as a scenario that replays it on them, and notes what they cannot be mad
 - Say before a replay what differs from the recording: the players, their numbers, the media and its track ids
 - Reach a position by what the players allow (cue, play, seek by beat jumps if a model takes them), and check it with
   expect_player after each step
-- Time steps in bars and beats of a deck or the tempo master as well as in seconds, so a step lands on a beat
-  whatever the tempo, which a recorded mix needs
+- Time a whole scenario in bars and beats, not only a step: `on_beat` puts one step on a beat of a deck, a player or
+  the master, and a recorded PLAY uses it
 - Leave the mixer out: its faders and EQs are not controlled from the network, so a replay sets the players and the
   mix is done by hand
 
