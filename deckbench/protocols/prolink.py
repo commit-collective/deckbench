@@ -1029,18 +1029,38 @@ class Prolink(Protocol):
             log("%s tells %s that number %d is in use" % (link.deck.name, claimer, number))
             self.world.events.add("number_defended", deck=number, claimer=claimer)
 
+    def broadcast_addresses(self):
+        """Where the listeners for broadcasts bind (keep-alives, statuses, fader start). Any address on the loopback
+        (local testing, as the device under test there expects) and on Windows, where one program holds a port. On a
+        real network elsewhere, only the broadcast addresses: a socket bound to any address there would take what
+        players send to another program of this machine (master hand-off, sync, status), and on Linux the last one
+        bound gets it. The decks' own addresses have sockets of their own."""
+        links = list(self.decks.values())
+        if os.name == "nt" or not links or all(ipaddress.ip_address(l.address).is_loopback for l in links):
+            return ["0.0.0.0"]
+        return sorted({l.broadcast for l in links} | {"255.255.255.255"})
+
     def faders(self):
         """Fader start packets (type 0x02, broadcast on 50001, as a mixer sends them): a byte for each
         of the players 1 to 4, 0 start, 1 stop, 2 leave it."""
-        s = share(self.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM))
-        s.bind(("", self.ports.beat))
-        s.settimeout(0.5)
+        socks = []
+        for address in self.broadcast_addresses():
+            s = share(self.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM))
+            s.bind((address, self.ports.beat))
+            s.settimeout(0.5)
+            socks.append(s)
         self.listening()
         while not self.runtime.stopping.is_set():
-            try:
-                data, addr = s.recvfrom(2048)
-            except socket.timeout:
-                continue
+            if len(socks) == 1:                     # any address: one socket
+                try:
+                    data, addr = socks[0].recvfrom(2048)
+                except socket.timeout:
+                    continue
+            else:
+                ready, _, _ = select.select(socks, [], [], 0.5)
+                if not ready:
+                    continue
+                data, addr = ready[0].recvfrom(2048)
             if self.runtime.stopping.is_set():
                 return
             if not self.accepts_source(addr[0]):
@@ -2189,15 +2209,24 @@ class Prolink(Protocol):
         the tempo master and at what tempo; and passes the master role when the
         unit takes it from a deck that has agreed to yield it."""
         socks = []
+        wide = self.broadcast_addresses()
         for port in (self.ports.announce, self.ports.update):
-            s = share(self.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM))
-            try:
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-            except (AttributeError, OSError):
-                pass
-            s.bind(("0.0.0.0", port))
-            s.settimeout(0.5)
-            socks.append((s, port))
+            for address in wide:
+                s = share(self.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM))
+                if address == "0.0.0.0":
+                    try:
+                        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                    except (AttributeError, OSError):
+                        pass
+                s.bind((address, port))
+                s.settimeout(0.5)
+                socks.append((s, port))
+        if wide != ["0.0.0.0"]:     # a keep-alive or a claim sent to a deck itself: its own address, as statuses are
+            for link in self.decks.values():
+                s = share(self.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM))
+                s.bind((link.address, self.ports.announce))
+                s.settimeout(0.5)
+                socks.append((s, self.ports.announce))
         # What the unit sends to a deck itself (its status, to port 50002 of the
         # deck's address) goes to the socket bound to that address, not to the
         # ones bound to any address: a socket for each deck.
@@ -2216,10 +2245,11 @@ class Prolink(Protocol):
                     continue
                 bound = s.getsockname()
                 port = bound[1]
-                self.monitor.feed(data, addr[0], port, to="*" if bound[0] == "0.0.0.0" else bound[0])
+                wide_socket = bound[0] in wide
+                self.monitor.feed(data, addr[0], port, to="*" if wide_socket else bound[0])
                 if len(data) < 0x30 or data[:10] != MAGIC:
                     continue
-                if port == self.ports.update and data[0x0A] == 0x19 and bound[0] != "0.0.0.0":
+                if port == self.ports.update and data[0x0A] == 0x19 and not wide_socket:
                     self.load_command(bound[0], data)        # a track to load, sent to one of the decks
                     continue
                 if port == self.ports.announce and startup.claimed_number(data) is not None:

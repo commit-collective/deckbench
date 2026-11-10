@@ -302,6 +302,15 @@ The status line at the top of the page says which: **listening** and the seconds
 (or **number 7**), or **number 2 in use, silent** while another device has it. Its tooltip says why that number. The
 state has it as `protocols.prolink.presence`.
 
+## Beside another Pro DJ Link program
+
+On Linux and macOS, a bench on a real network listens on its own addresses and on the broadcast addresses only, never
+on any address. Players send some messages to one device's address alone: the master hand-off, sync commands, their
+status. Another program of the same computer on another address (an emulated player, a second bench) keeps getting
+those, and the bench gets what is broadcast and what is sent to its own addresses. Two programs on the same address
+still take each other's messages: give each its own. On Windows, a program that holds the Pro DJ Link ports keeps them
+to itself, so the two cannot run side by side there.
+
 ## Observe without a simulated deck
 
 ```sh

@@ -4,6 +4,10 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- On a real network in Linux or macOS, the bench listens on its own and the broadcast addresses only. Bound to any address,
+  it could take what players send to another Pro DJ Link program of the same computer: an emulated player lost its
+  master hand-off and sync to it.
+
 - A bench on a real network in Linux or WSL starts again. It stopped while reading the adapters' MAC addresses,
   which it never found there, and on an adapter without one.
 
