@@ -42,6 +42,7 @@ import threading
 import time
 import collections
 import ipaddress
+import json
 import types
 
 from ..core import Protocol, log
@@ -662,7 +663,7 @@ class Prolink(Protocol):
     def __init__(self, world, loaded=None, titles=None, model=None, status_length=None,
                  addresses=None, broadcast=BROADCAST, refuse_db=False, strict=False, ports=DEFAULT_PORTS,
                  claim=False, mixer_name=b"DJM-900NXS2", mixer_address=None, mixer_channels=4, profile=None, observer=False,
-                 observer_auto=False, auto_track_info=True, auto_waveforms=True,
+                 observer_auto=False, auto_track_info=True, auto_waveforms=True, feed=None,
                  target="DJS-"):
         """world.decks must have the decks (core.Deck, by player number) already.
         loaded: {deck: (source player, slot, rekordbox id)}; titles: {source
@@ -688,6 +689,9 @@ class Prolink(Protocol):
         self.runtime = NetworkRuntime()
         self.observer = bool(observer)
         self.observer_auto = bool(observer_auto)    # the observer's number is chosen (announced_number), not given
+        # (host, port): the link is only watched, through what another program forwards there (read_feed). Nothing of
+        # the link is bound or sent: for a computer where another program holds the Pro DJ Link ports
+        self.feed = feed
         self.announced = None               # the number the presence or the auto observer announces now
         self.started = time.time()          # when its network started (start): announced_number listens first
         # the real players' controls and the reading of their track info, for every eligible player at once. Both on by
@@ -806,6 +810,22 @@ class Prolink(Protocol):
             self.runtime = NetworkRuntime()
             self.ready.clear()
             self._bound = 0
+        if self.feed:
+            self.started = time.time()
+            self._expected = 1
+            s = self.runtime.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:                                    # bound here, so that a port in use is said at once
+                s.bind(self.feed)
+            except OSError as error:
+                self.stop()
+                raise PortError("UDP %d on %s, for the feed: %s" % (self.feed[1], self.feed[0], error.strerror or error)) from error
+            log("watching the link through what is forwarded to %s:%d (nothing of the link is bound or sent)" % self.feed)
+            self.runtime.spawn(self.read_feed, s)
+            if wait and (not self.ready.wait(wait) or self.runtime.errors):
+                errors = ", ".join(self.runtime.errors) or "the feed's port did not become ready"
+                self.stop()
+                raise PortError(errors)
+            return
         self.check_ports()
         self.started = time.time()
         # the listeners: each deck's UDP socket for what is sent to it and its two TCP servers, the sniffer and the fader listener
@@ -833,6 +853,29 @@ class Prolink(Protocol):
                 errors = ", ".join(self.runtime.errors) or "listeners did not become ready"
                 self.stop()
                 raise PortError(errors)
+
+    def read_feed(self, s):
+        """The link as another program forwards it (--feed): a UDP datagram for each packet it heard or sent, a JSON
+        object as a capture keeps them: {"src": the sender's address, "port": the Pro DJ Link port, "hex": the
+        packet}, and "to" when it was sent to one address. The monitor reads them as if heard. `s` is bound to it."""
+        s.settimeout(0.5)
+        self.listening()
+        known = (self.ports.announce, self.ports.beat, self.ports.update)
+        while not self.runtime.stopping.is_set():
+            try:
+                data, _ = s.recvfrom(65535)
+            except socket.timeout:
+                continue
+            try:
+                item = json.loads(data)
+                payload = bytes.fromhex(item["hex"])
+                source = str(ipaddress.IPv4Address(item["src"]))
+                link_port = int(item["port"])
+                to = str(item.get("to", "*"))
+            except (ValueError, KeyError, TypeError, AttributeError):
+                continue                    # not a packet of the feed: left out
+            if link_port in known and payload:
+                self.monitor.feed(payload, source, link_port, to=to)
 
     def stop(self):
         """Stop this protocol's workers and release its sockets and timers."""

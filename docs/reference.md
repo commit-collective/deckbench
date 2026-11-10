@@ -41,6 +41,9 @@ Options (`python -m deckbench --help`):
 - `--observe`: announce an observer, with no simulated playback decks, beat packets or database servers.
   `--observer-number N` selects its unused identity, announced at once. Without it, the number is a free 1 to 4,
   taken after 5 seconds of listening, while track info or waveforms are read by itself, and 7 otherwise. This is an announced observer, not a silent packet capture
+- `--feed [HOST:]PORT`: watch the link through the packets another program forwards to that UDP port (127.0.0.1 by
+  default), one JSON object a datagram as captures keep them, binding and sending nothing on the link. It implies
+  `--observe`. See [Watch through a feed](real-network.md#watch-through-a-feed)
 - `--on`: start them on (otherwise off, switch on from the page)
 - `--init DECK=play,sync,master,loopN`: start a deck on, playing, synced, the master, looping N beats
 - `--loaded DECK=SOURCE:SLOT:ID`, `--titles FILE`: the track a deck has loaded

@@ -4,6 +4,9 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- `--feed [HOST:]PORT` watches the link through the packets another program forwards to that UDP port, as captures
+  keep them, binding and sending nothing on the link: for a computer where that program holds the Pro DJ Link ports.
+
 - On a real network in Linux or macOS, the bench listens on its own and the broadcast addresses only. Bound to any address,
   it could take what players send to another Pro DJ Link program of the same computer: an emulated player lost its
   master hand-off and sync to it.

@@ -71,6 +71,10 @@ def main(argv=None):
                     "Pro DJ Link: CDJs on 127.0.0.<number>, with a page and an API to drive them.")
     ap.add_argument("--version", action="version", version=__version__)
     ap.add_argument("--observe", action="store_true", help="announce a status observer without simulated playback decks")
+    ap.add_argument("--feed", metavar="[HOST:]PORT",
+                    help="watch the link through the packets another program forwards to this UDP port (one JSON object "
+                         "a datagram, as captures keep them), binding and sending nothing on the link: for a computer "
+                         "where another program holds the Pro DJ Link ports. Implies --observe. HOST is 127.0.0.1 by default")
     ap.add_argument("--no-track-info", action="store_true", help="start with Read track info by itself off")
     ap.add_argument("--no-waveforms", action="store_true", help="start with Read waveforms by itself off")
     ap.add_argument("--press-settle", type=float, default=None, metavar="SECONDS",
@@ -210,6 +214,18 @@ def main(argv=None):
         from .protocols import transport
         transport.SETTLE = a.press_settle
     numbers = [int(x) for x in a.numbers.split(",")] if a.numbers else list(range(1, a.decks + 1))
+    feed = None
+    if a.feed:
+        host, _, port = a.feed.rpartition(":")
+        try:
+            feed = (host or "127.0.0.1", int(port))
+            if not 0 < feed[1] < 65536:
+                raise ValueError
+        except ValueError:
+            ap.error("--feed is [HOST:]PORT, such as 7330 or 127.0.0.1:7330")
+        if a.dj_interface or a.bind:
+            ap.error("--feed binds nothing on the link: it takes no --dj-interface or --bind")
+        a.observe = True
     if a.observe:
         if a.observer_number is not None and not 1 <= a.observer_number <= 127:
             ap.error("--observer-number must be 1 to 127")
@@ -270,7 +286,7 @@ def main(argv=None):
                    ports=Ports.shifted(a.port_shift), claim=a.claim, mixer_name=a.mixer or "DJM-900NXS2",
                    mixer_address=a.mixer_address, mixer_channels=a.mixer_channels, profile=a.profile, observer=a.observe,
                    observer_auto=a.observe and a.observer_number is None,
-                   auto_track_info=not a.no_track_info, auto_waveforms=not a.no_waveforms,
+                   auto_track_info=not a.no_track_info, auto_waveforms=not a.no_waveforms, feed=feed,
                    target=a.target or ("DJS-" if any(spec.split(":")[0] == "djs1000-emu" for _, spec in adapters) else None))
     link.tracks_dir = a.tracks_dir                          # a real track's audio is kept with the files sent from the page
     if a.capture:
@@ -281,6 +297,8 @@ def main(argv=None):
     if a.observe:
         world.decks.clear()          # the protocol retains one interface endpoint, not a playback deck
         world.info["role"] = "observer"
+    if feed:
+        world.info["feed"] = "%s:%d" % feed                 # the page says the link is watched through a feed
     try:
         link.start()
     except PortError as e:
@@ -298,7 +316,8 @@ def main(argv=None):
                        "or give another port with --audio-port.\n" % (a.audio_port, e.strerror or e))
         log("sound on tcp://127.0.0.1:%d (raw stereo 16-bit 44.1 kHz)" % server.port)
         world.info["audio"] = "tcp://127.0.0.1:%d" % server.port
-    log("broadcasting to %s" % broadcast)
+    if not feed:
+        log("broadcasting to %s" % broadcast)
     if not a.bind and a.http_host == "0.0.0.0":
         log("DJ link: loopback only, real players cannot see these decks. See docs/real-network.md")
     for n, deck in world.decks.items():

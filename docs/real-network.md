@@ -311,6 +311,21 @@ those, and the bench gets what is broadcast and what is sent to its own addresse
 still take each other's messages: give each its own. On Windows, a program that holds the Pro DJ Link ports keeps them
 to itself, so the two cannot run side by side there.
 
+## Watch through a feed
+
+Where another program holds the Pro DJ Link ports of this computer, or shares its address, the bench can still watch
+the link through what that program forwards to it:
+
+```sh
+python -m deckbench --feed 7330
+```
+
+It then binds and sends nothing on the link. Each UDP datagram it gets on `127.0.0.1:7330` (or `HOST:PORT`) is one
+packet that program heard or sent, a JSON object as captures keep them: `{"src": "169.254.20.3", "port": 50002, "hex":
+"5173707431576d4a4f4c..."}`, with `"to"` when it was sent to one address. The page shows the devices as if the bench heard
+them. Nothing is sent, so player control, Read track info and waveforms are not available, and a device is seen only
+as far as that program hears it: a player's status reaches it only once it is on the link as a player.
+
 ## Observe without a simulated deck
 
 ```sh
