@@ -23,6 +23,9 @@
     POST /api/loss/<percent>         that share of the datagrams is lost (0 for none)
     POST /api/scenario               plays the scenario in the body (JSON, see scenario.py); 409 if one plays
     POST /api/scenario/stop          ends it
+    GET  /api/mix                    a recording of the real players' mix: recording, seconds, players, events
+    POST /api/mix/start              begins one (409 if one runs)
+    POST /api/mix/stop               ends it: {"scenario": ...}, the scenario that plays it again (see mixrecord.py)
     POST /api/scenario/clear         forgets the last one's results (409 while one plays)
     GET  /api/scenario               how far it is: running, name, total, results, failed, stopped
     GET  /api/events?since=<n>       what the device under test did, from the n-th event on (see events.py)
@@ -88,6 +91,7 @@ from .audio import AudioError
 from . import uploads as upload_store
 from .core import log
 from .journal import Journal
+from .mixrecord import MixRecorder
 from .scenario import Runner, ScenarioError
 
 UI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
@@ -158,6 +162,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
     share_lock = threading.Lock()
     runner = Runner(world)
     journal = Journal()
+    mix = MixRecorder()
     mutation_lock = threading.RLock()
     folder = tracks or upload_store.default_dir()
 
@@ -339,6 +344,8 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 self.send(200, encode_json(dict(world.info, ready=True)))
             elif path == "/api/scenario":
                 self.send(200, encode_json(runner.snapshot()))
+            elif path == "/api/mix":
+                self.send(200, encode_json(mix.snapshot()))
             elif path == "/api/events":
                 try:
                     since = int(parse_qs(urlparse(self.path).query).get("since", ["0"])[0])
@@ -474,6 +481,20 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
             if parts == ["api", "scenario", "stop"]:
                 runner.stop()
                 return self.send(200, encode_json(runner.snapshot()))
+            if parts == ["api", "mix", "start"]:
+                monitors = [p.monitor for p in world.protocols if hasattr(p, "monitor")]
+                if not monitors:
+                    return self.send(400, encode_json({"error": "no Pro DJ Link here to hear players on"}))
+                if mix.recording:
+                    return self.send(409, encode_json({"error": "a mix is being recorded"}))
+                for monitor in monitors:
+                    monitor.mix = mix
+                mix.start()
+                return self.send(200, encode_json(mix.snapshot()))
+            if parts == ["api", "mix", "stop"]:
+                if not mix.recording:
+                    return self.send(409, encode_json({"error": "no mix is being recorded"}))
+                return self.send(200, encode_json({"scenario": mix.stop()}))
             if parts == ["api", "scenario", "clear"]:
                 try:
                     runner.clear()

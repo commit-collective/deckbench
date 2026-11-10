@@ -13,8 +13,20 @@ from .core import World
 from .protocols.prolink import Ports, Prolink
 
 
-def replay_packets(packets, shift=0, seed=0, loss=0, delay_ms=0, jitter_ms=0):
-    """Replay bounded full-payload exports into an isolated decoder with a virtual clock."""
+def read_capture(path):
+    """The packets of a capture file: Export capture's JSON list, or --capture's JSON Lines."""
+    with open(path, encoding="utf-8") as stream:
+        contents = stream.read(40 * 1024 * 1024 + 1)
+    if len(contents) > 40 * 1024 * 1024:
+        raise ValueError("capture file exceeds 40 MiB")
+    if contents.lstrip().startswith("["):
+        return json.loads(contents)
+    return [json.loads(line) for line in contents.splitlines() if line.strip()]
+
+
+def replay_packets(packets, shift=0, seed=0, loss=0, delay_ms=0, jitter_ms=0, mix=None):
+    """Replay bounded full-payload exports into an isolated decoder with a virtual clock. `mix`, a MixRecorder, is
+    given the players' statuses as they are read."""
     if not isinstance(packets, list) or len(packets) > 20000:
         raise ValueError("capture must be a list of at most 20000 packets")
     if not 0 <= loss <= 100 or min(delay_ms, jitter_ms) < 0:
@@ -50,6 +62,7 @@ def replay_packets(packets, shift=0, seed=0, loss=0, delay_ms=0, jitter_ms=0):
     clock = [0.0]
     net.monitor.clock = lambda: clock[0]
     net.monitor.began = 0.0
+    net.monitor.mix = mix
     for at, _, data, address, port in arrivals:
         clock[0] = at
         net.monitor.feed(data, address, port)
@@ -67,11 +80,7 @@ def main():
     parser.add_argument("--jitter-ms", type=float, default=0)
     args = parser.parse_args()
     try:
-        with open(args.capture, encoding="utf-8") as stream:
-            contents = stream.read(40 * 1024 * 1024 + 1)
-            if len(contents) > 40 * 1024 * 1024:
-                raise ValueError("capture file exceeds 40 MiB")
-            packets = json.loads(contents) if contents.lstrip().startswith("[") else [json.loads(line) for line in contents.splitlines() if line.strip()]
+        packets = read_capture(args.capture)
         result = replay_packets(packets, args.port_shift, args.seed, args.loss, args.delay_ms, args.jitter_ms)
     except (OSError, ValueError, TypeError) as error:
         parser.error(str(error))

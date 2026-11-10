@@ -81,6 +81,33 @@ ends. The API behind it is `POST /api/scenario` (the scenario as the body, 409 w
 The same things can be done by hand: the page's API ([README](../README.md)) has them, and `Scenario.run(world)` plays one from
 Python.
 
+## Recording a mix
+
+RECORD MIX, in the Scenario tab, records what the real players do until it is pressed again. The recording becomes a
+scenario that does it again on the same players: it is put in the editor and kept in this browser under its name. The
+bench's own decks and the device under test are left out.
+
+A replay begins with a setup. Each player is checked: on the link, the same model, stopped. Each loads the track it had
+when the recording began, and SYNC and MASTER are set as they were. The recorded changes follow, each a `player` step
+then an `expect_player` that checks it, at their seconds after the start of the recording plus the setup's 12 seconds:
+
+- a track loaded, from the same player's media and slot
+- PLAY, a pause, CUE pressed or held
+- SYNC on or off, MASTER taken
+
+The network does not let the bench move a pitch fader, make a loop, use a hot cue, jump in a track or eject it. These are
+kept as `log` steps at their time, so the replay says when to do them by hand, and listed in the scenario's `notes`. A
+track starts from where the player puts it when it loads, its cue or first beat. A player that played from elsewhere,
+or was playing when the recording began, is noted. The mixer is not recorded: its faders and EQs are done by hand.
+
+Replaying needs what any `player` step needs: Player control on, and for the loads a bench deck with a number from 1 to
+4 that no real player uses. The media must hold the same tracks with the same ids. An expectation that fails says where
+the replay went another way.
+
+A capture of the link gives the same scenario offline: `python -m deckbench.mixrecord CAPTURE.json --out mix.json`
+reads Export capture's file or what `--capture` wrote. The API is `POST /api/mix/start`, `POST /api/mix/stop`, which
+answers `{"scenario": ...}`, and `GET /api/mix`.
+
 ## Expecting things of the device
 
 `expect_unit` and `expect_deck` take a `match`: a dictionary of key and wanted value. A wanted value is a plain value (equal to

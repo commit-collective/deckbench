@@ -39,6 +39,14 @@ STATE_NAMES = {0: "no track", 2: "loading", 3: "playing", 4: "looping", 5: "paus
                9: "searching", 14: "spun down", 17: "track ended"}
 
 
+def model_title(name):
+    """The model a device's name stands for, as the page shows it (its profile's title), else the name."""
+    for profile in profiles.PROFILES.values():
+        if profile["model"].upper() == name.upper():
+            return profile["title"]
+    return name
+
+
 def text(data, start, end):
     return data[start:end].split(b"\0")[0].decode("latin-1", "replace").strip()
 
@@ -118,6 +126,7 @@ class Monitor:
         self.devices = {}                       # by address
         self.counts = collections.Counter()
         self.recent = {}                        # (source, port, bytes): when it was last heard
+        self.mix = None                         # a MixRecorder while a mix is recorded: it is given each player's status
         self.busy = 0                           # packets being read now, by whichever thread: 0 when everything heard is taken in
 
     # -- who is ours --
@@ -401,6 +410,9 @@ class Monitor:
                 d["status"] = st
         if st["track_beat"] is not None and st["state"] == "cued":
             st["stands"] = self.stands(st)
+        mix = self.mix
+        if mix is not None and not d["ours"] and not d["unit"]:
+            mix.observe(d["number"], model_title(d["name"]), st, now)
         if not d["ours"]:
             changed = {k: st[k] for k in ("play", "master", "sync", "on_air", "state", "source", "slot", "rbid", "handoff")
                        if previous.get(k) != st[k]}
@@ -486,10 +498,7 @@ class Monitor:
         for d in devices:
             if d["ours"] or now - d["seen"] > 60 or not (d["name"] or d["number"] is not None):
                 continue
-            model = d["name"]
-            for key, profile in profiles.PROFILES.items():
-                if profile["model"].upper() == d["name"].upper():
-                    model = profile["title"]
+            model = model_title(d["name"])
             st = d["status"] if d["status"] and now - d["status"]["seen"] < 8 else None
             # held on CUE (cue playing) it sends its beats with its play flag off: it moves all the same
             moving = bool(st and (st["play"] or st["state"] in MOVING))

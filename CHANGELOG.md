@@ -14,6 +14,11 @@ Newest first. A release is a tagged commit.
 
 - Welcome the demo's first visit with what it shows and where to follow Deckbench.
 
+### Scenarios
+
+- Record what the real players do as a scenario that plays it again on them, with RECORD MIX in the Scenario tab
+  or `python -m deckbench.mixrecord` from a capture. What the network cannot do is noted at its time.
+
 ### Observation and diagnostics
 
 - A player's database reply that does not parse names the request and the first bytes that came back.

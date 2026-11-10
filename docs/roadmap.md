@@ -55,12 +55,11 @@ Implement protocol facts independently and check the license before reusing any 
 
 ## Record a mix, replay it on the players
 
-Scenarios can press a real player's buttons and load its tracks. A full automation pass could go further: record what
-the players do during a mix (the tracks they load, when they play, cue, sync and take the master, their tempo and loops)
-as a scenario, then replay it on the same players, which load each track and play it from the right place by themselves.
+RECORD MIX records what the players do during a mix (the tracks they load, when they play, cue, sync and take the
+master) as a scenario that replays it on them, and notes what they cannot be made to do (see
+[Recording a mix](scenarios.md#recording-a-mix)). Left to do:
 
-- Record from what the players broadcast and the bench already reads (status, beats, track ids), into the scenario format
-- Replay only when the setup matches: the same players and numbers, the same media with the same track ids, else say what differs
+- Say before a replay what differs from the recording: the players, their numbers, the media and its track ids
 - Reach a position by what the players allow (cue, play, seek by beat jumps if a model takes them), and check it with
   expect_player after each step
 - Time steps in bars and beats of a deck or the tempo master as well as in seconds, so a step lands on a beat

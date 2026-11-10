@@ -337,6 +337,17 @@ class Faults(unittest.TestCase):
         self.assertTrue(done["stopped"])
         self.assertEqual(len(done["results"]), 1)
 
+    def test_a_mix_is_recorded_from_the_page(self):
+        self.assertFalse(self.api("api/mix", post=False)["recording"])
+        self.assertEqual(self.post_json("api/mix/stop", "")[0], 409)          # none to stop
+        code, state = self.post_json("api/mix/start", "")
+        self.assertEqual((code, state["recording"]), (200, True))
+        self.assertEqual(self.post_json("api/mix/start", "")[0], 409)         # one at a time
+        code, got = self.post_json("api/mix/stop", "")
+        self.assertEqual(code, 200)
+        self.assertEqual(got["scenario"]["steps"], [])                        # no real player on this link
+        self.assertFalse(self.api("api/mix", post=False)["recording"])
+
     def test_the_results_of_a_scenario_can_be_cleared_once_it_ends(self):
         self.post_json("api/scenario", json.dumps({"name": "long", "steps": [
             {"at": 0, "do": "log", "text": "begin"}, {"at": 30, "do": "log", "text": "end"}]}))

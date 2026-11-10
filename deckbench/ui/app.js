@@ -1229,6 +1229,44 @@ $("scfile").addEventListener("change", (e) => {
   reader.readAsText(file);
   e.target.value = "";
 });
+/* Recording a mix of the real players: the button starts it and, pressed again, puts the scenario in the editor and keeps
+   it in this browser, under its name, so that it is not lost with what the editor had */
+let mixTimer = null;
+function showMix(m) {
+  const b = $("mixrec");
+  b.setAttribute("aria-pressed", String(!!m.recording));
+  /* short while it records, to stay on the row of RUN: what it has heard is in its title */
+  b.textContent = m.recording ? "● " + Math.floor(m.seconds / 60) + ":" + String(Math.floor(m.seconds % 60)).padStart(2, "0") : "Record mix";
+  b.title = m.recording ? "Recording the real players: press to stop. " + m.players.length + " player" + (m.players.length === 1 ? "" : "s") +
+    " heard, " + m.events + " change" + (m.events === 1 ? "" : "s") + " so far" : "Record what the real players do, as a scenario that plays it again on them";
+  clearTimeout(mixTimer);
+  if (m.recording) mixTimer = setTimeout(async () => {
+    try { showMix(await (await transport.fetch("api/mix")).json()); } catch (e) { mixTimer = null; }
+  }, 1000);
+}
+$("mixrec").addEventListener("click", async () => {
+  if ($("mixrec").getAttribute("aria-pressed") !== "true") {
+    const got = await act("api/mix/start");
+    if (got) { showMix(got); toast("Recording the real players. Press again to stop.", "ok"); }
+    return;
+  }
+  const got = await act("api/mix/stop");
+  showMix({recording: false, seconds: 0, players: [], events: 0});
+  if (!got || !got.scenario) return;
+  const sc = got.scenario, text = JSON.stringify(sc, null, 1);
+  const all = savedScenarios();
+  all[sc.name] = text;
+  store.set("deckbench.scenarios", JSON.stringify(all));
+  fillSaved();
+  $("scsaved").value = sc.name;
+  $("scdelete").hidden = false;
+  setScenario(text);
+  const notes = (sc.notes || []).length;
+  toast(sc.steps.length ? "Recorded as “" + sc.name + "”, kept in this browser" + (notes ? ". " + notes + " thing" + (notes > 1 ? "s" : "") + " to do by hand: see its notes" : "") + "." :
+    "Nothing was heard from real players.", sc.steps.length ? "ok" : undefined);
+});
+(async () => { try { showMix(await (await transport.fetch("api/mix")).json()); } catch (e) { /* an older bench */ } })();
+
 $("scrun").addEventListener("click", async () => {
   const r = validate();
   if (r.error) return toast("Not a scenario yet: " + r.error);

@@ -268,6 +268,7 @@ class DemoBench {
       if (route === "api/packets") return ok(this.packetsSince(Number(query.get("since") || 0), query.get("noisy") !== "0", Math.max(1, Math.min(20000, Number(query.get("limit") || 400)))));
       if (route === "api/examples") return ok(DEMO_EXAMPLES);
       if (route === "api/unit") return ok({heard: false});
+      if (route === "api/mix") return ok({recording: false, seconds: 0, players: [], events: 0});
       return fail(404, "not found");
     }
     if (parts[0] !== "api") return fail(404, "not found");
@@ -333,6 +334,7 @@ class DemoBench {
     }
     if (parts[1] === "mixer") return this.mixerRoute(parts.slice(2), ok, fail);
     if (parts[1] === "unit") return fail(400, "no adapter: the demo has no device under test");
+    if (parts[1] === "mix") return fail(400, "recording a mix needs real players: the demo has none");
     if (parts[1] === "scenario") {
       if (parts[2] === "stop") { this.stopping = true; return ok({}); }
       if (parts[2] === "clear") {
