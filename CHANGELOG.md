@@ -105,8 +105,8 @@ Newest first. A release is a tagged commit.
   afterwards is reported as a pitch. The sound is still the drum loop. See docs/reference.md.
 - A bench deck on a real player's track plays the track itself: the bench reads its audio file from the player's SD or
   USB over NFS, as a player loading a linked track does, and the deck plays it on the grid, in Listen and on the sound
-  port. Settings has a switch for it. Not yet tried against a player. The files read are kept only while the bench
-  runs, unless Keep a loaded track's audio is on.
+  port. Settings has a switch for it. The files read are kept only while the bench runs, unless Keep a loaded
+  track's audio is on.
 - A bench deck takes the load-track command that rekordbox or Beat Link sends a player, and refuses it while it plays.
 - A bench deck's header is a player's: it opens to all of it, with where its track comes from, its grid and its audio
   on a line of their own and the state under. Opening moves neither the number nor the name. The state is in one order

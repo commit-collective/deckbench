@@ -214,9 +214,8 @@ the beats from a bar line to the track's first beat. The event `linked_track_rea
 
 A bench deck also takes the load-track command (type 0x19) that rekordbox or Beat Link sends a player, unless it
 plays, as a player refuses then. The events are `load_command`, and `load_refused` with a `reason`. This has packet
-and loopback coverage only. The grid and waveform reading is the players' (see above), not yet tried on hardware
-for a bench deck. The audio reading is tested against a server that answers as Crate Digger describes the players,
-not yet against a player.
+and loopback coverage only. A bench deck loading a player's track, with its grid, waveform and audio, works against
+a player.
 
 ## Remote loading
 
