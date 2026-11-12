@@ -6,139 +6,66 @@ Newest first. A release is a tagged commit.
 
 ### Compatibility changes
 
-- The page is dark by default. Light and Follow the system stay in Settings, Appearance, Colours, and a choice made
-  there before is kept.
-- On a real network in Linux or macOS, the bench listens on its own and the broadcast addresses only. Bound to any address,
-  it could take what players send to another Pro DJ Link program of the same computer: an emulated player lost its
-  master hand-off and sync to it.
-- With every simulated deck off on a real network, the bench announces itself as an observer, so players send it their
-  status: the cards' PLAY, SYNC and MASTER lamps and the master's beat follow them without a deck switched on. While
-  it reads track info or waveforms by itself, it takes a free number 1 to 4, which older players answer, after
-  listening 5 seconds first, and so does --observe without --observer-number. Otherwise it is 7.
-- Player control and the reading of track info are settings for every player at once, both on by default. Player
-  control is off with --observe. A player's card shows its switches straight away, without a box to tick on each card.
-- Listen plays only the bench's decks. A real player was heard as a beat made up for it, which only stood in the way of
-  its own music, out of the mixer. The Sound settings keep the volume, and a Metronome switch: while Listen is on, a
-  click on each beat of the tempo master, a bench deck or a real player, higher on the first beat of the bar.
-- A bench deck is heard in Listen whatever a real mixer on the network says of its channel. A DJM said a deck off the
-  air when the channel of its number was down, and the page went silent, though the mixer does not carry the
-  bench's sound. Only the bench's own mixer silences a deck now, as on the sound port. The deck's card shows what a
-  real mixer says.
-- The app, its page title and the docs write the name Deckbench. The command, the package and the name it
-  announces on the network stay `deckbench`.
+- The page is dark by default. Light and Follow the system stay in Settings, Appearance, Colours.
+- On a real network in Linux or macOS, the bench listens only on its own and the broadcast addresses, so it no longer
+  takes packets meant for another Pro DJ Link program on the same computer.
+- With every deck off, the bench announces itself as an observer: 7, or a free number 1 to 4 after listening 5 s while
+  it reads track info by itself. `--observe` without `--observer-number` does the same.
+- Player control and Read track info are settings for every player, on by default and off with `--observe`.
+- Listen plays only the bench's decks, and a real mixer no longer silences them. The page shows what the mixer says.
+- The app and the docs write the name Deckbench. The command, the package and the name on the network stay `deckbench`.
 
-### Real players: control
+### Real players
 
-- A player card under control has switches like a bench deck's: PLAY/PAUSE, CUE, SYNC and MASTER, lit from what the
-  player reports. CUE is lit while CUE is held, on the player or on the page, and while the player waits at its cue
-  point. Fader start, track info and loading stay under Player control.
-- PLAY/PAUSE and CUE from the card, in each model's own packet format: a CDJ-3000 or 3000X, which takes no fader start,
-  a CDJ-2000NXS2 and an XDJ-1000MK2, which keep fader start as well. Each card shows the start and stop its model takes.
-  A press waits 0.1 s after connecting to the player (`--press-settle SECONDS` changes it) and lasts at least 0.1 s,
-  so a quick tap is not lost.
-- Hold CUE on the card for as long as the finger or the mouse is down, so the player plays from its cue point, and let
-  go on PLAY/PAUSE to play on, as on the player. The bench lets go by itself 3 seconds after the page stops holding it.
-- Request analyzed SD/USB tracks on stopped discovered players through an armed remote-load form or API. It needs an
-  online source and an announced sender, and tells a sent request from a confirmed load.
-- Read track info is disabled when no eligible sender or track source is available, with the reason shown on the
-  button, and eligibility is checked again before querying.
-
-### Real players: what the cards show
-
-- Real players' waveforms: the bench reads each player's track waveform and beat grid from the player that hosts it,
-  and the card draws it behind the strip's beats, as a bench deck's, with the whole track under it. A track with no
-  colour waveform gets the original blue one. Read waveforms by itself is a setting apart from track info.
-  `--no-track-info` and `--no-waveforms` start with either off. A CDJ-3000's strip is placed from its precise
-  position, many times a second.
-- A stopped player's strip stands where it waits: on its cue (cued on the track's first beat too), or where it paused,
-  from the beats it played. An older player reports only the beat it has passed, and its CUE-button cue is nowhere to
-  read, so the bench follows where it stops and cues. Anything it did not see makes it fall back to the reported beat,
-  marked as an estimate.
-- A start from a stop, PLAY or a held CUE, starts the strip where the player stood, timed from its first status. It
-  ran a beat ahead or behind at random: a player sends no beat for the beat it starts on, and at a cue it reports the
-  beat before. Checked against captures of a CDJ-2000NXS2 and an XDJ-1000MK2.
-- A player held on CUE keeps its beats on the strip, and the card's beat lamps and the master's follow it. It sends
-  its beats with its play flag off, and the bench hid them at each status, so the strip switched between the beats and
-  an estimate and the lamps flashed.
-- A real player's loop is steadier, from a capture of 2- and 4-beat loops on a CDJ-2000NXS2. The beats ahead of the
-  playhead take their place in the bar from the loop, so a 2-beat loop's numbers no longer move every pass. A status
-  sent in the middle of the jump back no longer puts a beat in the wrong place, and a beat whose packet did not come is
-  drawn. A CDJ-3000's loop is read from its status.
-- The loop is easier to read: a lighter tint, and each jump back one solid marker with a flag, the same everywhere.
-- A real player with no track shows no tempo. It said about 655 BPM, from the empty tempo field it sends.
-- A track's title is forgotten once no player has it loaded, so a USB or SD swapped for another whose track has the
-  same ID in the same slot no longer shows the old one.
-- The status line says how the bench is on the link with its decks off: listening, the number it took, or silent
-  while another device has it.
-- A discovered player's full name, address and track text show on hover, or with a tap or the keyboard, and its card
-  stays compact and within a narrow phone screen.
+- Draw each player's track waveform and beat grid on its card, read from the player that hosts the track.
+- Press PLAY/PAUSE and CUE from a player's card on the CDJ-3000, CDJ-2000NXS2 and XDJ-1000MK2.
+- Hold CUE on the card, and let go on PLAY/PAUSE to play on, as on the player.
+- Light the card's PLAY, CUE, SYNC and MASTER from what the player reports.
+- Place a stopped player's strip on its cue or where it paused, and start the strip from there.
+- Draw a CDJ-3000's loop from its status, placed from its precise position.
+- Request an analyzed SD/USB track on a stopped player through an armed remote-load form or API.
+- Add `--press-settle`, `--no-track-info` and `--no-waveforms`.
+- Show in the status line how the bench is on the link while its decks are off.
+- Show a player's full name, address and track on hover or tap.
 
 ### Bench decks
 
-- A bench deck can load a real player's SD or USB track: pick it from the tracks the players have loaded, or give the
-  player, slot and ID. The bench reads the track's grid, title and waveform from that player, and the deck plays on
-  the grid: the track's tempo, its bars counted as the grid counts them, and its waveform on the strip. It plays the
-  track itself, its audio file read from the player's SD or USB over NFS as a player loading a linked track does, in
-  Listen and on the sound port. Settings has a switch for it, else it plays the drum loop. The files read are kept only
-  while the bench runs, unless Keep a loaded track's audio is on. See docs/reference.md.
-- A bench deck takes the load-track command that rekordbox or Beat Link sends a player, and refuses it while it plays.
-- A bench deck's header is a player's: it opens to all of it, with where its track comes from, its grid and its audio
-  on a line of their own and the state under. Opening moves neither the number nor the name. The state is in one order
-  on both, ON AIR first, and the folded tags are at the right with their rows balanced. A bench deck shows MASTER and
-  SYNC there too. When the tags wrap, their box narrows to its widest row, and the name and the track take the room.
-- A bench deck's CUE works as a real player's on the page: held, it plays from the cue point, and let go on PLAY
-  it plays on (PLAY pressed while CUE is held plays on, as on a CDJ). Both kinds of deck say PLAY or PAUSE by what
-  the deck does, and PLAY while CUE is held.
-- Load a track takes one kind of track at a time. A player's track fills in its player, slot, ID and title and
-  clears the sound file. A sound file puts the database back to the deck's own. The track picked stays shown, and
-  Clear empties the form.
-- A deck's sound file no longer crackles in Listen. The page started it again at every change of the deck's phase,
-  with no fade: each time a synced deck was put back on its beat and each step of the pitch fader. It now plays on
-  when it is within 40 ms of the deck, takes a new tempo as a new speed, and fades over a jump.
-- Listen says what it waits for when nothing plays yet.
-- A bench deck no longer logs every beat of every player. On Windows its socket for commands also gets the broadcasts
-  of that port (beats, the mixer's on-air report, position, fader start), and each was logged. They are left to the
-  packet log now, and a packet of another kind is logged once for each sender.
+- Load a real player's SD or USB track on a bench deck, and play its audio on the track's grid.
+- Take the load-track command that rekordbox or Beat Link sends a player.
+- Give bench decks a player's header, and a CUE that plays while held.
+- Add a metronome to Listen.
 
 ### Scenarios
 
-- A scenario can play real players: a `player` step presses a button (CUE held for a while too) or loads a track on a
-  player by its number, with Player control on, and `expect_player` checks what that player says of itself. An
-  example in the new Real players group cues, plays, pauses and syncs player 1.
-- The Scenario tab has a Clear button for the results of the last run, as Events and the link log have. It waits for a
-  run to end or be stopped.
+- Add `player` steps and `expect_player` to press, load and check real players, with an example.
+- Add a Clear button to the scenario results.
 
 ### The page
 
-- **Phone**, at the top of the page on the bench's machine, shares the bench with phones on demand: it listens on an
-  address of the local network too, with a token of its own, and shows the QR code and the link in the page. **Stop
-  sharing** closes it. The button is lit whenever the bench is shared, from the start with `--phone` too, and then
-  shows the existing link and QR. `--phone-address` now also sets the address the button offers first.
-- A page that a phone suspended (another app, the screen off) reconnects when it comes back. The browser had closed
-  its stream for good, so it said reconnecting until the page was reloaded. The page now opens a new stream when its
-  stream is closed, quiet for 5 seconds, or quiet when the page is shown again.
-- Cards can be put in another order: drag one by the grip at its top (or move it with the arrow keys) within its grid,
-  the bench decks or the real players. The order is kept in this browser, and Settings, Appearance, Card order resets it.
-- Settings, Appearance, Cards per row sets how many cards sit side by side, 1 to 4, or as the width allows (the default).
-- The Classic look in light shows the strips again: their waveform, numbers and playhead were drawn dark on its dark
-  display.
-- The link log keeps its height in a short window, such as at a high display scale: it had shrunk to a thin line.
-- Text on the cards can be selected and copied: the page no longer rewrites text that did not change.
+- Add a Phone button that shares the bench with phones on demand, with a QR code.
+- Reorder cards by their grip, and set how many sit in a row.
 
 ### Networks and other programs
 
-- `--feed [HOST:]PORT` watches the link through the packets another program forwards to that UDP port, as captures
-  keep them, binding and sending nothing on the link: for a computer where that program holds the Pro DJ Link ports.
-- Choose the bench's DJ network adapter in the page's Network panel. An idle bench reconnects to it without restarting
-  its page, and a choice can be remembered as a suggestion, which leaves how the command line starts unchanged. A
-  Windows card whose address is not usable yet (Tentative) is listed, marked as such, and can be chosen once Windows
-  marks it Preferred. Receivers bound with `--bind` stay unfiltered.
-- The Windows firewall helper takes several adapters, such as a DJ adapter and the network bridge another program
-  makes of it, and covers each with one rule.
-- The optional DJS-1000 emulator adapter stays connected when a project name is reported.
-- A bench on a real network in Linux or WSL starts again. It stopped while reading the adapters' MAC addresses,
-  which it never found there, and on an adapter without one.
-- Say in one line which port is busy when the page or the sound cannot start, instead of a traceback.
+- Add `--feed` to watch the link through the packets another program forwards.
+- Choose the DJ network adapter in the Network panel, Tentative Windows cards included.
+- Let the Windows firewall helper cover several adapters.
+
+### Fixes
+
+- Steady a real player's loop on the strip and draw it more clearly.
+- Keep a player's beats on the strip while CUE is held on the player.
+- Show no tempo for a player with no track, not about 655 BPM.
+- Forget a track's title once no player has it loaded.
+- Stop a deck's sound file from crackling in Listen.
+- Stop logging other players' beats on bench decks on Windows.
+- Reconnect a page a phone suspended.
+- Keep text selections while the page redraws.
+- Keep the link log's height in a short window.
+- Draw the strips again in the Classic look's light theme.
+- Keep the DJS-1000 emulator adapter connected when a project name is reported.
+- Start again on a real network in Linux or WSL.
+- Name a busy port in one line instead of a traceback.
 
 ## v0.5.0
 
