@@ -87,6 +87,8 @@ Newest first. A release is a tagged commit.
 - A real player cued on its first beat keeps its waveform and grid on the card. It reports beat 0 there, which
   read as no track, so the strip went blank until it played.
 - A real player with no track shows no tempo. It said about 655 BPM, from the empty tempo field it sends.
+- A CDJ-3000's loop is drawn on its card, tinted with its jumps back, as other players' are. The card placed it
+  from its precise position and drew no loop. The bench now reads where the loop is from the player's status.
 - A track's title and waveform are forgotten once no player has it loaded, so a USB or SD swapped for another
   whose track has the same ID in the same slot no longer shows the old ones.
 - A loaded track's title no longer disappears for a moment every minute: its track info stays while it is loaded.

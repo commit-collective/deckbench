@@ -160,6 +160,31 @@ class PhaseParsing(unittest.TestCase):
         beat(1, 100.95)
         self.assertEqual(device["phase"][1], 92.0)
 
+    def test_a_cdj_3000_says_where_its_loop_is(self):
+        """A CDJ-3000's status is 0x200 bytes. While it loops it gives the loop's start and end, in counts of 65.536 ms,
+        and its whole beats. An older player's shorter status gives none."""
+        world = world_of(5)
+        net = Prolink(world)
+        monitor = net.monitor
+        link = net.decks[5]
+        device = monitor.device("127.0.0.9", 100.0, False)
+        data = bytearray(link.status())
+        data[0x7B] = 4                                               # looping
+        data += bytes(0x200 - len(data))
+        data[0x1B6:0x1BA] = (1000).to_bytes(4, "big")                # 65 536 ms
+        data[0x1BE:0x1C2] = (1029).to_bytes(4, "big")                # 67 436.5 ms
+        data[0x1C8:0x1CA] = (4).to_bytes(2, "big")
+        monitor.status(device, bytes(data), 100.0)
+        st = device["status"]
+        self.assertTrue(st["loop"])
+        self.assertEqual(st["loop_ms"], [65536.0, 67436.5])
+        self.assertEqual(st["loop_beats"], 4)
+        data[0x1B6:0x1C2] = bytes(12)                                # not looping: no loop
+        monitor.status(device, bytes(data), 100.2)
+        self.assertNotIn("loop_ms", device["status"])
+        monitor.status(device, link.status(), 100.4)                 # an NXS2's
+        self.assertNotIn("loop_ms", device["status"])
+
 
 class Heard(unittest.TestCase):
     @classmethod

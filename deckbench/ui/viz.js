@@ -56,6 +56,15 @@ const Strip = (() => {
     return {ticks, stopped: true, loop, loopAhead: loop && from > at ? from - at : 0};
   };
 
+  /* A loop a player gives in its status while it plays one (a CDJ-3000: `loop_ms`, its start and end in the track, and
+   * `loop_beats`), as {from, length} in beats of the track on its grid (`wave`), or null. A loop under a beat has none. */
+  v.deviceLoop = (status, wave) => {
+    if (!status || !status.loop || !status.loop_ms || !wave) return null;
+    const from = Math.round(wave.beatOf(status.loop_ms[0] / 1000));
+    const length = status.loop_beats || Math.round(wave.beatOf(status.loop_ms[1] / 1000)) - from;
+    return length > 0 ? {from, length} : null;
+  };
+
   /* remember the beats a device is told of: each change of its phase is a beat, [bench time, place, tempo] */
   v.observe = (key, phase, offset, barPhase = null) => {
     const list = v.history[key] = v.history[key] || [];

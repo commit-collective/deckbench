@@ -675,7 +675,9 @@ function devicePlan(d, wave, now) {
   if (!wave) return moving();
   const place = Strip.trackPlace(d, wave, now + S.offset);
   if (!place || (place.estimated && (Strip.moving(st) || beating))) return moving();
-  const plan = Strip.layout({at: wave.beatOf(place.seconds), bpm: st.bpm || st.track_bpm || 120}, now, S.offset);
+  const loop = Strip.deviceLoop(st, wave);         /* a CDJ-3000 says where its loop is: it is drawn as a bench deck's */
+  const plan = Strip.layout({at: wave.beatOf(place.seconds), bpm: st.bpm || st.track_bpm || 120,
+                             loop: loop ? loop.length : 0, loop_from: loop ? loop.from : 0}, now, S.offset);
   for (const t of plan.ticks) if (wave.bars[t.at] != null) t.beat = wave.bars[t.at];
   plan.stopped = !st.play;
   return {plan, place};

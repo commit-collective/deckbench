@@ -274,6 +274,19 @@ check("nothing heard, nothing drawn", Strip.layoutDevice("c", {status: null}, 5)
   check("past the ends, the last interval", near(wave.beatTime(5), 5.0) && near(wave.beatTime(-1), 0.5));
   check("the inverse", [0, 0.5, 2.5, 3.25, 4.5].every((b) => near(wave.beatOf(wave.beatTime(b)), b)));
 
+  // A CDJ-3000's loop, from its status: beats 1 to 3 of this grid (1500 to 3000 ms), two beats.
+  const cdj3000 = {loop: true, loop_ms: [1500.4, 3000.2], loop_beats: 2};
+  const found = Strip.deviceLoop(cdj3000, wave);
+  check("a CDJ-3000's loop is placed on the grid", found && found.from === 1 && found.length === 2, found);
+  check("its length from its ends when it gives no beats", Strip.deviceLoop({...cdj3000, loop_beats: 0}, wave).length === 2);
+  check("no loop when the player does not loop, or under a beat",
+    Strip.deviceLoop({...cdj3000, loop: false}, wave) === null &&
+    Strip.deviceLoop({loop: true, loop_ms: [1500, 1600], loop_beats: 0}, wave) === null &&
+    Strip.deviceLoop({loop: true}, wave) === null && Strip.deviceLoop(cdj3000, null) === null);
+  const inLoop = Strip.layout({at: 2.5, bpm: 120, loop: found.length, loop_from: found.from}, 100, 0);
+  check("drawn as a loop", inLoop.loop === 2 && inLoop.ticks.some((t) => t.inLoop) && inLoop.ticks.some((t) => t.wrap) &&
+    inLoop.ticks.filter((t) => t.dt > 0).every((t) => t.at >= 1 && t.at < 3), inLoop.ticks.map((t) => t.at));
+
   // where it is: a CDJ-3000's precise position, else the last beat and the tempo since (an estimate), paused the beat it waits on
   const precise = Strip.trackPlace({status: {play: true}, precise: {at: 100, position_ms: 2000, pitch: 10}}, wave, 100.5);
   check("precise position, at its pitch", near(precise.seconds, 2.55) && !precise.estimated, precise);

@@ -172,8 +172,9 @@ return to the cue or a held CUE starts from it. Whatever it did not see, a jog o
 the status or a beat that disagrees, makes it forget, and the card falls back to the beat after the reported one,
 marked as an estimate.
 Retrieval and the grid's alignment were tried on a CDJ-2000NXS2 (1.84), for a track on its own USB and on another
-NXS2's, and an XDJ-1000MK2 has answered. Live tracking, loops, seeks and the CDJ-3000 are not yet tried on
-hardware, nor its three-band style, which is not asked for.
+NXS2's, and an XDJ-1000MK2 and a CDJ-3000 have answered. The CDJ-3000's three-band style is not asked for.
+A CDJ-3000 says where its loop is in its status (its start and end in the track, and its beats), and its card draws
+the loop from that on the track's grid. Other players' loops are known from the beats, at their first jump back.
 
 ## A real player's track on a bench deck
 

@@ -353,6 +353,13 @@ class Monitor:
                              else beat_in_track),
               "source": data[0x28], "slot": data[0x29], "track_type": data[0x2A], "rbid": rbid,
               "sync_counter": struct.unpack(">I", data[0x84:0x88])[0], "handoff": data[0x9F], "seen": now}
+        if len(data) >= 0x1CA:
+            # A CDJ-3000 says where its loop is while it plays one: its start and end in the track, each a count of
+            # 65.536 ms, and its whole beats (0 for a loop under a beat). Older players say nothing of it.
+            start, end = struct.unpack(">I", data[0x1B6:0x1BA])[0], struct.unpack(">I", data[0x1BE:0x1C2])[0]
+            if start or end:
+                st["loop_ms"] = [round(start * 65.536, 1), round(end * 65.536, 1)]
+                st["loop_beats"] = struct.unpack(">H", data[0x1C8:0x1CA])[0]
         previous = d.get("status") or {}
         # When its beat changed: after the last status with the old beat, before this one. A page that runs a player
         # with no beat packets (cue playing) keeps its strip within that, where it would step on each status
