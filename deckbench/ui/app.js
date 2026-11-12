@@ -1742,6 +1742,10 @@ function showConnect(message) {
   $("conntoken").value = $("conntoken").value || transport.token;
   $("connmsg").textContent = message || "";
   $("connhow").textContent = "python -m deckbench --http-host 0.0.0.0 --allow-origin " + location.origin + " --token auto";
+  /* a bench shares with phones for commitcollective.cc only, so elsewhere the command is the way */
+  const phoneSite = location.origin === "https://commitcollective.cc";
+  $("connphone").hidden = !phoneSite;
+  $("connstart").textContent = phoneSite ? "Or start the bench ready for this page:" : "Start it there with:";
   $("connaddr").focus();
 }
 

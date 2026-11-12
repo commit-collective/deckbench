@@ -91,7 +91,8 @@ use the computer's address on that LAN. Pro DJ Link still needs the computer's w
 ## 2. The hosted page, as the screen
 
 The site's page (commitcollective.cc/deckbench) is the same page. It asks for the address and the token of a bench, and
-needs that bench to allow it:
+needs that bench to allow it. The **Phone** button of the bench's own page does that, with no option: its QR code and link
+open the site's page with the address and the token filled in. Or start the bench ready for it:
 
     python -m deckbench ... --http-host 0.0.0.0 --allow-origin https://commitcollective.cc --token auto
 

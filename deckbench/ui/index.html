@@ -204,7 +204,9 @@
 <div id="connect" class="overlay" hidden>
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="conntitle">
     <h1 id="conntitle">Connect to a bench</h1>
-    <p>This page drives a <b>Deckbench</b> that runs on your network, on the machine that is cabled to the players. Start it there with:</p>
+    <p>This page drives a <b>Deckbench</b> that runs on your network, on the machine that is cabled to the players.</p>
+    <p id="connphone">On that machine, open the bench's own page and press <b>Phone</b>. Scan its QR code or open its link here: it fills in the address and the token.</p>
+    <p id="connstart">Or start the bench ready for this page:</p>
     <pre id="connhow">python -m deckbench --http-host 0.0.0.0 --allow-origin ORIGIN --token auto</pre>
     <label>Its address<input type="text" id="connaddr" placeholder="http://192.168.1.20:8750" autocomplete="off" spellcheck="false"></label>
     <label>Its token<input type="text" id="conntoken" placeholder="printed when it starts" autocomplete="off" spellcheck="false"></label>
