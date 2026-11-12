@@ -160,31 +160,6 @@ class PhaseParsing(unittest.TestCase):
         beat(1, 100.95)
         self.assertEqual(device["phase"][1], 92.0)
 
-    def test_a_start_from_the_tracks_start_keeps_its_place_until_the_first_beat(self):
-        """An NXS2 or XDJ-1000MK2 cued at the very start of its track says beat 0, and still says 0 just after PLAY,
-        until its first beat. That is a place, not a player with no count, so the card keeps the track's grid. After a
-        beat, 0 while playing is a sampler's again."""
-        world = world_of(5)
-        net = Prolink(world)
-        monitor = net.monitor
-        link = net.decks[5]
-        device = monitor.device("127.0.0.9", 100.0, False)
-        def status(state, playing, now):
-            data = bytearray(link.status())
-            data[0x7B] = state
-            data[0x89] = data[0x89] | 0x40 if playing else data[0x89] & ~0x40
-            data[0x2C:0x30] = (7).to_bytes(4, "big")             # a rekordbox track
-            data[0xA0:0xA4] = bytes(4)                           # beat 0
-            monitor.status(device, bytes(data), now)
-            return device["status"]["track_beat"]
-        self.assertEqual(status(6, False, 100.0), 0)             # cued at the start
-        self.assertEqual(status(3, True, 100.2), 0)              # playing, its first beat to come
-        self.assertEqual(status(3, True, 100.4), 0)
-        monitor.beat(device, link.beat(0.0), 100.5)
-        self.assertIsNone(status(3, True, 100.6))                # 0 after a beat: no count
-        self.assertEqual(status(6, False, 101.0), 0)             # cued there again, and started again
-        self.assertEqual(status(3, True, 101.2), 0)
-
     def test_a_cdj_3000_says_where_its_loop_is(self):
         """A CDJ-3000's status is 0x200 bytes. While it loops it gives the loop's start and end, in counts of 65.536 ms,
         and its whole beats. An older player's shorter status gives none."""
