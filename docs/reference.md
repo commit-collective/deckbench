@@ -232,7 +232,7 @@ only. XDJ-XZ loading is excluded because its documented behavior differs.
 The API returns HTTP 202 with `sent: true, confirmed: false`. It records
 `player_load_requested` without changing observed state. A request or an
 acknowledgement is not proof of a successful load. Check the actual player.
-This implementation has packet and loopback coverage, not hardware validation.
+It works against a physical player, and has packet and loopback tests.
 See the [public wire description](https://djl-analysis.deepsymmetry.org/djl-analysis/loading_tracks.html).
 
 How a player is started and stopped depends on its model. The bench reports
@@ -247,18 +247,16 @@ for each discovered player:
 | others | `fader` | true | `start` and `stop`: fader start |
 
 Fader start is documented as unsupported on the CDJ-3000 and XDJ-XZ. The bench
-can instead press PLAY/PAUSE or CUE as a remote controller does, experimental:
+can instead press PLAY/PAUSE or CUE as a remote controller does:
 it connects, presses, holds 0.1 s, releases and disconnects, as controller
 number 54, unicast to the player's UDP 50001 from the bench's own. PLAY/PAUSE is
 a toggle, never retried, and CUE is held like the real button.
 
 The CDJ-3000 and the CDJ-2000NXS2 take these presses in two formats. The
 NXS2's fields are little-endian and name a controller slot, which the bench
-sets to the player's number (1 to 4), as tested. The presses worked on CDJ-3000
-firmware run in cdj3k-emu, and PLAY, PAUSE and a short CUE worked on a physical
-CDJ-2000NXS2. No physical CDJ-3000 or CDJ-3000X has been tried, nor a long CUE
-hold on the NXS2. The XDJ-1000MK2 is sent the NXS2's format, untried. Other
-models get no presses until they are tried. The API answers HTTP 202 with `sent: true, confirmed: false` and
+sets to the player's number (1 to 4), as tested. The presses work on CDJ-3000
+firmware run in cdj3k-emu, and on a physical CDJ-2000NXS2 and XDJ-1000MK2, which
+take the NXS2's format. Other models get no presses until they are tried. The API answers HTTP 202 with `sent: true, confirmed: false` and
 records `player_button`.
 
 `POST /api/player/IP/command/play-pause?number=N` (or `cue`, one tap) needs

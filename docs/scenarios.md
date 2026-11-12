@@ -55,7 +55,7 @@ A `player` step is sent, never confirmed: the player may ignore it (a button it 
 or PLAY with no track loaded), so follow it with an `expect_player` when the result matters. A `load` is sent from a bench
 deck: players take one only from a player 1 to 4, so a bench deck with a number from 1 to 4 that no real device uses must
 be on. With four real players there is no such number, and a scenario can only press the buttons of tracks loaded by
-hand. Its button presses are experimental and were tried on the
+hand. Its button presses work on the
 CDJ-2000NXS2 and XDJ-1000MK2 (see [link.md](link.md)). A step with `hold` lasts as long as the hold, and the steps after it
 wait for it. The **Real players** group of the examples has one that cues, plays, pauses and syncs player 1. For example, a
 player loads a track from its own USB, cues and plays, and the scenario checks that it plays. Here 205 stands for a

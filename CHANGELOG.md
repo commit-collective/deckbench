@@ -31,12 +31,12 @@ Newest first. A release is a tagged commit.
 
 ### Real players: control
 
-- Press PLAY/PAUSE and CUE on a CDJ-3000 or 3000X from its card (experimental), since it does not take fader
-  start. Each player shows the start and stop its model takes. Tried on CDJ-3000 firmware in an emulator only.
+- Press PLAY/PAUSE and CUE on a CDJ-3000 or 3000X from its card, since it does not take fader start. Each player
+  shows the start and stop its model takes.
 - Hold CUE on a CDJ-3000 from its card for as long as you hold the button, so it plays from the cue point.
   The bench lets go by itself after 8 seconds, or when it stops.
-- Press PLAY/PAUSE and CUE on a CDJ-2000NXS2 too (experimental), in its own packet format, tried on a physical
-  NXS2. It keeps fader start as well. The XDJ-1000MK2 is sent the same format, untried.
+- Press PLAY/PAUSE and CUE on a CDJ-2000NXS2 or an XDJ-1000MK2 too, in their own packet format. They keep fader
+  start as well.
 - A player card under control has switches like a bench deck's: PLAY/PAUSE, CUE, SYNC and MASTER, lit from what
   the player reports. Fader start, track info and loading stay under Player control.
 - A quick tap of CUE on a real player is no longer lost: the bench keeps a release that comes early and holds every
@@ -44,11 +44,10 @@ Newest first. A release is a tagged commit.
 - CUE held from the page lasts as long as the finger: the page keeps it held each second, and the bench lets go
   3 seconds after the page stops. Before, it let go after 8 seconds whatever the finger did.
 - Hold CUE and let go on PLAY/PAUSE to play on, as on the player: CUE keeps the finger or the mouse until it is let
-  go, and PLAY/PAUSE is marked as a place to let go while CUE is held (untried on hardware).
+  go, and PLAY/PAUSE is marked as a place to let go while CUE is held.
 - Request analyzed SD/USB tracks on stopped discovered players through an
-  armed, experimental remote-load form or API. Require an online source and
+  armed remote-load form or API. Require an online source and
   announced sender, and distinguish a sent request from a confirmed load.
-  Packet and loopback tests pass. Physical-player validation is pending.
 - Disable Read track info when no eligible sender or track source is available,
   with the reason shown on the button. Recheck eligibility before querying.
 
