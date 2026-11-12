@@ -347,6 +347,8 @@ const Strip = (() => {
 
   /* A real player that moves through its track: playing, or held on CUE (cue playing), when its play flag is off */
   v.moving = (st) => !!st && (st.play || ["playing", "looping", "cue playing", "cue scratching"].includes(st.state));
+  /* One that runs on at its tempo: playing, or held on CUE. Not one scratched, whose place goes where the jog takes it */
+  v.advancing = (st) => !!st && (st.play || st.state === "cue playing");
 
   /* Where a real player is in its track, in seconds, and how it is known: its precise position (the CDJ-3000's, many a second),
    * else its last beat and its tempo since, which is an estimate between beats and only the beat while it is paused. now and the
@@ -356,7 +358,7 @@ const Strip = (() => {
     if (!st || !wave) return null;
     if (precise && precise.at != null && now - precise.at < 1.5) {
       const rate = 1 + (precise.pitch || 0) / 100;
-      return {seconds: precise.position_ms / 1000 + (st.play ? (now - precise.at) * rate : 0), estimated: false};
+      return {seconds: precise.position_ms / 1000 + (v.advancing(st) ? (now - precise.at) * rate : 0), estimated: false};
     }
     if (v.moving(st) && device.phase && st.track_beat != null) {
       const [t, pos, bpm] = device.phase;

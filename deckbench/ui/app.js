@@ -660,6 +660,14 @@ function devicePlan(d, wave, now) {
     if (wave) for (const t of plan.ticks) if (wave.bars[t.at] != null) t.beat = wave.bars[t.at];      /* the grid's bars */
     return {plan, place: null};
   };
+  const placed = (place) => {
+    const loop = Strip.deviceLoop(st, wave);         /* a CDJ-3000 says where its loop is: it is drawn as a bench deck's */
+    const plan = Strip.layout({at: wave.beatOf(place.seconds), bpm: st.bpm || st.track_bpm || 120,
+                               loop: loop ? loop.length : 0, loop_from: loop ? loop.from : 0}, now, S.offset);
+    for (const t of plan.ticks) if (wave.bars[t.at] != null) t.beat = wave.bars[t.at];
+    plan.stopped = !Strip.advancing(st);
+    return {plan, place};
+  };
   if (!st || st.track_beat == null) return moving();
   /* without a precise position, moving while its beats come: a beat in the last two, whatever its play flag says */
   const beating = d.phase && d.phase[2] > 0 && now + S.offset - d.phase[0] < 2 * 60 / d.phase[2];
@@ -675,12 +683,7 @@ function devicePlan(d, wave, now) {
   if (!wave) return moving();
   const place = Strip.trackPlace(d, wave, now + S.offset);
   if (!place || (place.estimated && (Strip.moving(st) || beating))) return moving();
-  const loop = Strip.deviceLoop(st, wave);         /* a CDJ-3000 says where its loop is: it is drawn as a bench deck's */
-  const plan = Strip.layout({at: wave.beatOf(place.seconds), bpm: st.bpm || st.track_bpm || 120,
-                             loop: loop ? loop.length : 0, loop_from: loop ? loop.from : 0}, now, S.offset);
-  for (const t of plan.ticks) if (wave.bars[t.at] != null) t.beat = wave.bars[t.at];
-  plan.stopped = !st.play;
-  return {plan, place};
+  return placed(place);
 }
 
 function strips() {

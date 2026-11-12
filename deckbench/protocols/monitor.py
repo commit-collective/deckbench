@@ -343,13 +343,22 @@ class Monitor:
         state = data[0x7B]
         playing = bool(flags & 0x40)
         rbid = struct.unpack(">I", data[0x2C:0x30])[0]
+        before = d.get("status") or {}
+        if before.get("state") not in MOVING and STATE_NAMES.get(state) in MOVING:
+            d["beat_since_start"] = False
+        # Started from the very start of its track, a player says 0 until its first beat: that is a place too, before
+        # the first beat, as while it waited there. A sampler says 0 all along, with its beats.
+        first_beat_to_come = (rbid and state in (3, 4) and before.get("track_beat") == 0
+                              and not d.get("beat_since_start", True))
         st = {"play": playing, "master": bool(flags & 0x20), "sync": bool(flags & 0x10), "on_air": bool(flags & 0x08),
               "state": STATE_NAMES.get(state, "state %d" % state), "loop": state == 4,
               "bpm": round(track_bpm * pitch / PITCH_NORMAL, 2) if track_bpm else None, "track_bpm": track_bpm,
               "pitch": round((pitch / PITCH_NORMAL - 1) * 100, 2), "bar": data[0xA6] or None,
               # counted from 1. 0 is a player stopped before the first beat of its track (paused, cued or held on CUE
-              # there: a cue on the first beat), and otherwise a player with no count, as a sampler playing patterns
-              "track_beat": (None if beat_in_track == 0xFFFFFFFF or (beat_in_track == 0 and not (rbid and state in AT_CUE))
+              # there: a cue on the first beat), or started from there with its first beat to come, and otherwise a
+              # player with no count, as a sampler playing patterns
+              "track_beat": (None if beat_in_track == 0xFFFFFFFF or (beat_in_track == 0 and not (rbid and state in AT_CUE)
+                                                                     and not first_beat_to_come)
                              else beat_in_track),
               "source": data[0x28], "slot": data[0x29], "track_type": data[0x2A], "rbid": rbid,
               "sync_counter": struct.unpack(">I", data[0x84:0x88])[0], "handoff": data[0x9F], "seen": now}
@@ -453,7 +462,7 @@ class Monitor:
                 d["start_from"] = None
             # The reported bar need not match the absolute track count.
             d["bar_phase"] = [now, bar - 1.0, bpm]
-            d["beat_since_status"] = True
+            d["beat_since_status"] = d["beat_since_start"] = True
             d["phase"], d["phase_seen"] = [now, pos, bpm], now
             self.net.align_synced(d, now)
         return "%s #%d: beat %d of 4, %.1f BPM" % (d["name"] or "?", d["number"] if d["number"] is not None else 0, bar, bpm)

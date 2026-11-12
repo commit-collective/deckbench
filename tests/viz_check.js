@@ -290,6 +290,10 @@ check("nothing heard, nothing drawn", Strip.layoutDevice("c", {status: null}, 5)
   // where it is: a CDJ-3000's precise position, else the last beat and the tempo since (an estimate), paused the beat it waits on
   const precise = Strip.trackPlace({status: {play: true}, precise: {at: 100, position_ms: 2000, pitch: 10}}, wave, 100.5);
   check("precise position, at its pitch", near(precise.seconds, 2.55) && !precise.estimated, precise);
+  const cueHeld = Strip.trackPlace({status: {play: false, state: "cue playing"}, precise: {at: 100, position_ms: 2000}}, wave, 100.5);
+  check("held on CUE it runs on between positions, its play flag off", near(cueHeld.seconds, 2.5), cueHeld);
+  const scratched = Strip.trackPlace({status: {play: false, state: "cue scratching"}, precise: {at: 100, position_ms: 2000}}, wave, 100.5);
+  check("scratched it stays where the jog put it", near(scratched.seconds, 2.0), scratched);
   const stale = Strip.trackPlace({status: {play: true, track_beat: 2}, precise: {at: 90, position_ms: 2000}, phase: [100, 1, 120]}, wave, 100.25);
   check("else from the beat, estimated", near(stale.seconds, wave.beatTime(1.5)) && stale.estimated, stale);
   const paused = Strip.trackPlace({status: {play: false, track_beat: 3}}, wave, 100);
