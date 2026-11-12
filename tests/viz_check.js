@@ -298,6 +298,8 @@ check("nothing heard, nothing drawn", Strip.layoutDevice("c", {status: null}, 5)
   check("else from the beat, estimated", near(stale.seconds, wave.beatTime(1.5)) && stale.estimated, stale);
   const paused = Strip.trackPlace({status: {play: false, track_beat: 3}}, wave, 100);
   check("paused: the beat after the reported one, where it waits", near(paused.seconds, 3.0) && paused.estimated);
+  const firstBeat = Strip.trackPlace({status: {play: false, state: "cued", track_beat: 1, bar: 1, stands: 0}}, wave, 100);
+  check("cued on the first beat: where the bench says it stands", near(firstBeat.seconds, wave.beatTime(0)), firstBeat);
   const held = Strip.trackPlace({status: {play: false, track_beat: 3}, held: 2.5}, wave, 100);
   check("paused where the bench followed it", near(held.seconds, wave.beatTime(2.5)) && !held.estimated, held);
   check("nothing known", Strip.trackPlace({status: null}, wave, 100) === null);

@@ -644,7 +644,7 @@ function cueRun(d, st, running, now) {
       return beatSeen[d.ip] = {beat: b, t: since, at: seen.stood, running};
     }
     return beatSeen[d.ip] = {beat: b, t: now, at: running ? b : null, running,
-                             stood: running ? null : (d.held != null ? d.held : b + 1)};
+                             stood: running ? null : d.held != null ? d.held : st.stands != null ? st.stands : b + 1};
   }
   let at = seen.at + (now - seen.t) * rate;
   const win = st.beat_window;

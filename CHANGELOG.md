@@ -89,6 +89,9 @@ Newest first. A release is a tagged commit.
 - A real player cued on its first beat keeps its waveform and grid on the card. It reports beat 0 there, which
   read as no track, so the strip went blank until it played.
 - A real player with no track shows no tempo. It said about 655 BPM, from the empty tempo field it sends.
+- A real player cued on its track's first beat stands there on its card, and starts from there. It reports that beat
+  itself, where at another cue it reports the beat before, so the card stood a beat late and jumped once it played.
+  The reported beat's bar, from the track's grid, tells the two apart. Checked against a capture of a CDJ-2000NXS2.
 - A CDJ-3000's strip runs on smoothly while CUE is held, as it does while it plays. It moved only with each position
   the player sent.
 - A CDJ-3000's loop is drawn on its card, tinted with its jumps back, as other players' are. The card placed it

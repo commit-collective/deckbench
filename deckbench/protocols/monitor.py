@@ -382,10 +382,10 @@ class Monitor:
         if previous.get("state") not in MOVING and st["state"] in MOVING:
             if d.get("phase") and d["phase"][0] < previous.get("seen", 0):
                 d["phase"] = d["bar_phase"] = None
-            # where it starts from: where the bench followed it, else at a cue the beat after the reported one
-            r = previous.get("track_beat")
+            # where it starts from: where the bench followed it, else where it stood at its cue
+            stands = previous.get("stands")
             d["start_from"] = d.get("held") if d.get("held") is not None else (
-                float(r) if r is not None and previous.get("state") == "cued" else None)
+                float(stands) if stands is not None and previous.get("state") == "cued" else None)
         elif st["state"] not in MOVING:
             d["start_from"] = None
         if d["ours"]:
@@ -399,6 +399,8 @@ class Monitor:
                 for deck in self.net.world.decks.values():
                     deck.reanchor(at)
                 d["status"] = st
+        if st["track_beat"] is not None and st["state"] == "cued":
+            st["stands"] = self.stands(st)
         if not d["ours"]:
             changed = {k: st[k] for k in ("play", "master", "sync", "on_air", "state", "source", "slot", "rbid", "handoff")
                        if previous.get(k) != st[k]}
@@ -421,6 +423,21 @@ class Monitor:
             d["name"], d["number"], st["state"], ", master" if st["master"] else "", ", synced" if st["sync"] else "",
             ", on air" if st["on_air"] else "", "%.1f BPM" % st["bpm"] if st["bpm"] else "no tempo", st["bar"] if st["bar"] else "-",
             ", track %d:%d:%d" % (st["source"], st["slot"], st["rbid"]) if st["rbid"] else "")
+
+    def stands(self, st):
+        """Where a player waiting at its cue stands, as a beat of the track counted from 0. A cue sits a hair before its
+        beat, so the player reports the beat before, with the cue's bar: it stands on the next one. On the track's first
+        beat there is no beat before, and an NXS2 reports that beat itself, beat 1 with its own bar. The reported beat's
+        bar, from the track's grid, tells which. Without the grid, beat 1 in bar 1 is taken for the first beat, as a
+        track's first beat mostly starts a bar."""
+        r = st["track_beat"]
+        if r >= 1 and st["bar"]:
+            own = self.net.beat_bar(st, r - 1) if hasattr(self.net, "beat_bar") else None
+            if own is None and r == 1:
+                own = 1
+            if own == st["bar"]:
+                return r - 1
+        return r
 
     def beat(self, d, data, now):
         bar = data[0x5C]

@@ -364,9 +364,11 @@ const Strip = (() => {
       const [t, pos, bpm] = device.phase;
       return {seconds: wave.beatTime(pos + Math.max(0, now - t) * bpm / 60), estimated: true};
     }
-    /* stopped: where the bench followed it to (held), else the beat after the reported one. A cue sits on a beat, a hair
-       before it, so the player reports the beat before the one it waits on */
+    /* stopped: where the bench followed it to (held), else where the bench says it stands at its cue (on the track's
+       first beat, the reported beat itself), else the beat after the reported one. A cue sits on a beat, a hair before
+       it, so the player reports the beat before the one it waits on */
     if (device.held != null) return {seconds: wave.beatTime(device.held), estimated: false};
+    if (st.stands != null) return {seconds: wave.beatTime(st.stands), estimated: true};
     if (st.track_beat != null) return {seconds: wave.beatTime(st.track_beat), estimated: true};
     return null;
   };

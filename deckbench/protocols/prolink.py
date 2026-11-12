@@ -1521,6 +1521,15 @@ class Prolink(Protocol):
 
     WAVES = 8                           # waveforms kept: a few players' tracks and the ones before
 
+    def beat_bar(self, status, index):
+        """The place in the bar (1 to 4) of a beat of the track a status names, counted from 0, from its grid once the
+        bench has read it, else None. Without a snapshot of the devices, so the status handler can ask."""
+        with self.wave_lock:
+            entries = [e for k, e in self.waves.items()
+                       if k[1] == status.get("source") and k[3] == status.get("slot") and k[4] == status.get("rbid")]
+        grid = entries[0]["data"].get("grid") if entries else None
+        return grid[index][1] if grid and 0 <= index < len(grid) else None
+
     def wave_key(self, device):
         """(key, sender, source, None) for a player's track whose waveform can be read, or (None, None, None, why).
         The key names the source that hosts the media (address, number, MAC), the slot, the track and the style."""

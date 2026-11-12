@@ -160,6 +160,49 @@ class PhaseParsing(unittest.TestCase):
         beat(1, 100.95)
         self.assertEqual(device["phase"][1], 92.0)
 
+    def cued_on(self, beat_reported, bar, grid=None):
+        """A player cued with these beat and bar, then started, as an NXS2 was captured: its first beat packet comes
+        0.344 s after PLAY. The device, after both."""
+        world = world_of(5)
+        net = Prolink(world)
+        monitor = net.monitor
+        link = net.decks[5]
+        if grid is not None:
+            net.waves[("127.0.0.9", 2, "", 3, 881, "waveform")] = {"data": {"grid": grid}, "used": 0}
+        device = monitor.device("127.0.0.9", 100.0, False)
+        def status(state, playing, now):
+            data = bytearray(link.status())
+            data[0x7B] = state
+            data[0x89] = data[0x89] | 0x40 if playing else data[0x89] & ~0x40
+            data[0x28], data[0x29] = 2, 3                        # its own USB, player 2
+            data[0x2C:0x30] = (881).to_bytes(4, "big")
+            data[0xA0:0xA4] = beat_reported.to_bytes(4, "big")
+            data[0xA6] = bar
+            monitor.status(device, bytes(data), now)
+        status(6, False, 100.0)                                  # cued
+        stands = device["status"].get("stands")
+        status(3, True, 101.0)                                   # PLAY
+        packet = bytearray(link.beat(0.0))
+        packet[0x5C] = bar % 4 + 1
+        monitor.beat(device, bytes(packet), 101.344)
+        return stands, device["phase"][1]
+
+    def test_cued_on_the_tracks_first_beat_it_stands_there(self):
+        """Captured on an NXS2: cued on the track's first beat it reports beat 1 in bar 1, not the beat before as at
+        another cue. It stands on the first beat (0), and its first beat packet after PLAY is the second (1)."""
+        self.assertEqual(self.cued_on(1, 1), (0, 1.0))
+
+    def test_the_grid_says_which_beat_a_cue_is_on(self):
+        """A track whose first beat is the 4th of a bar: beat 1 reported in bar 1 is a cue on beat 2."""
+        grid = [[400 * i, (i + 3) % 4 + 1, 15000] for i in range(8)]
+        self.assertEqual(self.cued_on(1, 1, grid), (1, 2.0))
+        grid = [[400 * i, i % 4 + 1, 15000] for i in range(8)]
+        self.assertEqual(self.cued_on(1, 1, grid), (0, 1.0))
+
+    def test_another_cue_stands_on_the_beat_after_the_reported_one(self):
+        """Cued on beat 5 (bar 1), a player reports beat 4 with the cue's bar: it stands on beat 5 (4)."""
+        self.assertEqual(self.cued_on(4, 1), (4, 5.0))
+
     def test_a_cdj_3000_says_where_its_loop_is(self):
         """A CDJ-3000's status is 0x200 bytes. While it loops it gives the loop's start and end, in counts of 65.536 ms,
         and its whole beats. An older player's shorter status gives none."""
