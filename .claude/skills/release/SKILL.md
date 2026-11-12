@@ -18,6 +18,8 @@ user says so.** Nothing is deployed from here by hand except the site copy in st
 4. **`CHANGELOG.md`.** Rename "Unreleased" or "Not yet released" to `## vX.Y.Z` and group it as past releases are (the page,
    the API, fixes). Write what changed for someone using the bench, in short plain sentences with no semicolons. The workflow
    fails without an entry for the tag. `python tools/release_notes.py vX.Y.Z` shows the notes GitHub will get.
+   A feature new in this release is described as it works now: a fix to it before the release amends its line,
+   never a line of its own. A fix line is only for a bug a published release had.
 5. **Docs match.** If the API or the options changed, `README.md` and `docs/` say so.
 6. **The site copy.** If the page (`deckbench/ui`) changed: `python tools/copy_to_site.py ../commitcollective.cc/public/deckbench/app`.
    The site deploys on push, so leave pushing it to the user.
