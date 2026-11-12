@@ -39,6 +39,8 @@ Newest first. A release is a tagged commit.
   start as well.
 - A player card under control has switches like a bench deck's: PLAY/PAUSE, CUE, SYNC and MASTER, lit from what
   the player reports. Fader start, track info and loading stay under Player control.
+- A player card's CUE is lit as the player's own: while CUE is held, on the player or on the page, and while the
+  player waits at its cue point. It was lit only while held on the page.
 - A quick tap of CUE on a real player is no longer lost: the bench keeps a release that comes early and holds every
   press at least 0.1 s.
 - CUE held from the page lasts as long as the finger: the page keeps it held each second, and the bench lets go

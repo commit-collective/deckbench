@@ -870,7 +870,10 @@ function renderDevices() {
       const takes = {buttons: d.transport_method === "buttons", fader: !!d.fader_start_supported && d.transport_method !== "buttons"};
       const switches = q("player-switches");
       switches.hidden = !d.transport_available;
-      const lit = {"play-pause": !!(live && st.play), cue: heldCues.has(d.ip), start: false, stop: false,
+      /* CUE is lit as on the player: while it is held, there or here, and while the player waits at its cue point */
+      const lit = {"play-pause": !!(live && st.play),
+                   cue: heldCues.has(d.ip) || !!(live && ["cue playing", "cue scratching", "cued"].includes(st.state)),
+                   start: false, stop: false,
                    sync: !!(live && st.sync), master: !!(live && st.master)};
       const why = usable ? "" : !set.player_control && !d.transport_armed ? "Player control is off in Settings" : "";
       for (const button of switches.querySelectorAll("button")) {
