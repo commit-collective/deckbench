@@ -113,6 +113,8 @@ class Djs1000Emulator(Adapter):
                         self.frame = self.read(sock, 128)
                     elif kind == ord("A"):
                         self.read(sock, y * 8)
+                    elif kind == ord("P"):
+                        self.read(sock, y)                         # project name: not needed by this adapter
                     else:
                         raise ConnectionError("unknown message")
             except (OSError, ConnectionError, struct.error):

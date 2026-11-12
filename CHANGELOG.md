@@ -4,6 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
+- The optional DJS-1000 emulator adapter stays connected when a project name is reported.
+
 - `--feed [HOST:]PORT` watches the link through the packets another program forwards to that UDP port, as captures
   keep them, binding and sending nothing on the link: for a computer where that program holds the Pro DJ Link ports.
 
