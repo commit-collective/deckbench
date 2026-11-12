@@ -17,8 +17,6 @@ Newest first. A release is a tagged commit.
   listening 5 seconds first, and so does --observe without --observer-number. Otherwise it is 7.
 - Player control and the reading of track info are settings for every player at once, both on by default. Player
   control is off with --observe. A player's card shows its switches straight away, without a box to tick on each card.
-- PLAY/PAUSE and CUE take effect sooner: the wait between connecting to a player and pressing is 0.1 s, down from
-  0.25 s. `--press-settle SECONDS` changes it. With none, CUE was missed. 0.05 s worked.
 - Listen plays only the bench's decks. A real player was heard as a beat made up for it, which only stood in the way of
   its own music, out of the mixer. The Sound settings keep the volume, and a Metronome switch: while Listen is on, a
   click on each beat of the tempo master, a bench deck or a real player, higher on the first beat of the bar.
@@ -31,90 +29,58 @@ Newest first. A release is a tagged commit.
 
 ### Real players: control
 
-- Press PLAY/PAUSE and CUE on a CDJ-3000 or 3000X from its card, since it does not take fader start. Each player
-  shows the start and stop its model takes.
-- Hold CUE on a CDJ-3000 from its card for as long as you hold the button, so it plays from the cue point.
-  The bench lets go by itself after 8 seconds, or when it stops.
-- Press PLAY/PAUSE and CUE on a CDJ-2000NXS2 or an XDJ-1000MK2 too, in their own packet format. They keep fader
-  start as well.
-- A player card under control has switches like a bench deck's: PLAY/PAUSE, CUE, SYNC and MASTER, lit from what
-  the player reports. Fader start, track info and loading stay under Player control.
-- A player card's CUE is lit as the player's own: while CUE is held, on the player or on the page, and while the
-  player waits at its cue point. It was lit only while held on the page.
-- A quick tap of CUE on a real player is no longer lost: the bench keeps a release that comes early and holds every
-  press at least 0.1 s.
-- CUE held from the page lasts as long as the finger: the page keeps it held each second, and the bench lets go
-  3 seconds after the page stops. Before, it let go after 8 seconds whatever the finger did.
-- Hold CUE and let go on PLAY/PAUSE to play on, as on the player: CUE keeps the finger or the mouse until it is let
-  go, and PLAY/PAUSE is marked as a place to let go while CUE is held.
-- Request analyzed SD/USB tracks on stopped discovered players through an
-  armed remote-load form or API. Require an online source and
-  announced sender, and distinguish a sent request from a confirmed load.
-- Disable Read track info when no eligible sender or track source is available,
-  with the reason shown on the button. Recheck eligibility before querying.
+- A player card under control has switches like a bench deck's: PLAY/PAUSE, CUE, SYNC and MASTER, lit from what the
+  player reports. CUE is lit while CUE is held, on the player or on the page, and while the player waits at its cue
+  point. Fader start, track info and loading stay under Player control.
+- PLAY/PAUSE and CUE from the card, in each model's own packet format: a CDJ-3000 or 3000X, which takes no fader start,
+  a CDJ-2000NXS2 and an XDJ-1000MK2, which keep fader start as well. Each card shows the start and stop its model takes.
+  A press waits 0.1 s after connecting to the player (`--press-settle SECONDS` changes it) and lasts at least 0.1 s,
+  so a quick tap is not lost.
+- Hold CUE on the card for as long as the finger or the mouse is down, so the player plays from its cue point, and let
+  go on PLAY/PAUSE to play on, as on the player. The bench lets go by itself 3 seconds after the page stops holding it.
+- Request analyzed SD/USB tracks on stopped discovered players through an armed remote-load form or API. It needs an
+  online source and an announced sender, and tells a sent request from a confirmed load.
+- Read track info is disabled when no eligible sender or track source is available, with the reason shown on the
+  button, and eligibility is checked again before querying.
 
 ### Real players: what the cards show
 
 - Real players' waveforms: the bench reads each player's track waveform and beat grid from the player that hosts it,
-  and the card draws it behind the strip's beats, as a bench deck's, with the whole track under it. Retrieval was
-  tried on a CDJ-2000NXS2. A database answer that leaves out an empty blob after a zero is now read correctly.
-- Read waveforms by itself is a setting apart from track info. `--no-track-info` and `--no-waveforms` start with
-  either off.
-- A track with no colour waveform gets the original blue one, so tracks analysed for older players have a waveform
-  on their card too.
-- A real player's loop is steadier, from a capture of 2- and 4-beat loops on a CDJ-2000NXS2. The beats ahead of
-  the playhead take their place in the bar from the loop, so a 2-beat loop's numbers no longer move every pass. A
-  status sent in the middle of the jump back (its bar moved on, its beat not yet) no longer puts a beat in the wrong
-  place, and a beat whose packet did not come is drawn.
-- A track started in a loop keeps its grid and waveform, past and to come, as it plays until its first jump back,
-  when the loop's length is known and the loop is drawn. The grid no longer disappears for that moment.
+  and the card draws it behind the strip's beats, as a bench deck's, with the whole track under it. A track with no
+  colour waveform gets the original blue one. Read waveforms by itself is a setting apart from track info.
+  `--no-track-info` and `--no-waveforms` start with either off. A CDJ-3000's strip is placed from its precise
+  position, many times a second.
+- A stopped player's strip stands where it waits: on its cue (cued on the track's first beat too), or where it paused,
+  from the beats it played. An older player reports only the beat it has passed, and its CUE-button cue is nowhere to
+  read, so the bench follows where it stops and cues. Anything it did not see makes it fall back to the reported beat,
+  marked as an estimate.
+- A start from a stop, PLAY or a held CUE, starts the strip where the player stood, timed from its first status. It
+  ran a beat ahead or behind at random: a player sends no beat for the beat it starts on, and at a cue it reports the
+  beat before. Checked against captures of a CDJ-2000NXS2 and an XDJ-1000MK2.
+- A player held on CUE keeps its beats on the strip, and the card's beat lamps and the master's follow it. It sends
+  its beats with its play flag off, and the bench hid them at each status, so the strip switched between the beats and
+  an estimate and the lamps flashed.
+- A real player's loop is steadier, from a capture of 2- and 4-beat loops on a CDJ-2000NXS2. The beats ahead of the
+  playhead take their place in the bar from the loop, so a 2-beat loop's numbers no longer move every pass. A status
+  sent in the middle of the jump back no longer puts a beat in the wrong place, and a beat whose packet did not come is
+  drawn. A CDJ-3000's loop is read from its status.
 - The loop is easier to read: a lighter tint, and each jump back one solid marker with a flag, the same everywhere.
-- A start from a stop, PLAY or a held CUE, no longer runs a beat ahead or behind at random. A player sends no beat
-  for the beat it starts on, and at a cue it reports the beat before with the cue's bar. The strip now starts from
-  where the player stood, timed from its first status, and its first beat is counted from there. Checked against
-  a capture of an XDJ-1000MK2 and a CDJ-2000NXS2.
-- A pause is placed when its status comes, which players send at once, and a pause right before a beat keeps its
-  place when the player reports that beat a moment later.
-- PLAY or a held CUE from a stop starts the strip where the player stood, not a beat behind, and a beat from before
-  the stop is no longer taken for the new start.
-- A player held on CUE sends its beats with its play flag off. The bench hid them at each status, so the strip
-  switched between the beats and an estimate and the beat lamps flashed. They now stay, as while it plays.
-- A real player's strip shows the track's beats and waveform before PLAY from its first seconds, also right after
-  a pause or a jump to the cue, where it was empty on the left until the beats filled it.
-- While CUE is held, the card's beat lamps and the master's follow the strip, as the player sends no beats then.
-- A stopped real player's waveform sits on the beat it waits on, not one beat before: a player at a cue reports
-  the beat before it. While CUE is held, its strip runs on smoothly between the player's status updates.
-- The bench follows where an older player stops and where its CUE-button cue is: a pause is placed from the beats it
-  played, and a return to the cue or a held CUE starts there. Anything it did not see makes it forget.
-- A real player cued on its first beat keeps its waveform and grid on the card. It reports beat 0 there, which
-  read as no track, so the strip went blank until it played.
 - A real player with no track shows no tempo. It said about 655 BPM, from the empty tempo field it sends.
-- A real player cued on its track's first beat stands there on its card, and starts from there. It reports that beat
-  itself, where at another cue it reports the beat before, so the card stood a beat late and jumped once it played.
-  The reported beat's bar, from the track's grid, tells the two apart. Checked against a capture of a CDJ-2000NXS2.
-- A CDJ-3000's strip runs on smoothly while CUE is held, as it does while it plays. It moved only with each position
-  the player sent.
-- A CDJ-3000's loop is drawn on its card, tinted with its jumps back, as other players' are. The card placed it
-  from its precise position and drew no loop. The bench now reads where the loop is from the player's status.
-- A track's title and waveform are forgotten once no player has it loaded, so a USB or SD swapped for another
-  whose track has the same ID in the same slot no longer shows the old ones.
-- A loaded track's title no longer disappears for a moment every minute: its track info stays while it is loaded.
+- A track's title is forgotten once no player has it loaded, so a USB or SD swapped for another whose track has the
+  same ID in the same slot no longer shows the old one.
 - The status line says how the bench is on the link with its decks off: listening, the number it took, or silent
   while another device has it.
-- Reveal full discovered-player names, addresses and track text on hover,
-  or expand them with a tap or keyboard. Keep the compact card layout.
-- Keep discovered-player cards within narrow phone screens.
+- A discovered player's full name, address and track text show on hover, or with a tap or the keyboard, and its card
+  stays compact and within a narrow phone screen.
 
 ### Bench decks
 
 - A bench deck can load a real player's SD or USB track: pick it from the tracks the players have loaded, or give the
   player, slot and ID. The bench reads the track's grid, title and waveform from that player, and the deck plays on
-  the grid: the track's tempo, its bars counted as the grid counts them, and its waveform on the strip. A tempo set
-  afterwards is reported as a pitch. The sound is still the drum loop. See docs/reference.md.
-- A bench deck on a real player's track plays the track itself: the bench reads its audio file from the player's SD or
-  USB over NFS, as a player loading a linked track does, and the deck plays it on the grid, in Listen and on the sound
-  port. Settings has a switch for it. The files read are kept only while the bench runs, unless Keep a loaded
-  track's audio is on.
+  the grid: the track's tempo, its bars counted as the grid counts them, and its waveform on the strip. It plays the
+  track itself, its audio file read from the player's SD or USB over NFS as a player loading a linked track does, in
+  Listen and on the sound port. Settings has a switch for it, else it plays the drum loop. The files read are kept only
+  while the bench runs, unless Keep a loaded track's audio is on. See docs/reference.md.
 - A bench deck takes the load-track command that rekordbox or Beat Link sends a player, and refuses it while it plays.
 - A bench deck's header is a player's: it opens to all of it, with where its track comes from, its grid and its audio
   on a line of their own and the state under. Opening moves neither the number nor the name. The state is in one order
@@ -129,7 +95,7 @@ Newest first. A release is a tagged commit.
 - A deck's sound file no longer crackles in Listen. The page started it again at every change of the deck's phase,
   with no fade: each time a synced deck was put back on its beat and each step of the pitch fader. It now plays on
   when it is within 40 ms of the deck, takes a new tempo as a new speed, and fades over a jump.
-- Listen says what it waits for when nothing plays yet, and that a real player is heard as a beat, not its music.
+- Listen says what it waits for when nothing plays yet.
 - A bench deck no longer logs every beat of every player. On Windows its socket for commands also gets the broadcasts
   of that port (beats, the mixer's on-air report, position, fader start), and each was logged. They are left to the
   packet log now, and a packet of another kind is logged once for each sender.
@@ -137,8 +103,8 @@ Newest first. A release is a tagged commit.
 ### Scenarios
 
 - A scenario can play real players: a `player` step presses a button (CUE held for a while too) or loads a track on a
-  player by its number, with Player control on, and `expect_player` checks what that player says of itself. An example in the new Real players group cues,
-  plays, pauses and syncs player 1.
+  player by its number, with Player control on, and `expect_player` checks what that player says of itself. An
+  example in the new Real players group cues, plays, pauses and syncs player 1.
 - The Scenario tab has a Clear button for the results of the last run, as Events and the link log have. It waits for a
   run to end or be stopped.
 
@@ -146,10 +112,8 @@ Newest first. A release is a tagged commit.
 
 - **Phone**, at the top of the page on the bench's machine, shares the bench with phones on demand: it listens on an
   address of the local network too, with a token of its own, and shows the QR code and the link in the page. **Stop
-  sharing** closes it. Started with `--phone`, the button shows the existing link and QR. `--phone-address` now also
-  sets the address the button offers first.
-- The Phone button is lit whenever the bench is shared with phones, from the start with `--phone` too. It was lit only
-  once its dialog had been opened.
+  sharing** closes it. The button is lit whenever the bench is shared, from the start with `--phone` too, and then
+  shows the existing link and QR. `--phone-address` now also sets the address the button offers first.
 - A page that a phone suspended (another app, the screen off) reconnects when it comes back. The browser had closed
   its stream for good, so it said reconnecting until the page was reloaded. The page now opens a new stream when its
   stream is closed, quiet for 5 seconds, or quiet when the page is shown again.
@@ -160,26 +124,20 @@ Newest first. A release is a tagged commit.
   display.
 - The link log keeps its height in a short window, such as at a high display scale: it had shrunk to a thin line.
 - Text on the cards can be selected and copied: the page no longer rewrites text that did not change.
-- Keep the network adapter's remember-choice checkbox beside its natural-width label.
 
 ### Networks and other programs
 
 - `--feed [HOST:]PORT` watches the link through the packets another program forwards to that UDP port, as captures
   keep them, binding and sending nothing on the link: for a computer where that program holds the Pro DJ Link ports.
+- Choose the bench's DJ network adapter in the page's Network panel. An idle bench reconnects to it without restarting
+  its page, and a choice can be remembered as a suggestion, which leaves how the command line starts unchanged. A
+  Windows card whose address is not usable yet (Tentative) is listed, marked as such, and can be chosen once Windows
+  marks it Preferred. Receivers bound with `--bind` stay unfiltered.
+- The Windows firewall helper takes several adapters, such as a DJ adapter and the network bridge another program
+  makes of it, and covers each with one rule.
 - The optional DJS-1000 emulator adapter stays connected when a project name is reported.
 - A bench on a real network in Linux or WSL starts again. It stopped while reading the adapters' MAC addresses,
   which it never found there, and on an adapter without one.
-- Choose the backend's DJ network adapter from the browser Network panel.
-  Reconnect an idle bench without restarting its HTTP server, with explicit
-  reset of discovered identities and armed controls and recovery on bind failure.
-  Remember adapter choices as suggestions without changing CLI startup behavior.
-- Keep manual `--bind` receivers unfiltered and require a distinct mixer address
-  after switching to a real adapter. Release the reconnect guard after CLI
-  scenarios finish, and prevent reconnecting unavailable remembered adapters.
-- The Windows firewall helper takes several adapters, such as a DJ adapter and the network bridge
-  another program makes of it, and covers each with one rule.
-- List a Windows network card whose address is not usable yet (Tentative) in the adapter
-  choice, marked as such, instead of hiding it. It cannot be chosen until Windows marks it Preferred.
 - Say in one line which port is busy when the page or the sound cannot start, instead of a traceback.
 
 ## v0.5.0
