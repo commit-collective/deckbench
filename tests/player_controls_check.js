@@ -7,7 +7,7 @@ const vm = require("vm");
 const calls = [];
 const context = vm.createContext({
   h: (tag, attrs, ...children) => ({tag, attrs, children: children.flat().filter(Boolean)}),
-  devId: ip => ip, beatIndicators: () => null,
+  devId: d => d.ip, beatIndicators: () => null,
   act: url => calls.push(url),
   api: url => { calls.push(url); return Promise.resolve({}); }, toast: () => {},
   buildPlayerLoad: () => null,

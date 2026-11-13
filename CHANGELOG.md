@@ -11,6 +11,7 @@ Newest first. A release is a tagged commit.
 ### Fixes
 
 - Show the title of a player's track on a bench deck once the bench has read the track's waveform for the player.
+- Show each deck of a unit that shares one address, as an all-in-one does, on a card of its own, with no player control.
 
 ## v0.6.0
 

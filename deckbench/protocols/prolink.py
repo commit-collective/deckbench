@@ -1634,10 +1634,18 @@ class Prolink(Protocol):
                 return {"key": name, "state": "failed", "reason": self.wave_failed[key][1]}
         return {"key": name, "state": "reading" if self.wave_busy == key else ("waiting" if self.auto_waves else "off")}
 
-    def waveform_asset(self, ip):
-        """GET /api/player/IP/waveform: the waveform of the track the player has now, from the cache. (status, body)"""
+    @staticmethod
+    def at_address(devices, ip, number=None):
+        """The device at `ip`, and with player `number` when one is given: an all-in-one has several decks on one address."""
+        here = [d for d in devices if d["ip"] == ip]
+        if number is not None:
+            return next((d for d in here if str(d["number"]) == str(number)), None)
+        return here[0] if here else None
+
+    def waveform_asset(self, ip, number=None):
+        """GET /api/player/IP/waveform[?number=N]: the waveform of the track the player has now, from the cache. (status, body)"""
         import base64
-        device = next((d for d in self.monitor.snapshot() if d["online"] and d["ip"] == ip), None)
+        device = self.at_address([d for d in self.monitor.snapshot() if d["online"]], ip, number)
         if not device:
             return 404, {"error": "no such player online"}
         key, _, _, reason = self.wave_key(device)
@@ -1703,6 +1711,8 @@ class Prolink(Protocol):
             if available:
                 eligible.add(identity)
             device["transport_available"] = bool(available)
+            # an all-in-one (an XDJ-XZ or XDJ-AZ) has several decks and a mixer on one address: untried, so not controlled
+            device["shared_address"] = sum(d["online"] and d["ip"] == device["ip"] for d in devices) > 1
             device["transport_method"] = self.transport_method(device)
             device["fader_start_supported"] = device["name"].upper() not in self.NO_FADER_START
             device["transport_armed"] = bool(available and (self.control_on or identity in self.player_controls))
@@ -1897,7 +1907,8 @@ class Prolink(Protocol):
         """Arm a discovered player or request an explicit unicast action."""
         if len(parts) != 4 or parts[2] not in ("arm", "command", "metadata", "load"):
             return 404, {"error": "no such player control"}
-        device = next((d for d in self.control_devices() if d["ip"] == parts[1]), None)
+        devices = self.control_devices()
+        device = self.at_address(devices, parts[1], query.get("number", [None])[0]) or self.at_address(devices, parts[1])
         if not device or not device["transport_available"]:
             return 400, {"error": "player is offline, conflicting or not eligible for player control"}
         if query.get("number", [None])[0] != str(device["number"]):

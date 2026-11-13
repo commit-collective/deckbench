@@ -131,7 +131,7 @@ Options (`python -m deckbench --help`):
     POST /api/player/<ip>/arm/<0|1>?number=<n>       arm one player while player_control is off (scripts, --observe)
     POST /api/player/<ip>/command/<command>?number=<n>   start, stop, sync-on, sync-off or master, requires arming
     POST /api/player/<ip>/metadata/refresh?number=<n>    read the loaded analyzed track's metadata, no arming required
-    GET  /api/player/<ip>/waveform    the waveform and beat grid of the player's track, once read (see below)
+    GET  /api/player/<ip>/waveform[?number=<n>]   the waveform and beat grid of the player's track, once read (see below)
     POST /api/player/<ip>/load/<id>?number=<n>&source=<player>&slot=<2|3>    request an analyzed SD/USB track, requires arming
     POST /api/mixer/on/<0|1>          the mixer on or off. Also master/<0|1>, channel/<n>/fader/<0-100>, channel/<n>/fader_start/<0|1>,
                                       channel/<n>/command/<start|stop>
@@ -246,6 +246,10 @@ for each discovered player:
 | CDJ-2000NXS2, XDJ-1000MK2 | `buttons` | true | `play-pause` and `cue`, or `start` and `stop` |
 | XDJ-XZ | (empty) | false | none |
 | others | `fader` | true | `start` and `stop`: fader start |
+
+An all-in-one such as an XDJ-XZ shows its decks and its mixer on one address. Each is a device of its own, with
+`shared_address` true, and `?number=<n>` names which one a player route means. None of them takes player control,
+since no all-in-one has been tried.
 
 Fader start is documented as unsupported on the CDJ-3000 and XDJ-XZ. The bench
 can instead press PLAY/PAUSE or CUE as a remote controller does:

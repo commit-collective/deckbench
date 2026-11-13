@@ -520,7 +520,7 @@ function beatOf(d) {
 /* A player as the lamps take it. Held on CUE (cue playing), it sends no beats: its beat is the strip's (cueRun), in the
    bar its status gives. */
 function lampsOf(d) {
-  const st = d.status, seen = beatSeen[d.ip];
+  const st = d.status, seen = beatSeen[devKey(d)];
   if (d.phase || !d.online || !st || st.state !== "cue playing" || !st.bar || !seen || !seen.running) return d;
   const bpm = st.bpm || st.track_bpm || 120;
   return Object.assign({}, d, {phase: [seen.t, seen.at, bpm], bar_phase: [seen.t, st.bar - 1 + seen.at - seen.beat, bpm]});
@@ -538,7 +538,7 @@ function lamps() {
     row.querySelectorAll("i").forEach((square, k) => square.classList.toggle("lit", masterBeat === k + 1));
   }
   for (const d of devicesOf(S.state).map(lampsOf)) {
-    const card = $(devId(d.ip));
+    const card = $(devId(d));
     if (!card || d.kind === "mixer") continue;
     const now = d.online && d.phase ? beatOf(d) : 0;
     card.querySelectorAll(".beats i").forEach((square, k) => {
@@ -564,7 +564,9 @@ function devicesOf(state) {
   return (link && link.devices) || [];
 }
 
-const devId = (ip) => "dev-" + ip.replace(/[^\w]/g, "-");
+/* A device on the link: its address, and its number too when it shares the address (an all-in-one's decks and mixer) */
+const devKey = (d) => d.shared_address && d.number != null ? d.ip + "#" + d.number : d.ip;
+const devId = (d) => "dev-" + devKey(d).replace(/[^\w]/g, "-");
 
 /* The waveform of a deck's sound file, got from the bench once for each file: null while it comes, or when the deck has none. */
 const waves = {};
@@ -602,19 +604,19 @@ function linkedWaveOf(n, d) {
 
 /* A real player's waveform, read by the bench from the player that hosts the track (api/player/IP/waveform), once it says it
    is ready: by address, for the track it was read for. A new track drops the old one at once. */
-const realWaves = {};                   // address: {key, peaks, overview, beatTime, beatOf, bars, duration}, or {key, failed}
+const realWaves = {};                   // device (devKey): {key, peaks, overview, beatTime, beatOf, bars, duration}, or {key, failed}
 function realWaveOf(d) {
-  const wf = d.waveform || {}, have = realWaves[d.ip];
-  if (have && have.key !== wf.key) delete realWaves[d.ip];
+  const wf = d.waveform || {}, id = devKey(d), have = realWaves[id];
+  if (have && have.key !== wf.key) delete realWaves[id];
   if (wf.state !== "ready" || transport.demo) return null;
-  if (!realWaves[d.ip]) {
-    realWaves[d.ip] = {key: wf.key, pending: true};
-    transport.fetch("api/player/" + d.ip + "/waveform")
+  if (!realWaves[id]) {
+    realWaves[id] = {key: wf.key, pending: true};
+    transport.fetch("api/player/" + d.ip + "/waveform" + (d.number != null ? "?number=" + d.number : ""))
       .then((r) => { if (!r.ok) throw new Error("none"); return r.json(); })
-      .then((data) => { if (realWaves[d.ip] && realWaves[d.ip].key === data.key) realWaves[d.ip] = Strip.realWave(data); })
-      .catch(() => { if (realWaves[d.ip] && realWaves[d.ip].key === wf.key) realWaves[d.ip] = {key: wf.key, failed: true}; });
+      .then((data) => { if (realWaves[id] && realWaves[id].key === data.key) realWaves[id] = Strip.realWave(data); })
+      .catch(() => { if (realWaves[id] && realWaves[id].key === wf.key) realWaves[id] = {key: wf.key, failed: true}; });
   }
-  const w = realWaves[d.ip];
+  const w = realWaves[id];
   return w && w.peaks ? w : null;
 }
 
@@ -632,7 +634,7 @@ const beatSeen = {};
    as a stopped strip is drawn. */
 function cueRun(d, st, running, now) {
   const b = st.track_beat - 1, rate = (st.bpm || st.track_bpm || 120) / 60;
-  let seen = beatSeen[d.ip];
+  let seen = beatSeen[devKey(d)];
   if (!seen || !running || !seen.running) {
     /* from a stop, PLAY or CUE held: where the stopped strip stood (where the bench followed it, else the beat after
        the one it reported while stopped), from when the bench saw it start (status.since). The first statuses of a
@@ -641,9 +643,9 @@ function cueRun(d, st, running, now) {
     const near = (at) => at != null && at >= b - 1.001 && at <= b + 1.001;
     if (running && seen && !seen.running && near(seen.stood)) {
       const since = st.since != null && st.since <= now && now - st.since < 1 ? st.since : now;
-      return beatSeen[d.ip] = {beat: b, t: since, at: seen.stood, running};
+      return beatSeen[devKey(d)] = {beat: b, t: since, at: seen.stood, running};
     }
-    return beatSeen[d.ip] = {beat: b, t: now, at: running ? b : null, running,
+    return beatSeen[devKey(d)] = {beat: b, t: now, at: running ? b : null, running,
                              stood: running ? null : d.held != null ? d.held : st.stands != null ? st.stands : b + 1};
   }
   let at = seen.at + (now - seen.t) * rate;
@@ -656,7 +658,7 @@ function cueRun(d, st, running, now) {
 
 function devicePlan(d, wave, now) {
   const st = d.status, moving = () => {
-    const plan = Strip.layoutDevice(d.ip, d, now);
+    const plan = Strip.layoutDevice(devKey(d), d, now);
     if (wave) for (const t of plan.ticks) if (wave.bars[t.at] != null) t.beat = wave.bars[t.at];      /* the grid's bars */
     return {plan, place: null};
   };
@@ -695,7 +697,7 @@ function strips() {
     else if (canvas) canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
   }
   for (const d of devicesOf(S.state)) {
-    const card = $(devId(d.ip)), canvas = card && card.querySelector(".strip");
+    const card = $(devId(d)), canvas = card && card.querySelector(".strip");
     if (!canvas) continue;
     const st = d.status, known = !!(st && st.track_beat != null), wave = known ? realWaveOf(d) : null;
     const {plan, place} = devicePlan(d, wave, now);
@@ -797,7 +799,7 @@ function buildPlayerLoad(d) {
 
 function buildDevice(d) {
   const mixer = d.kind === "mixer";
-  return h("article", {class: "deck device off", id: devId(d.ip), "aria-label": (d.model || "Device") + " on the link"},
+  return h("article", {class: "deck device off", id: devId(d), "aria-label": (d.model || "Device") + " on the link"},
     grip(),
     h("div", {class: "deck-head"},
       h("div", {class: "num", "aria-hidden": "true"}),
@@ -855,9 +857,9 @@ function renderDevices() {
   $("others").hidden = !list.length;
   const keep = new Set();
   for (const d of list) {
-    Strip.observe(d.ip, d.phase, S.offset, d.bar_phase);
-    keep.add(devId(d.ip));
-    let card = $(devId(d.ip));
+    Strip.observe(devKey(d), d.phase, S.offset, d.bar_phase);
+    keep.add(devId(d));
+    let card = $(devId(d));
     if (!card || card.dataset.kind !== d.kind) {
       if (card) card.remove();
       card = buildDevice(d);
@@ -941,6 +943,9 @@ function renderDevices() {
       setText(q("lcd").firstChild, bpm != null && d.online ? bpm.toFixed(1) : "--");
       if (st && st.pitch) facts.push(h("span", {}, "pitch " + (st.pitch > 0 ? "+" : "") + st.pitch.toFixed(2) + " %"));
       if (d.firmware) facts.push(h("span", {}, "firmware " + d.firmware));
+      /* an all-in-one's deck: seen, not controlled, until one is tried */
+      if (d.shared_address) facts.push(h("span", {title: "Its decks and mixer share one address, as on an all-in-one. Player control is not supported there yet."},
+                                        "shares its address: no player control yet"));
       if (d.precise) facts.push(h("span", {}, "position " + (d.precise.position_ms / 1000).toFixed(3) + " s"));
     }
     if (d.peers != null) facts.push(h("span", {}, "knows " + d.peers + " device" + (d.peers === 1 ? "" : "s")));

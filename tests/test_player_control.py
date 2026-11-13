@@ -138,6 +138,23 @@ class PlayerControl(unittest.TestCase):
         self.net.monitor.feed(self.player.status(), "127.0.0.8", self.net.ports.update)
         self.assertEqual(self.call("command", "stop")[0], 400)
 
+    def test_an_all_in_one_shows_each_deck_and_controls_none(self):
+        """Two decks on one address, as an XDJ-XZ has: each is its own device, and neither is controlled."""
+        other = World()
+        other.decks[1] = Deck(other, 1, 124, "external")
+        deck1 = Prolink(other, profile="cdj-2000nxs2").decks[1]
+        deck1.name = self.player.name = b"XDJ-XZ"
+        self.net.monitor.devices.clear()
+        self.feed()
+        self.net.monitor.feed(deck1.status(), self.ip, self.net.ports.update)
+        devices = self.net.info()["devices"]
+        self.assertEqual(sorted(d["number"] for d in devices), [1, 2])
+        self.assertTrue(all(d["shared_address"] and not d["transport_available"] for d in devices))
+        self.assertEqual(self.net.at_address(devices, self.ip, 1)["number"], 1)
+        self.assertEqual(self.net.at_address(devices, self.ip, "2")["number"], 2)
+        self.assertIsNone(self.net.at_address(devices, self.ip, 3))
+        self.assertEqual(self.call("command", "stop", number="1")[0], 400)
+
     def test_unsupported_model_and_numbers_are_rejected(self):
         self.net.monitor.devices.clear()
         self.player.name = b"CDJ-3000"
