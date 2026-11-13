@@ -768,6 +768,13 @@ class Prolink(Protocol):
             return [link.broadcast]
         return sorted({device["ip"] for device in self.monitor.snapshot() if device["online"]})
 
+    def check_broadcast(self):
+        """macOS cannot bind 255.255.255.255 (EADDRNOTAVAIL), which the sniffer and the fader listener need for a deck's
+        broadcast address, so a bench configured with it is refused here, before any listener starts. Raises PortError."""
+        if sys.platform == "darwin" and any(link.broadcast == "255.255.255.255" for link in self.decks.values()):
+            raise PortError("macOS cannot listen on the broadcast address 255.255.255.255. Give the network's own "
+                            "broadcast address, such as 192.168.0.255 (--broadcast, or --netmask with --bind)")
+
     def check_ports(self):
         """Binds every port the decks need once, to say so at once if one cannot be had (the threads that serve
         them would die unseen). Raises PortError.
@@ -827,6 +834,7 @@ class Prolink(Protocol):
                 self.stop()
                 raise PortError(errors)
             return
+        self.check_broadcast()
         self.check_ports()
         self.started = time.time()
         # the listeners: each deck's UDP socket for what is sent to it and its two TCP servers, the sniffer and the fader listener

@@ -11,6 +11,7 @@ Newest first. A release is a tagged commit.
 ### Fixes
 
 - On macOS, do not bind 255.255.255.255 on a real network (the system refuses it, so the sniffer and the fader listener failed with `Can't assign requested address`); the subnet broadcast addresses are still bound.
+- On macOS, a configured broadcast address of 255.255.255.255 is refused at start with a message that names the subnet broadcast address to use, as the system cannot listen on it.
 - Show the title of a player's track on a bench deck once the bench has read the track's waveform for the player.
 - Show each deck of a unit that shares one address, as an all-in-one does, on a card of its own, with no player control.
 

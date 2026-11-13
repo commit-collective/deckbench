@@ -12,7 +12,8 @@ from unittest import mock
 
 from _ports import fresh
 from deckbench.core import Deck, World
-from deckbench.protocols.prolink import Prolink
+from deckbench.net import macos_interfaces
+from deckbench.protocols.prolink import PortError, Prolink
 
 SENDERS = 12            # players: each its own address and port, which is what the sharing of a port goes by
 
@@ -86,6 +87,36 @@ class Binding(unittest.TestCase):
             net = Prolink(world, addresses={2: "169.254.4.5"}, broadcast="169.254.255.255")
         for address in net.broadcast_addresses():
             self.assertNotEqual(address, "255.255.255.255", "macOS cannot bind it (EADDRNOTAVAIL)")
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS only")
+    def test_the_listeners_bind_on_a_real_interface_on_macos(self):
+        found = [(name, a, mac) for name, a, mac in macos_interfaces()
+                 if not a.ip.is_loopback and not a.ip.is_link_local and a.network.prefixlen < 31]
+        if not found:
+            self.skipTest("no interface with an IPv4 broadcast address")
+        name, a, mac = found[0]
+        world = World()
+        world.decks[2] = Deck(world, 2, 120.0)
+        with mock.patch("deckbench.protocols.prolink.interface_macs", return_value={str(a.ip): mac or bytes(6)}):
+            net = Prolink(world, ports=fresh(), addresses={2: str(a.ip)}, broadcast=str(a.network.broadcast_address))
+        self.assertEqual(net.broadcast_addresses(), [str(a.network.broadcast_address)])
+        net.start()
+        self.addCleanup(net.stop)
+        self.assertTrue(net.ready.wait(10))
+        self.assertEqual(net.runtime.errors, [], "a listener could not bind on " + name)
+
+    def test_a_configured_255_255_255_255_is_refused_on_macos_before_any_listener_starts(self):
+        world = World()
+        world.decks[2] = Deck(world, 2, 120.0)
+        with mock.patch("deckbench.protocols.prolink.interface_macs", return_value={"169.254.4.5": bytes(6)}):
+            net = Prolink(world, ports=fresh(), addresses={2: "169.254.4.5"}, broadcast="255.255.255.255")
+        with mock.patch("deckbench.protocols.prolink.sys.platform", "darwin"), \
+                mock.patch.object(Prolink, "check_ports") as ports:
+            with self.assertRaises(PortError) as caught:
+                net.start()
+        self.assertIn("255.255.255.255", str(caught.exception))
+        ports.assert_not_called()
+        self.assertEqual(net.runtime.threads, [])
 
 
 if __name__ == "__main__":
