@@ -72,7 +72,32 @@ class Errors(unittest.TestCase):
                 pass
 
 
+def grid_bytes(beats, trailer=b""):
+    """A grid as a CDJ-3000 sends it: the header (its number of beats and their bytes), then 16 bytes a beat."""
+    header = bytes.fromhex("00001000") + len(beats).to_bytes(4, "little") + (16 * len(beats)).to_bytes(4, "little") \
+        + bytes.fromhex("01000000ffffffff")
+    body = b"".join(struct.pack("<HHI", bar, bpm, ms) + b"\xff" * 8 for ms, bar, bpm in beats)
+    return header + body + trailer
+
+
 class Grid(unittest.TestCase):
+    def test_a_cdj3000_grid_with_four_more_bytes_is_read(self):
+        from deckbench.waveforms import decode_grid
+        beats = [[0, 1, 13500], [445, 2, 13500], [889, 3, 13500]]
+        self.assertEqual(decode_grid(grid_bytes(beats, bytes(4))), beats)
+
+    def test_a_grid_without_them_is_read_as_before(self):
+        from deckbench.waveforms import decode_grid
+        beats = [[0, 1, 12800], [469, 2, 12800]]
+        self.assertEqual(decode_grid(grid_bytes(beats)), beats)
+
+    def test_the_extra_bytes_must_match_the_header(self):
+        from deckbench.waveforms import decode_grid
+        data = bytearray(grid_bytes([[0, 1, 13500], [445, 2, 13500]], bytes(4)))
+        data[4] = 9                                         # the header claims 9 beats
+        with self.assertRaises(ValueError):
+            decode_grid(bytes(data))
+
     def test_a_grid_of_an_unexpected_length_shows_its_bytes(self):
         from deckbench.waveforms import decode_grid
         data = bytes(range(40))
