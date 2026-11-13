@@ -1653,7 +1653,21 @@ function start() {
   if (transport.demo) {
     const note = h("div", {class: "demo-note"}, "Demo: a bench made of JavaScript in this page. It shows the page, not a network. The real one runs on a machine cabled to your players.");
     document.body.prepend(note);
+    welcome();
   }
+}
+
+/* The demo's first visit in this browser: what it is, and where to follow Deckbench. Shown once. */
+function welcome() {
+  if (store.get("deckbench.welcomed", "")) return;
+  const box = $("welcome");
+  const close = () => { box.hidden = true; store.set("deckbench.welcomed", "1"); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  $("welcomeok").onclick = close;
+  box.onclick = (e) => { if (e.target === box) close(); };
+  document.addEventListener("keydown", onKey);
+  box.hidden = false;
+  $("welcomeok").focus();
 }
 
 /* ---- a phone as the screen ----

@@ -382,6 +382,7 @@ h2:first-child { margin-top: 0; }
 .dialog pre { margin: 0; padding: 8px 10px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r); font: 400 12px var(--mono); white-space: pre-wrap; word-break: break-all; }
 .dialog label { display: flex; flex-direction: column; gap: 4px; font: 400 10px var(--lab); letter-spacing: var(--ls); text-transform: var(--tt); color: var(--muted); }
 .dialog input { width: 100%; height: 34px; }
+.dialog a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .demo-note { padding: 6px 16px; background: color-mix(in srgb, var(--master) 12%, var(--surface)); border-bottom: 1px solid var(--line); font: 400 11px var(--lab); letter-spacing: .04em; text-align: center; color: var(--muted); }
 
 .player-control { border-top: 1px solid var(--line); padding: 10px 16px; }

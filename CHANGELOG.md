@@ -4,6 +4,10 @@ Newest first. A release is a tagged commit.
 
 ## Not yet released
 
+### The page
+
+- Welcome the demo's first visit with what it shows and where to follow Deckbench.
+
 ### Fixes
 
 - Show the title of a player's track on a bench deck once the bench has read the track's waveform for the player.
