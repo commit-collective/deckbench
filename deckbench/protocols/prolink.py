@@ -36,6 +36,7 @@ found to need.
 import select
 import random
 import os
+import sys
 import socket
 import struct
 import threading
@@ -1077,11 +1078,14 @@ class Prolink(Protocol):
         (local testing, as the device under test there expects) and on Windows, where one program holds a port. On a
         real network elsewhere, only the broadcast addresses: a socket bound to any address there would take what
         players send to another program of this machine (master hand-off, sync, status), and on Linux the last one
-        bound gets it. The decks' own addresses have sockets of their own."""
+        bound gets it. The decks' own addresses have sockets of their own. macOS refuses to bind 255.255.255.255
+        (EADDRNOTAVAIL, which stopped the sniffer and the fader listener), so there only the subnet broadcast
+        addresses are bound."""
         links = list(self.decks.values())
         if os.name == "nt" or not links or all(ipaddress.ip_address(l.address).is_loopback for l in links):
             return ["0.0.0.0"]
-        return sorted({l.broadcast for l in links} | {"255.255.255.255"})
+        limited = set() if sys.platform == "darwin" else {"255.255.255.255"}
+        return sorted({l.broadcast for l in links} | limited)
 
     def faders(self):
         """Fader start packets (type 0x02, broadcast on 50001, as a mixer sends them): a byte for each

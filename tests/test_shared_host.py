@@ -75,7 +75,17 @@ class Binding(unittest.TestCase):
         with mock.patch("deckbench.protocols.prolink.interface_macs", return_value={"169.254.4.5": bytes(6)}):
             net = Prolink(world, addresses={2: "169.254.4.5"}, broadcast="169.254.255.255")
         self.assertEqual(net.broadcast_addresses(), ["0.0.0.0"] if sys.platform == "win32" else
+                         ["169.254.255.255"] if sys.platform == "darwin" else
                          ["169.254.255.255", "255.255.255.255"])
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS only")
+    def test_every_broadcast_address_can_be_bound_on_macos(self):
+        world = World()
+        world.decks[2] = Deck(world, 2, 120.0)
+        with mock.patch("deckbench.protocols.prolink.interface_macs", return_value={"169.254.4.5": bytes(6)}):
+            net = Prolink(world, addresses={2: "169.254.4.5"}, broadcast="169.254.255.255")
+        for address in net.broadcast_addresses():
+            self.assertNotEqual(address, "255.255.255.255", "macOS cannot bind it (EADDRNOTAVAIL)")
 
 
 if __name__ == "__main__":
