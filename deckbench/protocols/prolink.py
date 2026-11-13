@@ -153,8 +153,8 @@ def read_message(conn):
     count = read_field(conn)[1]
     if not isinstance(count, int) or not 0 <= count <= 12:
         raise ValueError("invalid protocol argument count")
-    kind, tags = read_field(conn)           # the argument types
-    if kind != "b" or len(tags) != 12:
+    kind, tags = read_field(conn)           # the argument types: 12 bytes from most players, as many as there are arguments
+    if kind != "b" or not count <= len(tags) <= 12:     # from a CDJ-3000 (see tests/test_database_errors.py)
         raise ValueError("invalid protocol argument table")
     args = []
     for expected in tags[:count]:

@@ -33,10 +33,18 @@ def serve(reply):
     return query.getsockname()[1]
 
 
+MAGIC = b"\x11\x87\x23\x49\xae"
+
+
+def setup_reply(table):
+    """The reply to the session's first request: type 0x4000, two numbers, and an argument table of the given bytes."""
+    return (MAGIC + b"\x11\xff\xff\xff\xfe" + b"\x10\x40\x00" + b"\x0f\x02" + b"\x14" + len(table).to_bytes(4, "big") + table
+            + b"\x11\x00\x00\x00\x03" + b"\x11\x00\x00\x00\x01")
+
+
 class Errors(unittest.TestCase):
-    def test_an_argument_table_of_the_wrong_length_shows_the_bytes(self):
-        magic = b"\x11\x87\x23\x49\xae"
-        reply = magic + b"\x11\xff\xff\xff\xfe" + b"\x10\x40\x00" + b"\x0f\x01" + b"\x14\x00\x00\x00\x03\x06\x06\x06"
+    def test_an_argument_table_shorter_than_the_arguments_shows_the_bytes(self):
+        reply = setup_reply(b"\x06")                    # two arguments, one type
         port = serve(reply)
         with self.assertRaises(ValueError) as caught:
             with session("127.0.0.1", "127.0.0.1", 3, port, 3):
@@ -44,7 +52,24 @@ class Errors(unittest.TestCase):
         text = str(caught.exception)
         self.assertIn("invalid protocol argument table", text)
         self.assertIn("received", text)
-        self.assertIn(reply.hex(), text)
+        self.assertIn(reply[:20].hex(), text)
+
+    def test_a_table_as_long_as_the_arguments_is_read(self):
+        """A CDJ-3000 (EP122) answers with a 2 byte table for 2 arguments, not the 12 bytes the others send."""
+        port = serve(setup_reply(b"\x06\x06"))
+        with session("127.0.0.1", "127.0.0.1", 3, port, 3) as exchange:
+            self.assertTrue(callable(exchange))
+
+    def test_a_table_of_twelve_bytes_is_read(self):
+        port = serve(setup_reply(b"\x06\x06" + bytes(10)))
+        with session("127.0.0.1", "127.0.0.1", 3, port, 3) as exchange:
+            self.assertTrue(callable(exchange))
+
+    def test_a_table_longer_than_twelve_bytes_is_not(self):
+        port = serve(setup_reply(b"\x06\x06" + bytes(11)))
+        with self.assertRaises(ValueError):
+            with session("127.0.0.1", "127.0.0.1", 3, port, 3):
+                pass
 
 
 if __name__ == "__main__":
