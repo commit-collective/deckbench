@@ -1,0 +1,43 @@
+name: Bug report
+description: Something in Deckbench does not work as it should
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`python -m deckbench --version`, or the commit"
+      placeholder: "0.6.0"
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: OS and Python
+      placeholder: "Windows 11, Python 3.12"
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Launch command
+      description: Remove any token first.
+      placeholder: "python -m deckbench --numbers 5 --dj-interface Ethernet"
+  - type: textarea
+    id: setup
+    attributes:
+      label: Network and devices
+      description: Loopback, Ethernet or a VM bridge, and each device's model and firmware.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, what happened instead, and the steps to get there.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: The bench's output or an exported event log. Remove tokens and private addresses.
+      render: text

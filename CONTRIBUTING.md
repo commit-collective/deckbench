@@ -9,7 +9,7 @@ setup guidance useful across hardware, applications and platforms.
 
 ## Report a bug or test a setup
 
-[Open an issue](https://github.com/commit-collective/deckbench/issues) with:
+[Open a bug report](https://github.com/commit-collective/deckbench/issues/new?template=bug_report.yml) with:
 
 - The version or commit, OS and Python version
 - The launch command, with tokens removed
@@ -21,6 +21,11 @@ Say what you actually tested. A parser check, a passing CI job and a successful
 hardware session establish different things. Report failures and untested
 behavior too. See [platform and protocol limits](docs/prolink.md) and
 [macOS networking](docs/macos.md).
+
+## Request a feature
+
+[Open a feature request](https://github.com/commit-collective/deckbench/issues/new?template=feature_request.yml)
+with what you want to test, how far Deckbench gets you today and your setup.
 
 ## Make a change
 

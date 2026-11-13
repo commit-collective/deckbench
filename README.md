@@ -81,9 +81,10 @@ The implementation follows public protocol analyses and is exercised through
 synthetic fixtures and integration tests. Packet-layout checks do not establish
 compatibility with every physical player. See [protocol notes](docs/prolink.md).
 
-[Report an issue](https://github.com/commit-collective/deckbench/issues)
+[Report a bug](https://github.com/commit-collective/deckbench/issues/new?template=bug_report.yml)
 with the version, OS, command, expected result and log. Redact tokens and
-private addresses. Follow releases on GitHub or [Commit Collective](https://commitcollective.cc).
+private addresses. [Request a feature](https://github.com/commit-collective/deckbench/issues/new?template=feature_request.yml)
+with what you want to test and your setup. Follow releases on GitHub or [Commit Collective](https://commitcollective.cc).
 
 ## Contributing
 

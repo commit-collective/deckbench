@@ -1,0 +1,32 @@
+name: Feature request
+description: Something you would like Deckbench to do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: What do you want to test or do?
+      description: The job you have in mind, more than the feature itself.
+      placeholder: "Check that my player hands the master role back when..."
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: What Deckbench does today
+      description: How far it gets you now, or where it stops.
+  - type: textarea
+    id: setup
+    attributes:
+      label: Your setup
+      description: Players, mixer, DJ software or emulators, and the OS the bench runs on.
+      placeholder: "2x CDJ-2000NXS2, DJM-900NXS2, rekordbox 7 on macOS"
+  - type: dropdown
+    id: help
+    attributes:
+      label: Can you help try it?
+      description: Some features can only be checked on hardware.
+      options:
+        - "Yes, on my hardware"
+        - "Yes, with a capture of my link"
+        - "Not for now"
