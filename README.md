@@ -6,7 +6,7 @@
 Simulated DJ decks and mixers for testing software, hardware and emulators
 that speak Pro DJ Link. Drive them from a browser, HTTP API or scenario.
 
-<img src="https://commitcollective.cc/deckbench/hero.png" alt="Four simulated decks with transport controls, beat strips and a network event log" width="1000">
+<img src="https://commitcollective.cc/deckbench/hero.png" alt="A CDJ-3000, a CDJ-2000NXS2 and an XDJ-1000MK2 on the network with their waveforms and buttons, a simulated deck and the event log" width="1000">
 
 [Try the browser demo](https://commitcollective.cc/deckbench/app/?demo) ·
 [Real hardware setup](docs/real-network.md) · [API and options](docs/reference.md)
