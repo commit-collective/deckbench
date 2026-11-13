@@ -91,6 +91,19 @@ class Grid(unittest.TestCase):
         beats = [[0, 1, 12800], [469, 2, 12800]]
         self.assertEqual(decode_grid(grid_bytes(beats)), beats)
 
+    def test_one_to_three_extra_bytes_are_rejected(self):
+        from deckbench.waveforms import decode_grid
+        beats = [[0, 1, 13500], [445, 2, 13500], [889, 3, 13500]]
+        for extra in (1, 2, 3):
+            with self.subTest(extra=extra):
+                with self.assertRaises(ValueError):
+                    decode_grid(grid_bytes(beats, bytes(extra)))
+
+    def test_more_than_four_extra_bytes_are_rejected(self):
+        from deckbench.waveforms import decode_grid
+        with self.assertRaises(ValueError):
+            decode_grid(grid_bytes([[0, 1, 13500], [445, 2, 13500]], bytes(5)))
+
     def test_the_extra_bytes_must_match_the_header(self):
         from deckbench.waveforms import decode_grid
         data = bytearray(grid_bytes([[0, 1, 13500], [445, 2, 13500]], bytes(4)))

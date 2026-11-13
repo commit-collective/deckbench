@@ -121,7 +121,7 @@ def decode_grid(data):
     if end >= 36 and (end - 20) % 16:
         # a CDJ-3000 ends it with 4 more bytes: the header says the number of beats (byte 4) and their bytes (byte 8)
         count, size = struct.unpack_from("<II", data, 4)
-        if size == 16 * count and 20 + size <= end <= 20 + size + 4:
+        if size == 16 * count and end == 20 + size + 4:
             end = 20 + size
     if end < 36 or (end - 20) % 16:
         raise ValueError("beat grid has an unexpected length (%d bytes, start %s, end %s)"
