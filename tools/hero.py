@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT OR Apache-2.0
-"""Takes the hero picture of deckbench: its page with three players on the link and one bench deck, for the README and the website.
+"""Takes the hero picture of deckbench: its page with three players on the link and three bench decks, for the README and the website.
 
     hero.py [--out PNG] [--width 1600] [--height 1060] [--browser PATH]
 
-It starts a bench of its own (on shifted ports, so a bench or rekordbox that is running does not matter) with one deck. A CDJ-3000,
+It starts a bench of its own (on shifted ports, so a bench or rekordbox that is running does not matter) with three decks: one in a loop, one playing a player's track and one in sync. A CDJ-3000,
 a CDJ-2000NXS2 and an XDJ-1000MK2 stand in for real players on its link: they announce themselves, report their status and beats,
 and answer the database requests for their tracks' titles, waveforms and beat grids, as players do. Then it takes a screenshot of
 the page with a headless Chrome or Edge. By default the picture is written where the website keeps it,
@@ -285,6 +285,18 @@ def wait_for_players(bench, timeout=30.0):
         [(d.get("number"), (d.get("waveform") or {}).get("state"), (d.get("metadata") or {}).get("title")) for d in players]))
 
 
+def wait_for_linked(bench, number, timeout=30.0):
+    """Until a bench deck has read the real player's track it loaded."""
+    deadline, linked = time.time() + timeout, None
+    while time.time() < deadline:
+        deck = bench.state().get("decks", {}).get(str(number), {})
+        linked = deck.get("linked") or {}
+        if linked.get("state") == "ready":
+            return
+        time.sleep(0.5)
+    print("deck %d did not read its linked track: %s" % (number, json.dumps(linked)))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--out", default=SITE_HERO)
@@ -299,7 +311,7 @@ def main():
     stop = threading.Event()
     players = []
     try:
-        with Bench(numbers=[4], on=True, init={4: "play,sync"}) as bench:
+        with Bench(numbers=[4, 5, 6], on=True, init={4: "play,sync", 5: "play", 6: "play,sync"}) as bench:
             players = [Player(bench.ports, spec) for spec in PLAYERS]
 
             def run():
@@ -317,12 +329,17 @@ def main():
                     stop.wait(0.05)
 
             threading.Thread(target=run, daemon=True).start()
-            bench.post("api/deck/4/tempo/126")
+            bench.post("api/settings/track_audio/0")           # the stand-ins have no NFS for the audio
+            for n in (4, 6):
+                bench.post("api/deck/%d/tempo/126" % n)
             bench.post("api/deck/4/loop/4")
             wait_for_players(bench)
+            spec = PLAYERS[0]                                   # deck 5 plays the CDJ-3000's track from its USB
+            bench.post("api/deck/5/load/%d?source=%d&slot=3" % (spec["rbid"], spec["number"]))
+            wait_for_linked(bench, 5)
             time.sleep(1.0)
             subprocess.run([browser, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--user-data-dir=" + profile,
-                            "--window-size=%d,%d" % (args.width, args.height), "--timeout=6000", "--screenshot=" + out,
+                            "--window-size=%d,%d" % (args.width, args.height), "--timeout=9000", "--screenshot=" + out,
                             bench.url + "#events"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=90)
     finally:
         stop.set()
