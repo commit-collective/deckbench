@@ -72,5 +72,15 @@ class Errors(unittest.TestCase):
                 pass
 
 
+class Grid(unittest.TestCase):
+    def test_a_grid_of_an_unexpected_length_shows_its_bytes(self):
+        from deckbench.waveforms import decode_grid
+        data = bytes(range(40))
+        with self.assertRaises(ValueError) as caught:
+            decode_grid(data)
+        self.assertIn("40 bytes", str(caught.exception))
+        self.assertIn(data[:48].hex(), str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

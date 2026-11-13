@@ -118,7 +118,8 @@ def decode_grid(data):
     """The beats, from byte 20, 16 bytes each: their place in the bar (1 to 4), the tempo times 100 and the time in
     the track in milliseconds, little-endian. As [ms, bar, bpm * 100], the times only increasing."""
     if len(data) < 36 or (len(data) - 20) % 16:
-        raise ValueError("beat grid has an unexpected length")
+        raise ValueError("beat grid has an unexpected length (%d bytes, start %s, end %s)"
+                         % (len(data), data[:48].hex(), data[-16:].hex()))
     beats, previous = [], -1
     for offset in range(20, len(data), 16):
         bar, bpm100, ms = struct.unpack_from("<HHI", data, offset)
