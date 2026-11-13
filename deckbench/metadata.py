@@ -6,16 +6,23 @@ import struct
 import time
 
 
+SEEN_LIMIT = 160                                   # bytes of a session's answers kept for an error
+
+
 class DeadlineSocket:
     def __init__(self, sock, deadline):
         self.sock, self.deadline = sock, deadline
+        self.seen = bytearray()             # the start of what came back, for the error of a reply that does not parse
 
     def recv(self, size):
         remaining = self.deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError("metadata deadline expired")
         self.sock.settimeout(remaining)
-        return self.sock.recv(size)
+        data = self.sock.recv(size)
+        if len(self.seen) < SEEN_LIMIT:
+            self.seen += data[:SEEN_LIMIT - len(self.seen)]
+        return data
 
 
 @contextlib.contextmanager
@@ -48,7 +55,12 @@ def session(address, source, number, query_port=12523, timeout=4):
         def exchange(txid, kind, args):
             sock.settimeout(max(0.01, deadline - time.monotonic()))
             sock.sendall(message(txid, kind, args))
-            got_txid, got_kind, got_args = read_message(reader)
+            reader.seen.clear()
+            try:
+                got_txid, got_kind, got_args = read_message(reader)
+            except ValueError as error:      # say what arrived, to tell a player that answers differently from a bad stream
+                raise ValueError("%s (request %#x, received %d+ bytes: %s)"
+                                 % (error, kind, len(reader.seen), bytes(reader.seen).hex())) from error
             if got_txid != txid:
                 raise ValueError("database transaction mismatch")
             return got_kind, got_args

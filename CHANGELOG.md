@@ -10,6 +10,7 @@ Newest first. A release is a tagged commit.
 
 ### Fixes
 
+- When a player's database reply does not parse (`invalid protocol argument table`, for example), the error says the request and the first bytes that arrived, to tell a player that answers in another format from a bad stream.
 - Show the title of a player's track on a bench deck once the bench has read the track's waveform for the player.
 - Show each deck of a unit that shares one address, as an all-in-one does, on a card of its own, with no player control.
 
