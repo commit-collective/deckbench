@@ -2,6 +2,12 @@
 
 Newest first. A release is a tagged commit.
 
+## Not yet released
+
+### Fixes
+
+- Show the title of a player's track on a bench deck once the bench has read the track's waveform for the player.
+
 ## v0.6.0
 
 ### Compatibility changes

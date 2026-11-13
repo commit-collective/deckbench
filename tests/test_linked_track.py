@@ -57,6 +57,15 @@ class LinkedTrack(unittest.TestCase):
         self.assertEqual(self.net.linked_waveform(3)[1]["grid"], GRID)
         self.assertEqual(self.world.events.since(0)[-1]["kind"], "linked_track_read")
 
+    def test_a_track_read_for_its_player_gets_its_title(self):
+        self.world.load_track(self.deck, 57, source=2, slot=3)
+        key, _ = self.net.linked_key(self.link, [d for d in self.net.monitor.snapshot() if d["online"]])
+        self.net.waves[key] = {"data": {"overview": b"\0" * 12, "detail": b"\0" * 300, "grid": GRID, "style": {}},
+                               "used": 0, "meta": None}         # read for the player, with no title
+        reads, titles = self.rounds(2)
+        self.assertEqual((reads, titles), ([], [57]))
+        self.assertEqual(self.net.describe(self.deck)["track"], "Real track")
+
     def test_the_pitch_is_what_it_plays_at_over_the_track_tempo(self):
         self.world.load_track(self.deck, 57, source=2, slot=3)
         self.rounds(2)

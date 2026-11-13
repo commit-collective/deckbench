@@ -1571,7 +1571,22 @@ class Prolink(Protocol):
                 self.wave_failed = {k: v for k, v in self.wave_failed.items() if k in wanted and now - v[0] < 60}
                 todo = [k for k in wanted if k not in self.waves and k not in self.wave_failed
                         and (self.auto_waves or k in linked)]
+                # a bench deck's track whose waveform was read for a player: its title is still to read
+                untitled = [k for k in linked if k in self.waves and not self.waves[k].get("titled")]
             self.follow_linked(devices)
+            if not todo and untitled:
+                key = untitled[0]
+                sender, source = wanted[key]
+                meta = None
+                try:
+                    meta = read_track_metadata(source["ip"], sender.address, sender.number, key[3], key[4], self.ports.query)
+                except (OSError, EOFError, ValueError) as error:
+                    log("title of %s on %s not read: %s" % (key[4], key[0], error))
+                with self.wave_lock:
+                    if key in self.waves:
+                        self.waves[key].update(meta=meta, titled=True)
+                self.follow_linked([d for d in self.monitor.snapshot() if d["online"]])
+                continue
             if not todo:
                 continue
             key = todo[0]
@@ -1598,7 +1613,7 @@ class Prolink(Protocol):
                 except (OSError, EOFError, ValueError) as error:
                     log("title of %s on %s not read: %s" % (key[4], key[0], error))
             with self.wave_lock:
-                self.waves[key] = {"data": data, "used": time.time(), "meta": meta}
+                self.waves[key] = {"data": data, "used": time.time(), "meta": meta, "titled": key in linked}
                 while len(self.waves) > self.WAVES:
                     self.waves.popitem(last=False)
             self.world.events.add("waveform_read", source=key[1], slot=key[3], rbid=key[4],
