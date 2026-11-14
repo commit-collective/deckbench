@@ -29,6 +29,7 @@ jobs:
           set -o pipefail
           python -u -m unittest discover -s tests -p test_macos.py -v 2>&1 | tee test-output.txt
           python -u -m unittest discover -s tests -p test_demo.py -v 2>&1 | tee -a test-output.txt
+          python -u -m unittest discover -s tests -p test_shared_host.py -v 2>&1 | tee -a test-output.txt
       - name: Check installed package
         run: |
           python -m pip install --no-deps .
