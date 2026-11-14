@@ -10,6 +10,9 @@ Newest first. A release is a tagged commit.
 
 ### Fixes
 
+- Read the beat grid of a CDJ-3000 (EP122), which ends 4 bytes after its last beat; the header gives the number of beats.
+- Read the database replies of a CDJ-3000 (EP122), which writes an argument-type table as long as its argument count instead of 12 bytes. Track info and waveforms of those players failed with `invalid protocol argument table`.
+- When a player's database reply does not parse (`invalid protocol argument table`, for example), the error says the request and the first bytes that arrived, to tell a player that answers in another format from a bad stream.
 - Show the title of a player's track on a bench deck once the bench has read the track's waveform for the player.
 - Show each deck of a unit that shares one address, as an all-in-one does, on a card of its own, with no player control.
 
