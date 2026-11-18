@@ -565,7 +565,7 @@ function devicesOf(state) {
 }
 
 /* A device on the link: its address, and its number too when it shares the address (an all-in-one's decks and mixer) */
-const devKey = (d) => d.shared_address && d.number != null ? d.ip + "#" + d.number : d.ip;
+const devKey = (d) => d.number != null ? d.ip + "#" + d.number : d.ip;
 const devId = (d) => "dev-" + devKey(d).replace(/[^\w]/g, "-");
 
 /* The waveform of a deck's sound file, got from the bench once for each file: null while it comes, or when the deck has none. */

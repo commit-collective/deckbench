@@ -34,6 +34,7 @@ djl-analysis, Beat Link); docs/prolink.md has what is set, and what a unit was
 found to need.
 """
 import select
+from contextlib import contextmanager
 import random
 import os
 import sys
@@ -58,6 +59,14 @@ BROADCAST = "127.255.255.255"
 DB_PORT = 1051
 QUERY_PORT = 12523
 BEAT_PORT, UPDATE_PORT, ANNOUNCE_PORT = 50001, 50002, 50000
+
+
+@contextmanager
+def handling_packet():
+    try:
+        yield
+    except (ValueError, IndexError, KeyError, TypeError, struct.error) as error:
+        log("ignored an invalid Link packet: %s" % error)
 
 
 class PortError(OSError):
@@ -442,42 +451,43 @@ class LinkDeck:
                 return
             if not self.net.accepts_source(addr[0]):
                 continue
-            self.net.monitor.feed(data, addr[0], self.ports.beat, to=self.address)
-            if not deck.enabled or deck.unplugged or len(data) < 0x25 or data[:10] != MAGIC:
-                continue
-            kind, sender = data[0x0A], data[0x21]
-            # The broadcasts on this port reach this socket too on some systems (Windows): every player's beats, the
-            # mixer's on-air report, a CDJ-3000's position, fader start. They are not for this deck, and the monitor
-            # keeps them. Another kind is said once for each sender, not at each packet.
-            if kind not in (0x26, 0x2A) + BROADCAST_KINDS and (kind, sender) not in self.unknown_said:
-                self.unknown_said.add((kind, sender))
-                log("%s: packet type %#04x from %d, %d bytes (said once): %s"
-                    % (deck.name, kind, sender, len(data), data[0x1F:].hex()))
-            if kind == 0x26:                                     # master hand-off request
-                with world.lock:
-                    world.events.add("handoff_request", deck=deck.number, sender=sender, granted=bool(deck.master))
-                    if not deck.master:
-                        log("%s: hand-off request from %d, but it is not the master"
-                            % (deck.name, sender))
-                        continue
-                    log("%s: yields the master role to %d" % (deck.name, sender))
-                    self.handing_to = sender
-                reply = header(0x27, self.name) + bytes([
-                    0x01, 0x00, self.number, 0x00, 0x08, 0x00, 0x00, 0x00, self.number,
-                    0x00, 0x00, 0x00, 0x01])
-                self.send(out, bytes(reply), (addr[0], self.ports.beat))
-                self.net.runtime.later(4.0, self.cancel_handoff, sender)
-                world.changed()
-            elif kind == 0x2A:                                   # a sync command
-                command = data[0x2B] if len(data) > 0x2B else 0
-                log("%s: sync command %#x from %d" % (deck.name, command, sender))
-                world.events.add("sync_command", deck=deck.number, sender=sender, command=command)
-                if command == 0x10:
-                    world.set_sync(deck, True)
-                elif command == 0x20:
-                    world.set_sync(deck, False)
-                elif command == 0x01:
-                    self.net.command_master(deck, sender, addr[0])
+            with handling_packet():
+                self.net.monitor.feed(data, addr[0], self.ports.beat, to=self.address)
+                if not deck.enabled or deck.unplugged or len(data) < 0x25 or data[:10] != MAGIC:
+                    continue
+                kind, sender = data[0x0A], data[0x21]
+                # The broadcasts on this port reach this socket too on some systems (Windows): every player's beats, the
+                # mixer's on-air report, a CDJ-3000's position, fader start. They are not for this deck, and the monitor
+                # keeps them. Another kind is said once for each sender, not at each packet.
+                if kind not in (0x26, 0x2A) + BROADCAST_KINDS and (kind, sender) not in self.unknown_said:
+                    self.unknown_said.add((kind, sender))
+                    log("%s: packet type %#04x from %d, %d bytes (said once): %s"
+                        % (deck.name, kind, sender, len(data), data[0x1F:].hex()))
+                if kind == 0x26:                                     # master hand-off request
+                    with world.lock:
+                        world.events.add("handoff_request", deck=deck.number, sender=sender, granted=bool(deck.master))
+                        if not deck.master:
+                            log("%s: hand-off request from %d, but it is not the master"
+                                % (deck.name, sender))
+                            continue
+                        log("%s: yields the master role to %d" % (deck.name, sender))
+                        self.handing_to = sender
+                    reply = header(0x27, self.name) + bytes([
+                        0x01, 0x00, self.number, 0x00, 0x08, 0x00, 0x00, 0x00, self.number,
+                        0x00, 0x00, 0x00, 0x01])
+                    self.send(out, bytes(reply), (addr[0], self.ports.beat))
+                    self.net.runtime.later(4.0, self.cancel_handoff, sender)
+                    world.changed()
+                elif kind == 0x2A:                                   # a sync command
+                    command = data[0x2B] if len(data) > 0x2B else 0
+                    log("%s: sync command %#x from %d" % (deck.name, command, sender))
+                    world.events.add("sync_command", deck=deck.number, sender=sender, command=command)
+                    if command == 0x10:
+                        world.set_sync(deck, True)
+                    elif command == 0x20:
+                        world.set_sync(deck, False)
+                    elif command == 0x01:
+                        self.net.command_master(deck, sender, addr[0])
 
     # -- the master role --
     def cancel_handoff(self, target):
@@ -884,7 +894,8 @@ class Prolink(Protocol):
             except (ValueError, KeyError, TypeError, AttributeError):
                 continue                    # not a packet of the feed: left out
             if link_port in known and payload:
-                self.monitor.feed(payload, source, link_port, to=to)
+                with handling_packet():
+                    self.monitor.feed(payload, source, link_port, to=to)
 
     def stop(self):
         """Stop this protocol's workers and release its sockets and timers."""
@@ -1120,31 +1131,32 @@ class Prolink(Protocol):
                 return
             if not self.accepts_source(addr[0]):
                 continue
-            self.monitor.feed(data, addr[0], self.ports.beat)
-            flags = parse_on_air(data)
-            if flags is not None:
-                with self.world.lock:
-                    own_mixer = (addr[0] == self.mixer.address and data[0x21] == self.mixer.number
-                                 and data[0x0B:0x1F].rstrip(b"\0") == self.mixer.name)
-                    if own_mixer and not self.mixer.on:
-                        continue       # queued packets must not undo mixer_gone()
-                    for channel, on in flags.items():
-                        deck = self.world.decks.get(channel)
-                        if deck and deck.on_air != on:
-                            deck.on_air = on
-                            self.world.events.add("on_air", deck=channel, on=on, sender=data[0x21])
-                self.world.changed()
-                continue
-            if len(data) < 0x28 or data[:10] != MAGIC or data[0x0A] != 0x02:
-                continue
-            log("fader start from %d (%s): %s" % (data[0x21], data[0x0B:0x1F].rstrip(b"\0").decode("latin-1"),
-                                                  data[0x24:0x28].hex()))
-            for i in range(4):
-                deck = self.world.decks.get(i + 1)
-                if deck and deck.enabled and not deck.unplugged and data[0x24 + i] in (0, 1):
-                    action = "start" if data[0x24 + i] == 0 else "stop"
-                    self.world.set_play(deck, action == "start")
-                    self.world.events.add("fader_start", deck=i + 1, action=action, sender=data[0x21])
+            with handling_packet():
+                self.monitor.feed(data, addr[0], self.ports.beat)
+                flags = parse_on_air(data)
+                if flags is not None:
+                    with self.world.lock:
+                        own_mixer = (addr[0] == self.mixer.address and data[0x21] == self.mixer.number
+                                     and data[0x0B:0x1F].rstrip(b"\0") == self.mixer.name)
+                        if own_mixer and not self.mixer.on:
+                            continue       # queued packets must not undo mixer_gone()
+                        for channel, on in flags.items():
+                            deck = self.world.decks.get(channel)
+                            if deck and deck.on_air != on:
+                                deck.on_air = on
+                                self.world.events.add("on_air", deck=channel, on=on, sender=data[0x21])
+                    self.world.changed()
+                    continue
+                if len(data) < 0x28 or data[:10] != MAGIC or data[0x0A] != 0x02:
+                    continue
+                log("fader start from %d (%s): %s" % (data[0x21], data[0x0B:0x1F].rstrip(b"\0").decode("latin-1"),
+                                                      data[0x24:0x28].hex()))
+                for i in range(4):
+                    deck = self.world.decks.get(i + 1)
+                    if deck and deck.enabled and not deck.unplugged and data[0x24 + i] in (0, 1):
+                        action = "start" if data[0x24 + i] == 0 else "stop"
+                        self.world.set_play(deck, action == "start")
+                        self.world.events.add("fader_start", deck=i + 1, action=action, sender=data[0x21])
 
     # -- what the World asks --
     def external_master_bpm(self):
@@ -1584,7 +1596,8 @@ class Prolink(Protocol):
                 todo = [k for k in wanted if k not in self.waves and k not in self.wave_failed
                         and (self.auto_waves or k in linked)]
                 # a bench deck's track whose waveform was read for a player: its title is still to read
-                untitled = [k for k in linked if k in self.waves and not self.waves[k].get("titled")]
+                untitled = [k for k in linked if k in self.waves and not self.waves[k].get("titled")
+                            and now >= self.waves[k].get("retry_title", 0)]
             self.follow_linked(devices)
             if not todo and untitled:
                 key = untitled[0]
@@ -1596,7 +1609,7 @@ class Prolink(Protocol):
                     log("title of %s on %s not read: %s" % (key[4], key[0], error))
                 with self.wave_lock:
                     if key in self.waves:
-                        self.waves[key].update(meta=meta, titled=True)
+                        self.waves[key].update(meta=meta, titled=meta is not None, retry_title=now + 30)
                 self.follow_linked([d for d in self.monitor.snapshot() if d["online"]])
                 continue
             if not todo:
@@ -1625,7 +1638,8 @@ class Prolink(Protocol):
                 except (OSError, EOFError, ValueError) as error:
                     log("title of %s on %s not read: %s" % (key[4], key[0], error))
             with self.wave_lock:
-                self.waves[key] = {"data": data, "used": time.time(), "meta": meta, "titled": key in linked}
+                self.waves[key] = {"data": data, "used": time.time(), "meta": meta, "titled": meta is not None,
+                                   "retry_title": now + 30 if key in linked else 0}
                 while len(self.waves) > self.WAVES:
                     self.waves.popitem(last=False)
             self.world.events.add("waveform_read", source=key[1], slot=key[3], rbid=key[4],
@@ -1714,17 +1728,18 @@ class Prolink(Protocol):
         eligible = set()
         for device in devices:
             number = device["number"]
+            shared = sum(d["ip"] == device["ip"] for d in devices) > 1 or device["name"].upper() in ("XDJ-AZ", "XDJ-XZ")
             available = (device["online"] and device["kind"] == "player"
                          and (number in (1, 2, 3, 4) or device["name"].upper() in ("CDJ-3000", "CDJ-3000X") and number in (5, 6))
                          and sum(d["online"] and d["number"] == number for d in devices) == 1
-                         and sum(d["online"] and d["ip"] == device["ip"] for d in devices) == 1
+                         and not shared
                          and not any(l.deck.enabled and l.number == number for l in self.decks.values()))
             identity = self.control_identity(device)
             if available:
                 eligible.add(identity)
             device["transport_available"] = bool(available)
             # an all-in-one (an XDJ-XZ or XDJ-AZ) has several decks and a mixer on one address: untried, so not controlled
-            device["shared_address"] = sum(d["online"] and d["ip"] == device["ip"] for d in devices) > 1
+            device["shared_address"] = shared
             device["transport_method"] = self.transport_method(device)
             device["fader_start_supported"] = device["name"].upper() not in self.NO_FADER_START
             device["transport_armed"] = bool(available and (self.control_on or identity in self.player_controls))
@@ -2336,58 +2351,59 @@ class Prolink(Protocol):
                 bound = s.getsockname()
                 port = bound[1]
                 wide_socket = bound[0] in wide
-                self.monitor.feed(data, addr[0], port, to="*" if wide_socket else bound[0])
-                if len(data) < 0x30 or data[:10] != MAGIC:
-                    continue
-                if port == self.ports.update and data[0x0A] == 0x19 and not wide_socket:
-                    self.load_command(bound[0], data)        # a track to load, sent to one of the decks
-                    continue
-                if port == self.ports.announce and startup.claimed_number(data) is not None:
-                    self.defend(startup.claimed_number(data), addr[0])
-                kind = "keep-alive" if port == self.ports.announce and data[0x0A] == 0x06 else "status"
-                name, number, declared = self.monitor.identify(kind, data)
-                if not self.matches_target(name, number, addr[0]) and not (declared and self.matches_target(name, number, declared)):
-                    continue
-                with world.lock:
-                    if port == self.ports.announce and data[0x0A] == 0x06:
-                        if unit["number"] != data[0x24]:
-                            unit["number"] = data[0x24]
-                            log("the unit under test is player %d" % data[0x24])
-                            world.events.add("unit_seen", number=data[0x24])
-                        unit["ip"] = ".".join(str(b) for b in data[0x2C:0x30])
-                        unit["announced"] = time.time()
-                    elif port == self.ports.update and data[0x0A] == 0x0A and len(data) >= 0xA7:
-                        master = bool(data[0x89] & 0x20)
-                        unit["syncn"] = struct.unpack(">I", data[0x84:0x88])[0]
-                        seen = (data[0x89], data[0x9E], data[0x9F], unit["syncn"])
-                        if seen != unit.get("flags"):
-                            unit["flags"] = seen
-                            log("the unit's status: flags %#04x, master meaningful %d, hand-off to "
-                                "%#04x, sync counter %d" % seen)
-                        if master != unit["master"]:
-                            log("the unit under test %s the tempo master"
-                                % ("is now" if master else "is no longer"))
-                            world.events.add("unit_master", on=master)
-                        unit["master"] = master
-                        unit["seen"], unit["beat"] = time.time(), data[0xA6]
-                        for key, bit, kind in (("playing", 0x40, "unit_play"), ("synced", 0x10, "unit_sync"),
-                                               ("on_air", 0x08, None)):
-                            value = bool(data[0x89] & bit)
-                            if value != unit[key] and kind:
-                                world.events.add(kind, on=value)
-                            unit[key] = value
-                        # The BPM field is the track's; the tempo it plays at is that
-                        # times the pitch (0x100000 is no change), as on a CDJ.
-                        unit["track_bpm"] = tempo_of(data[0x92:0x94])
-                        unit["pitch"] = struct.unpack(">I", data[0x8C:0x90])[0]
-                        unit["bpm"] = round(unit["track_bpm"] * unit["pitch"] / PITCH_NORMAL, 2) if unit["track_bpm"] else None
-                        tempo = (unit["track_bpm"], unit["pitch"])
-                        if tempo != unit.get("tempo"):
-                            unit["tempo"] = tempo
-                            log("the unit's tempo: track %.2f BPM, pitch %#x: %.2f BPM" % (tempo + (unit["bpm"],))
-                                if unit["bpm"] else "the unit's tempo: none (no track)")
-                        if master:
-                            for link in self.decks.values():
-                                if link.deck.master and link.handing_to == data[0x21]:
-                                    link.finish_handoff()
-                world.changed()
+                with handling_packet():
+                    self.monitor.feed(data, addr[0], port, to="*" if wide_socket else bound[0])
+                    if len(data) < 0x30 or data[:10] != MAGIC:
+                        continue
+                    if port == self.ports.update and data[0x0A] == 0x19 and not wide_socket:
+                        self.load_command(bound[0], data)        # a track to load, sent to one of the decks
+                        continue
+                    if port == self.ports.announce and startup.claimed_number(data) is not None:
+                        self.defend(startup.claimed_number(data), addr[0])
+                    kind = "keep-alive" if port == self.ports.announce and data[0x0A] == 0x06 else "status"
+                    name, number, declared = self.monitor.identify(kind, data)
+                    if not self.matches_target(name, number, addr[0]) and not (declared and self.matches_target(name, number, declared)):
+                        continue
+                    with world.lock:
+                        if port == self.ports.announce and data[0x0A] == 0x06:
+                            if unit["number"] != data[0x24]:
+                                unit["number"] = data[0x24]
+                                log("the unit under test is player %d" % data[0x24])
+                                world.events.add("unit_seen", number=data[0x24])
+                            unit["ip"] = ".".join(str(b) for b in data[0x2C:0x30])
+                            unit["announced"] = time.time()
+                        elif port == self.ports.update and data[0x0A] == 0x0A and len(data) >= 0xA7:
+                            master = bool(data[0x89] & 0x20)
+                            unit["syncn"] = struct.unpack(">I", data[0x84:0x88])[0]
+                            seen = (data[0x89], data[0x9E], data[0x9F], unit["syncn"])
+                            if seen != unit.get("flags"):
+                                unit["flags"] = seen
+                                log("the unit's status: flags %#04x, master meaningful %d, hand-off to "
+                                    "%#04x, sync counter %d" % seen)
+                            if master != unit["master"]:
+                                log("the unit under test %s the tempo master"
+                                    % ("is now" if master else "is no longer"))
+                                world.events.add("unit_master", on=master)
+                            unit["master"] = master
+                            unit["seen"], unit["beat"] = time.time(), data[0xA6]
+                            for key, bit, kind in (("playing", 0x40, "unit_play"), ("synced", 0x10, "unit_sync"),
+                                                   ("on_air", 0x08, None)):
+                                value = bool(data[0x89] & bit)
+                                if value != unit[key] and kind:
+                                    world.events.add(kind, on=value)
+                                unit[key] = value
+                            # The BPM field is the track's; the tempo it plays at is that
+                            # times the pitch (0x100000 is no change), as on a CDJ.
+                            unit["track_bpm"] = tempo_of(data[0x92:0x94])
+                            unit["pitch"] = struct.unpack(">I", data[0x8C:0x90])[0]
+                            unit["bpm"] = round(unit["track_bpm"] * unit["pitch"] / PITCH_NORMAL, 2) if unit["track_bpm"] else None
+                            tempo = (unit["track_bpm"], unit["pitch"])
+                            if tempo != unit.get("tempo"):
+                                unit["tempo"] = tempo
+                                log("the unit's tempo: track %.2f BPM, pitch %#x: %.2f BPM" % (tempo + (unit["bpm"],))
+                                    if unit["bpm"] else "the unit's tempo: none (no track)")
+                            if master:
+                                for link in self.decks.values():
+                                    if link.deck.master and link.handing_to == data[0x21]:
+                                        link.finish_handoff()
+                    world.changed()

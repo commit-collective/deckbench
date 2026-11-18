@@ -35,9 +35,16 @@ def _name(text):
     return _opaque(text.encode("utf-16-le"))
 
 
+def unpack(fmt, data, at=0):
+    try:
+        return struct.unpack_from(fmt, data, at)
+    except struct.error as error:
+        raise NfsError("a short reply") from error
+
+
 def _attributes(data, at):
     """The size and the modification time of NFS version 2 file attributes (17 words) at `at`."""
-    words = struct.unpack_from(">17I", data, at)
+    words = unpack(">17I", data, at)
     return {"type": words[0], "size": words[5], "mtime": (words[13], words[14])}
 
 
@@ -77,13 +84,13 @@ class Client:
         """The results of an accepted reply. NfsError if it was refused."""
         if len(data) < 24:
             raise NfsError("a short reply")
-        _, kind, stat = struct.unpack_from(">III", data)
+        _, kind, stat = unpack(">III", data)
         if kind != 1 or stat != 0:
             raise NfsError("the call was refused")
-        length = struct.unpack_from(">I", data, 16)[0]
+        length = unpack(">I", data, 16)[0]
         at = 20 + length + (-length % 4)
-        if struct.unpack_from(">I", data, at)[0] != 0:
-            raise NfsError("the call was not accepted (%d)" % struct.unpack_from(">I", data, at)[0])
+        if unpack(">I", data, at)[0] != 0:
+            raise NfsError("the call was not accepted (%d)" % unpack(">I", data, at)[0])
         return data[at + 4:]
 
     def calls(self, port, prog, vers, proc, many):
@@ -113,7 +120,7 @@ class Client:
                 continue
             if len(data) < 4:
                 continue
-            entry = waiting.pop(struct.unpack_from(">I", data)[0], None)
+            entry = waiting.pop(unpack(">I", data)[0], None)
             if entry:
                 out[entry[0]] = self.results(data)
         return out
@@ -126,7 +133,7 @@ class Client:
         """The UDP port of a service, from the portmapper."""
         if (prog, vers) not in self.ports:
             got = self.call(self.portmap_port, PORTMAP, 2, 3, struct.pack(">IIII", prog, vers, 17, 0))
-            port = struct.unpack_from(">I", got)[0]
+            port = unpack(">I", got)[0]
             if not port:
                 raise NfsError("%s has no service %d version %d" % (self.address, prog, vers))
             self.ports[(prog, vers)] = port
@@ -135,16 +142,18 @@ class Client:
     def mount(self, path):
         """The handle of an exported folder (/B/, /C/)."""
         got = self.call(self.port(MOUNT, 1), MOUNT, 1, 1, _name(path))
-        status = struct.unpack_from(">I", got)[0]
+        status = unpack(">I", got)[0]
         if status:
             raise NotFound("%s does not export %s (%d)" % (self.address, path, status)) if status == NOENT else \
                 NfsError("%s refused to mount %s (%d)" % (self.address, path, status))
+        if len(got) < 36:
+            raise NfsError("a short file handle")
         return got[4:36]
 
     def lookup(self, folder, name):
         """(handle, attributes) of `name` in the folder."""
         got = self.call(self.port(NFS, 2), NFS, 2, 4, folder + _name(name))
-        status = struct.unpack_from(">I", got)[0]
+        status = unpack(">I", got)[0]
         if status:
             raise NotFound(name) if status == NOENT else NfsError("looking up %s: error %d" % (name, status))
         return got[4:36], _attributes(got, 36)
@@ -178,10 +187,10 @@ class Client:
             offsets = range(done, min(size, done + batch), CHUNK)
             answers = self.calls(nfs, NFS, 2, 6, [handle + struct.pack(">III", o, CHUNK, 0) for o in offsets])
             for offset, got in zip(offsets, answers):
-                status = struct.unpack_from(">I", got)[0]
+                status = unpack(">I", got)[0]
                 if status:
                     raise NfsError("reading the file: error %d" % status)
-                length = struct.unpack_from(">I", got, 72)[0]
+                length = unpack(">I", got, 72)[0]
                 data = got[76:76 + length]
                 want = min(CHUNK, size - offset)
                 if len(data) < want:

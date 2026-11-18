@@ -12,13 +12,16 @@ on:
         required: true
         default: "v0.1.0"
 
+permissions:
+  contents: read
+
 jobs:
   release:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
