@@ -11,16 +11,16 @@ Newest first. A release is a tagged commit.
 ### Observation and diagnostics
 
 - A player's database reply that does not parse names the request and the first bytes that came back.
+- Show each deck of a unit that shares one address, as an all-in-one does, on a card of its own, with no player control. Tried only without a unit.
 
 ### Fixes
 
-- Reject invalid tempos before they interrupt audio or page updates.
-- Check listener addresses for token-free API requests and limit shared audio loads to uploads.
-- Bound scenario requests and report incomplete network file replies.
+- Refuse a tempo of 0, a negative one or `nan`, which stopped the page's updates and the decks' sound.
+- Refuse API requests made through a host name that is not the bench's own, as a page using DNS rebinding would.
+- Load only uploaded sound files for a phone, and refuse a scenario over 1 MB.
 - Start on a real network on macOS, where the sniffer and the fader listener failed with `Can't assign requested address`. A broadcast address of 255.255.255.255 is refused there with the one to use.
 - Read the track info, waveforms and beat grids of a CDJ-3000.
 - Show the title of a player's track on a bench deck once the bench has read the track's waveform for the player.
-- Show each deck of a unit that shares one address, as an all-in-one does, on a card of its own, with no player control. Tried only without a unit.
 
 ## v0.6.0
 
