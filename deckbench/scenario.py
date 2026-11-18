@@ -59,6 +59,7 @@ import json
 import threading
 import time
 
+from .core import number
 from .matching import explain, matches
 
 DECK_ACTIONS = ("on", "off", "play", "stop", "sync", "unsync", "master", "release", "loop", "unloop", "load", "tempo",
@@ -106,6 +107,12 @@ class Scenario:
                 for need in kinds:
                     if need not in step:
                         raise ScenarioError("step %r: %s needs %s" % (step, do, need))
+        try:
+            for field, bounds in (("bpm", (1, 655.34)), ("seconds", (0, 86400)), ("at", (0, 86400))):
+                if field in step:
+                    number(step[field], *bounds)
+        except ValueError as error:
+            raise ScenarioError(str(error)) from error
         if do == "player" and ("press" in step) == ("load" in step):
             raise ScenarioError("step %r: player needs press or load" % (step,))
 

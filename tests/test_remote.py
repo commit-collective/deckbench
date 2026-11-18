@@ -44,6 +44,14 @@ class Open(unittest.TestCase):
         self.assertEqual(call(self.url + "api/state")[0], 200)
         self.assertEqual(call(self.url + "api/deck/2/on/1", "POST")[0], 200)
 
+    def test_unknown_host_on_state(self):
+        self.assertEqual(call(self.url + "api/state", headers={"Host": "other.invalid"})[0], 403)
+
+    def test_invalid_tempo_leaves_state_readable(self):
+        for tempo in ("nan", "0", "inf"):
+            self.assertEqual(call(self.url + "api/deck/2/tempo/" + tempo, "POST")[0], 400)
+        self.assertIsInstance(json.loads(call(self.url + "api/state")[2]), dict)
+
     def test_the_page_itself_is_served_from_its_own_origin(self):
         origin = self.url.rstrip("/")
         self.assertEqual(call(self.url + "api/state", headers={"Origin": origin})[0], 200)

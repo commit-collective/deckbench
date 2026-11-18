@@ -80,6 +80,7 @@ import threading
 import sys
 import time
 from urllib.parse import parse_qs, unquote, urlparse
+import socket
 import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -93,6 +94,10 @@ UI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
 UPLOAD_LIMIT = 300 * 1024 * 1024          # bytes of one uploaded sound file
 KINDS = {".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml",
          ".png": "image/png", ".ico": "image/x-icon"}
+
+
+def encode_json(value, **options):
+    return json.dumps(value, allow_nan=False, **options)
 
 
 def examples():
@@ -195,18 +200,27 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
             """False (after answering) if this request to the API must not be done: from a page that is not allowed,
             or without the token."""
             if self.server.closed:                  # sharing stopped: a request that was on its way
-                self.send(503, json.dumps({"error": "the bench no longer shares on this address"}))
+                self.send(503, encode_json({"error": "the bench no longer shares on this address"}))
                 return False
+            if not self.server.token:
+                local = self.connection.getsockname()[0]
+                names = {local, socket.gethostname().lower(), self.server.server_name.lower()}
+                if ipaddress.ip_address(local).is_loopback:
+                    names.add("localhost")
+                authority = self.headers.get("Host", "")
+                if authority.lower() not in names | {name + ":" + str(self.server.server_port) for name in names}:
+                    self.send(403, '{"error": "unknown listener address"}')
+                    return False
             origin = self.headers.get("Origin")
             if origin and origin.rstrip("/") not in self.server.allowed and origin != "http://" + (self.headers.get("Host") or ""):
-                self.send(403, json.dumps({"error": "this page may not use the bench: start it with --allow-origin %s" % origin}))
+                self.send(403, encode_json({"error": "this page may not use the bench: start it with --allow-origin %s" % origin}))
                 return False
             token = self.server.token
             if token and not preflight:             # a browser sends no credentials with a preflight
                 given = (self.headers.get("Authorization") or "")[7:] if (self.headers.get("Authorization") or "").startswith("Bearer ") \
                     else parse_qs(urlparse(self.path).query).get("token", [""])[0]
                 if not hmac.compare_digest(given.encode("utf-8"), token.encode("utf-8")):
-                    self.send(401, json.dumps({"error": "the bench wants its token (?token=... or Authorization: Bearer ...)"}))
+                    self.send(401, encode_json({"error": "the bench wants its token (?token=... or Authorization: Bearer ...)"}))
                     return False
             return True
 
@@ -233,7 +247,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
             self.cors()
             self.end_headers()
             def send_event(kind, data):
-                body = data if isinstance(data, str) else json.dumps(data)
+                body = data if isinstance(data, str) else encode_json(data)
                 self.wfile.write(("event: %s\ndata: %s\n\n" % (kind, body)).encode("utf-8"))
 
             try:
@@ -243,7 +257,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 while not self.server.closed:
                     snap = world.snapshot()
                     now = snap.pop("now")
-                    key = json.dumps(snap, sort_keys=True)
+                    key = encode_json(snap, sort_keys=True)
                     if key != last["state"] or time.time() - beat > 1.0:    # also a clock now and then, for the beats
                         last["state"], beat = key, time.time()
                         send_event("state", dict(snap, now=now))
@@ -253,7 +267,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                     for item in world.events.since(sent_events):
                         sent_events = item["n"] + 1
                         send_event("event", item)
-                    sc = json.dumps(runner.snapshot(), sort_keys=True)
+                    sc = encode_json(runner.snapshot(), sort_keys=True)
                     if sc != last["scenario"]:
                         last["scenario"] = sc
                         send_event("scenario", sc)
@@ -273,30 +287,30 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 with open(os.path.join(UI, name), "rb") as f:
                     self.send(200, f.read(), KINDS.get(os.path.splitext(name)[1], "application/octet-stream"))
             elif path == "/api/state":
-                self.send(200, json.dumps(world.snapshot()))
+                self.send(200, encode_json(world.snapshot()))
             elif path == "/api/network":
-                self.send(200 if network else 404, json.dumps(network.snapshot() if network else
+                self.send(200 if network else 404, encode_json(network.snapshot() if network else
                           {'error': 'Network setup is not enabled for this embedded bench'}))
             elif path == "/api/uploads":
-                self.send(200, json.dumps(upload_store.summary(folder)))
+                self.send(200, encode_json(upload_store.summary(folder)))
             elif path == "/api/share":
                 if not self.local_page():
-                    return self.send(403, json.dumps({"error": "only a page on the bench's own machine sees how it is shared"}))
-                self.send(200, json.dumps(share_state(listing=True)))
+                    return self.send(403, encode_json({"error": "only a page on the bench's own machine sees how it is shared"}))
+                self.send(200, encode_json(share_state(listing=True)))
             elif re.fullmatch(r"/api/player/[\d.]+/waveform", path):
                 number = parse_qs(urlparse(self.path).query).get("number", [None])[0]
                 answer = next((p.waveform_asset(path.split("/")[3], number) for p in world.protocols
                                if hasattr(p, "waveform_asset")), (404, {"error": "no link protocol here"}))
-                self.send(answer[0], json.dumps(answer[1]))
+                self.send(answer[0], encode_json(answer[1]))
             elif re.fullmatch(r"/api/deck/\d+/track-waveform", path):
                 answer = next((p.linked_waveform(int(path.split("/")[3])) for p in world.protocols
                                if hasattr(p, "linked_waveform")), (404, {"error": "no link protocol here"}))
-                self.send(answer[0], json.dumps(answer[1]))
+                self.send(answer[0], encode_json(answer[1]))
             elif re.fullmatch(r"/api/deck/\d+/waveform", path):
                 deck = world.decks.get(int(path.split("/")[3]))
                 track = deck.audio if deck else None
                 if track:
-                    self.send(200, json.dumps(dict(track.peaks(), file=os.path.basename(track.path))))
+                    self.send(200, encode_json(dict(track.peaks(), file=os.path.basename(track.path))))
                 else:
                     self.send(404, '{"error": "that deck has no sound file"}')
             elif re.fullmatch(r"/api/deck/\d+/audio\.wav", path):
@@ -314,23 +328,23 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                     since, limit = 0, 400
                 found = [p for p in world.protocols if hasattr(p, "monitor")]
                 if not found:
-                    self.send(200, json.dumps({"packets": [], "next": 0, "counts": {}}))
+                    self.send(200, encode_json({"packets": [], "next": 0, "counts": {}}))
                 else:
-                    self.send(200, json.dumps(found[0].monitor.since(since, query.get("noisy", ["1"])[0] != "0", max(1, min(limit, 20000)))))
+                    self.send(200, encode_json(found[0].monitor.since(since, query.get("noisy", ["1"])[0] != "0", max(1, min(limit, 20000)))))
             elif path == "/api/unit":
-                self.send(200, json.dumps(world.unit_state()))
+                self.send(200, encode_json(world.unit_state()))
             elif path == "/api/examples":
-                self.send(200, json.dumps(examples()))
+                self.send(200, encode_json(examples()))
             elif path == "/api/ready":
-                self.send(200, json.dumps(dict(world.info, ready=True)))
+                self.send(200, encode_json(dict(world.info, ready=True)))
             elif path == "/api/scenario":
-                self.send(200, json.dumps(runner.snapshot()))
+                self.send(200, encode_json(runner.snapshot()))
             elif path == "/api/events":
                 try:
                     since = int(parse_qs(urlparse(self.path).query).get("since", ["0"])[0])
                 except ValueError:
                     since = 0
-                self.send(200, json.dumps(world.events.since(since)))
+                self.send(200, encode_json(world.events.since(since)))
             else:
                 self.send(404, '{"error": "not found"}')
 
@@ -349,10 +363,10 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 return
             if self.path.split("?")[0] in ("/api/share/on", "/api/share/off"):
                 if not self.local_page():
-                    return self.send(403, json.dumps({"error": "only a page on the bench's own machine can share it"}))
+                    return self.send(403, encode_json({"error": "only a page on the bench's own machine can share it"}))
                 address = parse_qs(urlparse(self.path).query).get("address", [""])[0].strip()
                 code, body = answer(share_on(address) if self.path.split("?")[0].endswith("/on") else share_off())
-                return self.send(code, json.dumps(body))
+                return self.send(code, encode_json(body))
             if self.path.split('?')[0] == '/api/upload':
                 return self.post()
             with mutation_lock:
@@ -363,9 +377,9 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
             query = parse_qs(urlparse(self.path).query)
             if parts == ['api', 'network']:
                 if not network:
-                    return self.send(404, json.dumps({'error': 'Network setup is unavailable'}))
+                    return self.send(404, encode_json({'error': 'Network setup is unavailable'}))
                 if runner.snapshot().get('running') or world.info.get('recording') or world.info.get('cli_scenarios'):
-                    return self.send(409, json.dumps({'error': 'Stop the scenario or action recording before reconnecting'}))
+                    return self.send(409, encode_json({'error': 'Stop the scenario or action recording before reconnecting'}))
                 try:
                     length = int(self.headers.get('Content-Length', '0'))
                     if not 0 < length <= 4096:
@@ -375,32 +389,32 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                         raise ValueError('expected interface and optional remember')
                     result = network.apply(data.get('interface'), data.get('remember', False))
                 except RuntimeError as error:
-                    return self.send(409, json.dumps({'error': str(error)}))
+                    return self.send(409, encode_json({'error': str(error)}))
                 except (OSError, ValueError, TypeError, KeyError) as error:
-                    return self.send(400, json.dumps({'error': str(error)}))
-                return self.send(200, json.dumps(result))
+                    return self.send(400, encode_json({'error': str(error)}))
+                return self.send(200, encode_json(result))
             if parts == ["api", "journal", "start"]:
                 got = journal.start(world)
                 world.info["recording"] = True                    # the page says so
                 world.changed()
-                return self.send(200, json.dumps(got))
+                return self.send(200, encode_json(got))
             if parts == ["api", "journal", "stop"]:
                 got = journal.stop()
                 world.info["recording"] = False
                 world.changed()
-                return self.send(200, json.dumps(got))
+                return self.send(200, encode_json(got))
             journal.note(self.path)
             if parts == ["api", "mark"]:
                 label = query.get("text", [""])[0].strip()
                 if not label or len(label) > 500:
-                    return self.send(400, json.dumps({"error": "marker text must contain 1 to 500 characters"}))
-                return self.send(200, json.dumps(world.events.add("marker", text=label)))
+                    return self.send(400, encode_json({"error": "marker text must contain 1 to 500 characters"}))
+                return self.send(200, encode_json(world.events.add("marker", text=label)))
             if parts[:2] in (["api", "mixer"], ["api", "player"]):
                 for protocol in world.protocols:
                     result = protocol.handle_api(parts[1:], query)
                     if result is not None:
                         world.changed()
-                        return self.send(result[0], json.dumps(result[1] if result[0] != 200 else world.snapshot()))
+                        return self.send(result[0], encode_json(result[1] if result[0] != 200 else world.snapshot()))
                 return self.send(404, '{"error": "no matching link protocol here"}')
             if parts == ["api", "upload"]:
                 try:
@@ -408,23 +422,23 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                 except ValueError:
                     length = 0
                 if length <= 0:
-                    return self.send(400, json.dumps({"error": "the body is the sound file, and has a length"}))
+                    return self.send(400, encode_json({"error": "the body is the sound file, and has a length"}))
                 if length > UPLOAD_LIMIT:
                     self.close_connection = True
-                    return self.send(413, json.dumps({"error": "that file is over %d MB" % (UPLOAD_LIMIT >> 20)}))
+                    return self.send(413, encode_json({"error": "that file is over %d MB" % (UPLOAD_LIMIT >> 20)}))
                 try:
                     path = keep_upload(query.get("name", ["track"])[0], self.rfile, length)
                 except OSError as e:
-                    return self.send(400, json.dumps({"error": str(e)}))
-                return self.send(200, json.dumps({"path": path, "name": os.path.basename(path), "bytes": length}))
+                    return self.send(400, encode_json({"error": str(e)}))
+                return self.send(200, encode_json({"path": path, "name": os.path.basename(path), "bytes": length}))
             if len(parts) == 4 and parts[:3] == ["api", "audio", "source"]:
                 number = None if parts[3] == "all" else int(parts[3]) if parts[3].isdigit() else -1
                 if not world.set_audio_source(number):
                     return self.send(404, '{"error": "no such deck"}')
-                return self.send(200, json.dumps(world.snapshot()))
+                return self.send(200, encode_json(world.snapshot()))
             if parts == ["api", "uploads", "clear"]:
                 count, size = upload_store.clear(folder, loaded())
-                return self.send(200, json.dumps({"removed": count, "bytes": size}))
+                return self.send(200, encode_json({"removed": count, "bytes": size}))
             if parts == ["api", "packets", "clear"]:
                 for protocol in world.protocols:
                     if hasattr(protocol, "monitor"):
@@ -433,35 +447,39 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
             if len(parts) == 4 and parts[:3] == ["api", "unit", "press"]:
                 ok, why = world.press_unit(control=unquote(parts[3]))
                 if not ok:
-                    return self.send(409 if "not connected" in why else 400, json.dumps({"error": why}))
-                return self.send(200, json.dumps({"ok": True}))
+                    return self.send(409 if "not connected" in why else 400, encode_json({"error": why}))
+                return self.send(200, encode_json({"ok": True}))
             if len(parts) == 4 and parts[:2] == ["api", "settings"]:
                 value = unquote(parts[3])
                 if not any(p.set_option(parts[2], value) for p in world.protocols):
-                    return self.send(400, json.dumps({"error": "no such setting or value"}))
+                    return self.send(400, encode_json({"error": "no such setting or value"}))
                 world.changed()
-                return self.send(200, json.dumps(world.snapshot()))
+                return self.send(200, encode_json(world.snapshot()))
             if parts == ["api", "scenario"]:
                 try:
                     length = int(self.headers.get("Content-Length") or 0)
+                    if not 1 <= length <= 1024 * 1024:
+                        return self.send(413 if length > 0 else 400, '{"error": "invalid scenario length"}')
                     data = json.loads(self.rfile.read(length).decode("utf-8"))
+                    if not isinstance(data, dict):
+                        raise ValueError("expected a scenario object")
                     runner.start(data)
                 except (ValueError, UnicodeDecodeError) as e:
-                    return self.send(400, json.dumps({"error": "not a scenario: %s" % e}))
+                    return self.send(400, encode_json({"error": "not a scenario: %s" % e}))
                 except ScenarioError as e:
-                    return self.send(400, json.dumps({"error": str(e)}))
+                    return self.send(400, encode_json({"error": str(e)}))
                 except RuntimeError as e:
-                    return self.send(409, json.dumps({"error": str(e)}))
-                return self.send(200, json.dumps(runner.snapshot()))
+                    return self.send(409, encode_json({"error": str(e)}))
+                return self.send(200, encode_json(runner.snapshot()))
             if parts == ["api", "scenario", "stop"]:
                 runner.stop()
-                return self.send(200, json.dumps(runner.snapshot()))
+                return self.send(200, encode_json(runner.snapshot()))
             if parts == ["api", "scenario", "clear"]:
                 try:
                     runner.clear()
                 except RuntimeError as e:
-                    return self.send(409, json.dumps({"error": str(e)}))
-                return self.send(200, json.dumps(runner.snapshot()))
+                    return self.send(409, encode_json({"error": str(e)}))
+                return self.send(200, encode_json(runner.snapshot()))
             if parts == ["api", "events", "clear"]:
                 world.events.clear()
                 return self.send(200, "[]")
@@ -470,7 +488,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                     world.set_loss(float(parts[2]))
                 except ValueError:
                     return self.send(400, '{"error": "no such share"}')
-                return self.send(200, json.dumps(world.snapshot()))
+                return self.send(200, encode_json(world.snapshot()))
             if len(parts) in (4, 5) and parts[:2] == ["api", "deck"] and parts[3] in (
                     "tempo", "load", "unplug", "plug", "silence", "audio"):
                 try:
@@ -486,10 +504,15 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                         source, slot = query.get("source", [None])[0], query.get("slot", [None])[0]
                         audio, offset = query.get("audio", [None])[0], query.get("offset", [None])[0]
                         if audio:
+                            audio = os.path.realpath(audio)
+                            uploaded = os.path.dirname(audio) == os.path.realpath(folder)
+                            if not uploaded and (self.server.shared or not ipaddress.ip_address(self.connection.getsockname()[0]).is_loopback):
+                                return self.send(403, '{"error": "upload this sound file before loading it"}')
                             world.load_audio(deck, audio, float(bpm) if bpm else None, query["title"][0] if "title" in query else None,
                                              int(parts[4]), float(offset) if offset else 0.0,
                                              int(source) if source else None, int(slot) if slot else None)
-                            upload_store.touch(audio)             # a file of the folder that is in use is not old
+                            if uploaded:
+                                upload_store.touch(audio)
                         else:
                             world.load_track(deck, int(parts[4]), query["title"][0] if "title" in query else None,
                                              float(bpm) if bpm else None, int(source) if source else None,
@@ -505,10 +528,10 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                     else:
                         return self.send(400, '{"error": "no such action"}')
                 except AudioError as e:
-                    return self.send(400, json.dumps({"error": str(e)}))
+                    return self.send(400, encode_json({"error": str(e)}))
                 except ValueError:
                     return self.send(400, '{"error": "no such value"}')
-                return self.send(200, json.dumps(world.snapshot()))
+                return self.send(200, encode_json(world.snapshot()))
             if len(parts) in (4, 5) and parts[:2] == ["api", "deck"]:
                 try:
                     deck = world.decks[int(parts[2])]
@@ -525,7 +548,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                             world.set_cue(deck, parts[4] == "1", at)
                         else:
                             world.toggle(deck, "cue", at)
-                    return self.send(200, json.dumps(world.snapshot()))
+                    return self.send(200, encode_json(world.snapshot()))
                 if what in ("seek", "jump") and len(parts) == 5:      # seek/<beat>: to that beat. jump/<beats>: that far from here (negative: back)
                     try:
                         beats = int(parts[4])
@@ -533,7 +556,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                         return self.send(400, '{"error": "no such place"}')
                     if deck.enabled:
                         world.seek(deck, beats, what == "jump", at)
-                    return self.send(200, json.dumps(world.snapshot()))
+                    return self.send(200, encode_json(world.snapshot()))
                 if what == "loop" and len(parts) == 5:      # the loop's length in beats, 0 for none
                     try:
                         beats = int(parts[4])
@@ -543,7 +566,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                         return self.send(400, '{"error": "no such loop"}')
                     if deck.enabled:
                         world.set_loop(deck, beats, at)
-                    return self.send(200, json.dumps(world.snapshot()))
+                    return self.send(200, encode_json(world.snapshot()))
                 if len(parts) == 5:             # set, not toggle
                     want = parts[4] == "1"
                     # a deck held on CUE is not playing for PLAY: play/1 then plays on, as on a CDJ
@@ -556,7 +579,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                     ok = world.toggle(deck, what, at)
                 if not ok:
                     return self.send(400, '{"error": "no such switch"}')
-                return self.send(200, json.dumps(world.snapshot()))
+                return self.send(200, encode_json(world.snapshot()))
             self.send(404, '{"error": "not found"}')
 
     def share_state(listing=False):

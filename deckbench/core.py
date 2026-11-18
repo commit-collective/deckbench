@@ -17,6 +17,17 @@ import time
 from .events import Events
 
 
+def number(value, low, high):
+    """Read a finite number within the inclusive range."""
+    try:
+        result = float(value)
+    except (TypeError, OverflowError) as error:
+        raise ValueError("expected a number") from error
+    if not low <= result <= high:
+        raise ValueError("expected a number between %s and %s" % (low, high))
+    return result
+
+
 def log(text):
     sys.stderr.write("deckbench: %s\n" % text)
     sys.stderr.flush()
@@ -318,8 +329,9 @@ class World:
 
     def set_tempo(self, deck, bpm):
         """The pitch fader: the deck plays at `bpm` (its place in its bar is kept)."""
+        bpm = number(bpm, 1, 655.34)
         def change():
-            deck.base_bpm = float(bpm)
+            deck.base_bpm = bpm
         self.settle(change)
         log("%s plays at %.1f BPM" % (deck.name, deck.base_bpm))
         self.changed()
@@ -328,6 +340,8 @@ class World:
         """The deck loads the track with that rekordbox id (from its own database unless `source`, the number of the
         player it comes from, says otherwise, in `slot` if one is given, with that title if one is given, and at that
         tempo): it starts from its first beat, as a loaded track does, and the protocols tell the network."""
+        if bpm is not None:
+            bpm = number(bpm, 1, 655.34)
         def change():
             deck.track = (int(rbid), title)
             deck.cue, deck.cueing = 0.0, False
@@ -350,7 +364,7 @@ class World:
         the file's name for its title unless one is given, and the deck's sound (audio.py) is the file, played at the deck's
         tempo. Raises audio.AudioError, and changes nothing, if the file will not do."""
         from .audio import load_file
-        track = load_file(path, bpm or deck.base_bpm, offset)
+        track = load_file(path, number(deck.base_bpm if bpm is None else bpm, 1, 655.34), number(offset, 0, 86400))
         title = title or os.path.splitext(os.path.basename(path))[0]
         self.load_track(deck, rbid or 1000 + deck.number, title, track.bpm, source, slot)
         with self.lock:
@@ -413,6 +427,7 @@ class World:
 
     def silence(self, deck, seconds):
         """Unplugs the deck for `seconds`, then plugs it in."""
+        seconds = number(seconds, 0, 86400)
         self.set_unplugged(deck, True)
         timer = threading.Timer(float(seconds), self.set_unplugged, args=(deck, False))
         timer.daemon = True
