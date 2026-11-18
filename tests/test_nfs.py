@@ -109,6 +109,10 @@ def wav_bytes(seconds=1.0):
 
 
 class Client(unittest.TestCase):
+    def test_truncated_verifier_raises_a_protocol_error(self):
+        with self.assertRaises(nfs.NfsError):
+            nfs.Client.results(struct.pack(">6I", 0, 1, 0, 0, 100, 0))
+
     def test_a_file_is_read_whole_even_when_answers_are_lost(self):
         data = bytes(range(256)) * 41 + b"end"               # five reads and a bit
         player = FakePlayer({"/C/Contents/Artist/track.mp3": data}, drop=4)

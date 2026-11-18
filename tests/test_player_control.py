@@ -154,6 +154,12 @@ class PlayerControl(unittest.TestCase):
         self.assertEqual(self.net.at_address(devices, self.ip, "2")["number"], 2)
         self.assertIsNone(self.net.at_address(devices, self.ip, 3))
         self.assertEqual(self.call("command", "stop", number="1")[0], 400)
+        for sibling in self.net.monitor.devices.values():
+            if sibling["number"] == 1:
+                sibling["seen"] -= 10
+        devices = self.net.control_devices()
+        self.assertEqual(sum(d["online"] for d in devices), 1)
+        self.assertTrue(all(d["shared_address"] and not d["transport_available"] for d in devices))
 
     def test_unsupported_model_and_numbers_are_rejected(self):
         self.net.monitor.devices.clear()

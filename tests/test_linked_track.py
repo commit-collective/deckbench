@@ -33,6 +33,8 @@ class LinkedTrack(unittest.TestCase):
 
         def title(address, source, number, slot, rbid, *a, **k):
             titles.append(rbid)
+            if isinstance(meta, Exception):
+                raise meta
             return meta or {"title": "Real track", "artist": "Someone"}
         with patch("deckbench.waveforms.read_track_waveforms", read), \
              patch("deckbench.metadata.read_track_metadata", title), \
@@ -65,6 +67,16 @@ class LinkedTrack(unittest.TestCase):
         reads, titles = self.rounds(2)
         self.assertEqual((reads, titles), ([], [57]))
         self.assertEqual(self.net.describe(self.deck)["track"], "Real track")
+
+    def test_failed_title_retries_without_fetching_the_waveform_again(self):
+        self.world.load_track(self.deck, 57, source=2, slot=3)
+        reads, titles = self.rounds(3, meta=TimeoutError())
+        self.assertEqual((len(reads), titles), (1, [57]))
+        entry = next(iter(self.net.waves.values()))
+        self.assertFalse(entry["titled"])
+        entry["retry_title"] = 0
+        self.assertEqual(self.rounds(2), ([], [57]))
+        self.assertTrue(entry["titled"])
 
     def test_the_pitch_is_what_it_plays_at_over_the_track_tempo(self):
         self.world.load_track(self.deck, 57, source=2, slot=3)

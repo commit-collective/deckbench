@@ -2,7 +2,7 @@
 
 Newest first. A release is a tagged commit.
 
-## Not yet released
+## v0.7.0
 
 ### The page
 
