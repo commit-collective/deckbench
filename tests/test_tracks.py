@@ -300,6 +300,22 @@ class Upload(unittest.TestCase):
         os.utime(keep, (now - 60 * 86400, now - 60 * 86400))
         self.assertEqual(uploads.trim(folder, busy=[keep], max_age=30 * 86400)[0], 0)       # but not one that is in use
 
+    def test_a_file_in_use_is_kept_whatever_path_reaches_it(self):
+        """A deck holds the real path of what it plays: the folder may be named through a link or a short name."""
+        from deckbench import uploads
+        real = tempfile.mkdtemp(prefix="deckbench-real-")
+        self.addCleanup(shutil.rmtree, real, True)
+        link = real + "-link"
+        try:
+            os.symlink(real, link, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("this system cannot make a link")
+        self.addCleanup(os.remove if os.name != "nt" else os.rmdir, link)
+        with open(os.path.join(real, "in-use.wav"), "wb") as f:
+            f.write(b"x" * 10)
+        self.assertEqual(uploads.clear(link, busy=[os.path.join(real, "in-use.wav")])[0], 0)
+        self.assertEqual(uploads.clear(real, busy=[os.path.join(link, "in-use.wav")])[0], 0)
+
     def post(self, path, body=None):
         request = urllib.request.Request(self.base + path, data=body, method="POST")
         try:

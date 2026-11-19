@@ -83,7 +83,8 @@ def files(folder):
 
 
 def _same(a, b):
-    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+    """The same file, however each path reaches it (a link, or a Windows short name such as RUNNER~1)."""
+    return os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
 
 
 def summary(folder):
