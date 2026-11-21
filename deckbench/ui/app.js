@@ -161,7 +161,7 @@ function renderChips() {
   box.append(S.connected ? chip("connected", "ok") : chip(S.state ? "reconnecting…" : "connecting…", "bad"));
   if (!s) return;
   const unit = unitOf(s);
-  if ((s.adapters || []).some((a) => a.name === "djs1000-emu")) box.append(unit
+  if ((s.adapters || []).some((a) => a.name === "djs1000-emulator")) box.append(unit
     ? chip(" " + (unit.master ? "tempo master" : "") + (unit.bpm ? (unit.master ? ", " : "") + unit.bpm.toFixed(1) + " BPM" : ""),
            "ok", "Unit: player " + unit.number)
     : chip("no unit heard yet", "warn"));
@@ -929,7 +929,7 @@ function renderDevices() {
       "\nClick or press Enter to open";
     if (q("identity").title !== tip) q("identity").title = tip;
     const live = st && d.online;
-    fill(q("flags"), stateTags({unit: d.unit && (S.state.adapters || []).some((a) => a.name === "djs1000-emu"),
+    fill(q("flags"), stateTags({unit: d.unit && (S.state.adapters || []).some((a) => a.name === "djs1000-emulator"),
       air: live && st.on_air ? true : null, master: live && st.master, sync: live && st.sync, loop: !!(live && st.loop),
       offline: !d.online}));
     fitTags(q("flags"));

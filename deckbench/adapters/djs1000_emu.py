@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
-"""The DJS-1000 emulator (djs1000-emu), through its virtual deck's link: the shim's TCP port (127.0.0.1:7310).
+"""The DJS-1000 emulator (djs1000-emulator), through its virtual deck's link: the shim's TCP port (127.0.0.1:7310).
 
-    python -m deckbench --adapter djs1000-emu                 # 127.0.0.1:7310
-    python -m deckbench --adapter djs1000-emu:127.0.0.1:7310
+    python -m deckbench --adapter djs1000-emulator               # 127.0.0.1:7310
+    python -m deckbench --adapter djs1000-emulator:127.0.0.1:7310
 
 The shim sends each client, with an 8-byte header (kind, output, and three little-endian 16-bit numbers), the rows of the
 screen that changed ('S'), the 128-byte frame the app sends its panel, which holds the lamps ('L'), and the sound ('A').
@@ -33,7 +33,8 @@ def lamp_level(frame, lamp):
 
 
 class Djs1000Emulator(Adapter):
-    name = "djs1000-emu"
+    name = "djs1000-emulator"
+    aliases = ("djs1000-emu",)              # its name before the emulator's repository was renamed
     controls = tuple(BUTTONS)
 
     def __init__(self, args=""):

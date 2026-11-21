@@ -4,7 +4,7 @@ The bench sees a device by what it sends on the link: its keep-alives and status
 whether it is the tempo master, whether it plays or is synced, and its tempo. It does not tell it what the device shows or
 what a button does. An adapter adds that. With one, a scenario can press a control of the device and expect a lamp to be lit.
 
-    python -m deckbench --adapter djs1000-emu --scenario deckbench/examples/unit --then-exit
+    python -m deckbench --adapter djs1000-emulator --scenario deckbench/examples/unit --then-exit
 
 ## What a scenario can say
 
@@ -20,13 +20,13 @@ network's word and each adapter's, in one flat dictionary:
 | `beat` | the network | the beat of its bar, 1 to 4 (0 before it has sent a status) |
 | `age` | the network | seconds since its last status |
 | `adapter.connected` | an adapter | the adapter reaches the device |
-| `lamp.sync`, `lamp.master` | `djs1000-emu` | the lamp is lit (`lamp.sync_level` is 0 off, 1 dim, 2 bright) |
+| `lamp.sync`, `lamp.master` | `djs1000-emulator` | the lamp is lit (`lamp.sync_level` is 0 off, 1 dim, 2 bright) |
 
 `GET /api/unit` gives the same, and the page's Network tab shows it with a button for each control.
 
 ## The adapter for the DJS-1000 emulator
 
-`djs1000-emu[:HOST:PORT]` connects to the emulator's link, the TCP port its virtual deck uses (127.0.0.1:7310 by default).
+`djs1000-emulator[:HOST:PORT]` connects to the emulator's link, the TCP port its virtual deck uses (127.0.0.1:7310 by default).
 It reads the lamps from the frame the app sends its panel and presses a button by sending the panel the same
 `tap <byte> <bit>` the virtual deck does. Its controls are `sync` and `master`. The bench and the emulator must see each
 other's loopback, which is the case in WSL, where the emulator runs.
@@ -37,7 +37,7 @@ does not let go). They check that the unit follows a master deck and its tempo c
 deck to the unit and back, and that the unit keeps following after a cable is pulled and with 30 % of the packets lost. Run
 them from the emulator's side:
 
-    python3 -m deckbench --numbers 2,3,4 --adapter djs1000-emu --scenario deckbench/examples/unit --then-exit
+    python3 -m deckbench --numbers 2,3,4 --adapter djs1000-emulator --scenario deckbench/examples/unit --then-exit
 
 The exit status is 1 if an expectation failed, else 3 if a scenario was skipped (the unit was not on the link, or the adapter was
 not connected), else 0.

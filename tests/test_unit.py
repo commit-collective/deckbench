@@ -268,7 +268,7 @@ class Api(unittest.TestCase):
         cls.shim = FakeShim()
         cls.world = World()
         cls.world.decks[2] = Deck(cls.world, 2, 128.0, "deck 2")
-        cls.adapter = make("djs1000-emu:127.0.0.1:%d" % cls.shim.port)
+        cls.adapter = make("djs1000-emulator:127.0.0.1:%d" % cls.shim.port)
         cls.world.adapters.append(cls.adapter)
         cls.adapter.start(cls.world)
         cls.server = serve(cls.world, "127.0.0.1", 0)
@@ -293,7 +293,7 @@ class Api(unittest.TestCase):
         state = self.call("api/unit")
         self.assertIn("lamp.sync", state)
         snap = self.call("api/state")
-        self.assertEqual(snap["adapters"], [{"name": "djs1000-emu", "connected": True, "controls": ["sync", "master"]}])
+        self.assertEqual(snap["adapters"], [{"name": "djs1000-emulator", "connected": True, "controls": ["sync", "master"]}])
         self.assertIn("lamp.master", snap["unit_state"])
 
     def test_press(self):
@@ -308,11 +308,16 @@ class Api(unittest.TestCase):
 
 
 class Command(unittest.TestCase):
+    def test_the_old_adapter_name_still_works(self):
+        from deckbench.adapters import make
+        adapter = make("djs1000-emu:127.0.0.1:7999")                # its name before the repository was renamed
+        self.assertEqual((adapter.name, adapter.address), ("djs1000-emulator", ("127.0.0.1", 7999)))
+
     def test_no_such_adapter(self):
         out = subprocess.run([sys.executable, "-m", "deckbench", "--adapter", "nothing", "--http-port", "-1"],
                              capture_output=True, text=True, timeout=20, cwd=ROOT)
         self.assertEqual(out.returncode, 2)
-        self.assertIn("no adapter 'nothing' (there is: djs1000-emu)", out.stderr)        # before it touches any port
+        self.assertIn("no adapter 'nothing' (there is: djs1000-emulator)", out.stderr)        # before it touches any port
 
     def test_a_skipped_scenario_exits_with_3(self):
         import os

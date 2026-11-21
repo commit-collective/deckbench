@@ -120,7 +120,7 @@ def main(argv=None):
                          "one was skipped (its unit or adapter was not there), else 0")
     ap.add_argument("--adapter", action="append", default=[], metavar="NAME[:ARGS]",
                     help="what the device under test shows beyond the network, so a scenario can expect a lamp and press a "
-                         "control (see deckbench/adapters). There is djs1000-emu[:HOST:PORT], the emulator's link "
+                         "control (see deckbench/adapters). There is djs1000-emulator[:HOST:PORT], the emulator's link "
                          "(default 127.0.0.1:7310)")
     ap.add_argument("--events", metavar="FILE", help="write what the device under test does to FILE, a JSON object a line")
     ap.add_argument("--model", help="the device name every deck announces (default CDJ-FAKEn)")
@@ -287,7 +287,7 @@ def main(argv=None):
                    mixer_address=a.mixer_address, mixer_channels=a.mixer_channels, profile=a.profile, observer=a.observe,
                    observer_auto=a.observe and a.observer_number is None,
                    auto_track_info=not a.no_track_info, auto_waveforms=not a.no_waveforms, feed=feed,
-                   target=a.target or ("DJS-" if any(spec.split(":")[0] == "djs1000-emu" for _, spec in adapters) else None))
+                   target=a.target or ("DJS-" if any(spec.split(":")[0] in ("djs1000-emulator", "djs1000-emu") for _, spec in adapters) else None))
     link.tracks_dir = a.tracks_dir                          # a real track's audio is kept with the files sent from the page
     if a.capture:
         try:

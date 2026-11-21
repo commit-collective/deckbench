@@ -41,7 +41,8 @@ def make(spec):
     """An adapter from `NAME` or `NAME:ARGUMENTS`. ValueError if there is no such adapter."""
     from .djs1000_emu import Djs1000Emulator
     registry = {Djs1000Emulator.name: Djs1000Emulator}
+    aliases = {alias: cls for cls in registry.values() for alias in getattr(cls, "aliases", ())}
     name, _, args = spec.partition(":")
-    if name not in registry:
+    if name not in registry and name not in aliases:
         raise ValueError("no adapter %r (there is: %s)" % (name, ", ".join(sorted(registry))))
-    return registry[name](args)
+    return (registry.get(name) or aliases[name])(args)

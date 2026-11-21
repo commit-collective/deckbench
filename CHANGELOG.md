@@ -2,6 +2,12 @@
 
 Newest first. A release is a tagged commit.
 
+## Not yet released
+
+### Compatibility changes
+
+- The emulator's adapter is now `--adapter djs1000-emulator`, as its repository was renamed. `djs1000-emu` still works.
+
 ## v0.7.0
 
 ### The page
