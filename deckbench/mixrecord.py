@@ -8,11 +8,10 @@ with the one before. What changed becomes an event: a track loaded, PLAY, a paus
 SYNC on or off, MASTER taken. `MixRecorder.stop` turns them into scenario steps: `player` to do it again, then
 `expect_player` to check that the player did it.
 
-The network lets the bench load a track and press PLAY/PAUSE, CUE, SYNC and MASTER, nothing more. A track's title and
-artist, when the bench has read them, go with its load. When a mixer reports what is on air, the changes are noted, for
-bringing each channel in by hand. What a player cannot be
-made to do (a pitch moved by hand, a loop, a hot cue or a jump to another place in the track, an eject) is kept as a `log`
-step at its time and in the scenario's `notes`, so that whoever replays it does it by hand or knows where it differs.
+A track's title and artist, when the bench has read them, go with its load. When a mixer reports what is on air, the
+changes are noted for bringing each channel in by hand. A loop or position change alone cannot identify the original
+button press. Those changes, pitch moves and ejects are kept as `log` steps and notes. A manually edited scenario can
+request Hot Cue 1 and one-beat jumps on the CDJ-2000NXS2.
 
 A PLAY pressed while another player was the tempo master and playing is replayed on the same beat of the master's
 bar (`on_beat`): it is sent from half a bar before its time and waits for that beat, so it lands on the beat nearest

@@ -243,7 +243,8 @@ for each discovered player:
 | Model | `transport_method` | `fader_start_supported` | Commands |
 |---|---|---|---|
 | CDJ-3000, CDJ-3000X | `buttons` | false | `play-pause` and `cue` |
-| CDJ-2000NXS2, XDJ-1000MK2 | `buttons` | true | `play-pause` and `cue`, or `start` and `stop` |
+| CDJ-2000NXS2 | `buttons` | true | `play-pause`, `cue`, `start`, `stop`, `hot-cue-1`, `beat-jump-back`, `beat-jump-forward` |
+| XDJ-1000MK2 | `buttons` | true | `play-pause` and `cue`, or `start` and `stop` |
 | XDJ-XZ | (empty) | false | none |
 | others | `fader` | true | `start` and `stop`: fader start |
 
@@ -264,9 +265,16 @@ firmware run in cdj3k-emu, and on a physical CDJ-2000NXS2 and XDJ-1000MK2, which
 take the NXS2's format. Other models get no presses until they are tried. The API answers HTTP 202 with `sent: true, confirmed: false` and
 records `player_button`.
 
+A hand-authored `player` scenario step can use the three CDJ-2000NXS2 pad commands
+as its `press` value. Each beat jump moves one beat. Load an analyzed track and
+save Hot Cue 1 before using `hot-cue-1`. The deck may set a cue if the slot is empty.
+Record Mix keeps unexplained position changes as notes because a status packet
+does not identify the button that caused the change. Remote recall of a saved
+hot loop landed one beat early in one hardware test.
+
 `POST /api/player/IP/command/play-pause?number=N` (or `cue`, one tap) needs
 player control on (or the player armed), like the other commands. The wrong command for a model is
-refused with the right one named. Hot cues and loops are not implemented.
+refused. Loop editing and the other hot cue slots are currently unavailable.
 
 CUE can also be held, as on the player, where it plays from the cue point while
 held: `cue-down` connects and presses it, `cue-up` lets go and disconnects. The

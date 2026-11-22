@@ -17,11 +17,14 @@ import struct
 from .startup import MAGIC
 
 BUTTONS = {"play-pause": 20, "cue": 21}
+NXS2_PAD_BUTTONS = {"hot-cue-1": 0x46, "beat-jump-back": 0x5A, "beat-jump-forward": 0x5B}
+LEGACY_BUTTONS = {**BUTTONS, **NXS2_PAD_BUTTONS}
 CONTROLLER = 54                     # the controller's number in the packets: refused if a device on the link has it
 NAME = b"deckbench probe"           # as tested
 CONNECT, DISCONNECT = 1, 2
 HOLD = 0.1                          # seconds a button is held
-SETTLE = 0.1                        # after the connect, before the press (--press-settle): none loses CUE, 0.05 worked
+SETTLE = 0.1                        # time to connect before PLAY/PAUSE or CUE
+PAD_SETTLE = 0.25                   # connect time used in the physical NXS2 pad tests
 
 
 def packet(subtype, button=None, pressed=False, slot=None):
@@ -39,7 +42,8 @@ def packet(subtype, button=None, pressed=False, slot=None):
     struct.pack_into(">H", data, 34, len(data))
     struct.pack_into(order + "HH", data, 36, subtype, slot or 0)
     if button is not None:
-        if subtype != 0 or button not in BUTTONS.values():
+        buttons = BUTTONS if slot is None else LEGACY_BUTTONS
+        if subtype != 0 or button not in buttons.values():
             raise ValueError("unsupported button event")
         struct.pack_into(order + "HHBBH", data, 40, 1, button, 0, int(pressed), 0)
     elif subtype not in (CONNECT, DISCONNECT):
@@ -50,10 +54,12 @@ def packet(subtype, button=None, pressed=False, slot=None):
 def down(send, button, pause, slot=None):
     """Connect, then the button goes down, through send(datagram). pause(seconds) waits. If the press cannot be sent,
     it is let go at once (up), so nothing is left held. slot: see packet."""
+    key = (BUTTONS if slot is None else LEGACY_BUTTONS)[button]
+    pressed = packet(0, key, True, slot)
     send(packet(CONNECT, slot=slot))
-    pause(SETTLE)
+    pause(PAD_SETTLE if button in NXS2_PAD_BUTTONS else SETTLE)
     try:
-        send(packet(0, BUTTONS[button], True, slot))
+        send(pressed)
     except OSError:
         up(send, button, slot)
         raise
@@ -62,7 +68,8 @@ def down(send, button, pause, slot=None):
 def up(send, button, slot=None):
     """The button goes up, then the disconnect. Both are tried, whatever happens to the first."""
     errors = []
-    for data in (packet(0, BUTTONS[button], slot=slot), packet(DISCONNECT, slot=slot)):
+    key = (BUTTONS if slot is None else LEGACY_BUTTONS)[button]
+    for data in (packet(0, key, slot=slot), packet(DISCONNECT, slot=slot)):
         try:
             send(data)
         except OSError as error:

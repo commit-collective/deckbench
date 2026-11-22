@@ -1896,7 +1896,7 @@ class Prolink(Protocol):
             self.release_held_cue(ip, "the bench stops or reconnects")
 
     def press_player_button(self, device, button):
-        """One press of PLAY/PAUSE or CUE on a player that takes them (experimental, see protocols/transport.py),
+        """One press on a player that accepts the button (see protocols/transport.py),
         sent from an address of the bench's own and its UDP 50001, as tested, in the player's format."""
         if device["ip"] in self.held:
             return self.press_while_cue_held(device, button)
@@ -2003,10 +2003,11 @@ class Prolink(Protocol):
                 return 403, {'error': 'switch Player control on in Settings first'}
             return self.load_player_track(device, parts[3], query)
         command = parts[3]
-        if command not in ("start", "stop", "play-pause", "cue", "cue-down", "cue-hold", "cue-up", "sync-on", "sync-off",
-                           "master"):
-            return 400, {"error": "a command is start, stop, play-pause, cue, cue-down, cue-hold, cue-up, sync-on, "
-                                  "sync-off or master"}
+        if command not in transport.NXS2_PAD_BUTTONS and command not in (
+                "start", "stop", "play-pause", "cue", "cue-down", "cue-hold", "cue-up", "sync-on", "sync-off", "master"):
+            return 400, {"error": "unknown player command"}
+        if command in transport.NXS2_PAD_BUTTONS and device["name"].upper() != "CDJ-2000NXS2":
+            return 400, {"error": "Hot Cue 1 and beat jumps are supported on the CDJ-2000NXS2"}
         if command == "cue-up":                 # always allowed: letting go must never be refused
             return self.hold_player_cue(device, False)
         if command == "cue-hold":               # only keeps a hold going, never presses
@@ -2021,7 +2022,11 @@ class Prolink(Protocol):
             return 403, {"error": "switch Player control on in Settings first"}
         if command == "cue-down":
             return self.hold_player_cue(device, True)
-        if command in ("play-pause", "cue"):
+        if command in transport.NXS2_PAD_BUTTONS:
+            status = device.get("status") or {}
+            if not status.get("rbid") or status.get("track_type") != 1:
+                return 409, {"error": "load an analyzed rekordbox track before pressing a pad"}
+        if command in transport.NXS2_PAD_BUTTONS or command in transport.BUTTONS:
             return self.press_player_button(device, command)
         occupied = {d["number"] for d in self.monitor.snapshot() if d["online"]}
         sender = next((l for l in sorted(self.decks.values(), key=lambda link: not link.deck.enabled)
@@ -2154,6 +2159,8 @@ class Prolink(Protocol):
                 items.append((False, "player %d takes no button presses (PLAY, CUE): this %s has fader start only"
                               % (n, d["model"]) if d.get("fader_start_supported") else
                               "player %d takes no button presses (PLAY, CUE)" % n))
+            if presses & transport.NXS2_PAD_BUTTONS.keys() and d["name"].upper() != "CDJ-2000NXS2":
+                items.append((False, "player %d needs to be a CDJ-2000NXS2 for Hot Cue 1 and beat jumps" % n))
             if presses & {"start", "stop"} and not d.get("fader_start_supported"):
                 items.append((False, "player %d has no fader start (START, STOP)" % n))
             st = d.get("status") or {}

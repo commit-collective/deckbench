@@ -4,6 +4,10 @@ Newest first. A release is a tagged commit.
 
 ## Not yet released
 
+### Scenarios
+
+- Press Hot Cue 1 or jump one beat in either direction on a CDJ-2000NXS2.
+
 ### Compatibility changes
 
 - The emulator's adapter is now `--adapter djs1000-emulator`, as its repository was renamed. `djs1000-emu` still works.

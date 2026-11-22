@@ -173,6 +173,38 @@ class PlayerControl(unittest.TestCase):
         self.feed()
         self.assertEqual(self.call("arm", "1", "5")[0], 400)
 
+    def test_nxs2_pad_steps_send_the_validated_button_sequence(self):
+        self.call("arm", "1")
+        for button, key in (("hot-cue-1", 0x46), ("beat-jump-back", 0x5a),
+                            ("beat-jump-forward", 0x5b)):
+            with self.subTest(button=button), patch.object(self.net.decks[3], "send") as send:
+                step = {"do": "player", "player": 2, "press": button}
+                self.assertTrue(all(ok for ok, _ in self.net.check_steps([step])))
+                self.assertTrue(self.net.player_do(step)[0])
+                packets = [call.args[1] for call in send.call_args_list]
+                self.assertEqual([p[36:40] for p in packets],
+                                 [bytes((n, 0, 2, 0)) for n in (1, 0, 0, 2)])
+                self.assertEqual(packets[1][42:], bytes((key, 0, 0, 1, 0, 0)))
+                self.assertEqual(packets[2][42:], bytes((key, 0, 0, 0, 0, 0)))
+
+    def test_pad_commands_require_opt_in_a_track_and_the_nxs2(self):
+        step = {"do": "player", "player": 2, "press": "hot-cue-1"}
+        with patch.object(self.net.decks[3], "send") as send:
+            self.assertEqual(self.call("command", "hot-cue-1")[0], 403)
+            self.call("arm", "1")
+            self.player.rbid = 0
+            self.feed()
+            self.assertEqual(self.call("command", "hot-cue-1")[0], 409)
+            for model in (b"XDJ-1000MK2", b"CDJ-3000"):
+                self.net.monitor.devices.clear()
+                self.player.name = model
+                self.feed()
+                self.call("arm", "1")
+                self.assertEqual(self.call("command", "hot-cue-1")[0], 400)
+                self.assertTrue(any(not ok and "CDJ-2000NXS2" in msg
+                                    for ok, msg in self.net.check_steps([step])))
+            send.assert_not_called()
+
     def test_sync_commands_use_the_documented_packet_and_stay_opt_in(self):
         self.assertEqual(self.call("command", "master")[0], 403)
         self.call("arm", "1")
