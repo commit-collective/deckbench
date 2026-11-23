@@ -102,10 +102,13 @@ a step `on_beat` that beat of the master's bar, sent half a bar before its time,
 where it was even if the tempo is not quite the same. Which beat it was is read from the players' statuses, which
 come five times a second: a PLAY pressed far from a beat may be put on the next one.
 
-The network does not let the bench move a pitch fader, make a loop, use a hot cue, jump in a track or eject it. These are
-kept as `log` steps at their time, so the replay says when to do them by hand, and listed in the scenario's `notes`. A
-track starts from where the player puts it when it loads, its cue or first beat. A player that played from elsewhere,
-or was playing when the recording began, is noted. The mixer is not recorded: its faders and EQs are done by hand.
+On a CDJ-2000NXS2, Record Mix keeps the exact loop, Hot Cue 1 and one-beat jump commands sent from the card or API.
+Replay checks the track, plus the active-loop state for loop buttons. It also checks a loop start or exit when the
+recording saw that change. The active flag cannot verify a resize or whether an exited loop is saved.
+
+Physical presses that show up only as an unexplained loop or jump, pitch moves and ejects become timed `log` steps and
+notes. A track starts from its cue or first beat when loaded, and a player that started elsewhere is noted.
+Mixer faders and EQ are done by hand.
 
 A track's title and artist go with its load when the bench has read them (Read track info, or a player's card). When a
 mixer on the link reports which channels are on air, each change is noted too, "player 2 on air", for bringing its

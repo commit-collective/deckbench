@@ -4,6 +4,15 @@
 const $ = (id) => document.getElementById(id);
 const SLOTS = {1: "CD", 2: "SD", 3: "USB", 4: "rekordbox"};
 const LOOPS = [1, 2, 4, 8, 16, 32];
+const PLAYER_LOOP_AND_CUE = [
+  ["loop-in", "IN / ??", "Mark loop in or halve the active loop"],
+  ["loop-out", "OUT / 2?", "Mark loop out or double the active loop"],
+  ["four-beat-loop", "4 BEAT", "Start a four-beat loop"],
+  ["reloop-exit", "RELOOP / EXIT", "Resume the saved loop or exit the active loop"],
+  ["hot-cue-1", "HOT CUE 1", "Recall Hot Cue 1 or set it if empty"],
+  ["beat-jump-back", "?1 BEAT", "Jump back one beat"],
+  ["beat-jump-forward", "+1 BEAT", "Jump forward one beat"],
+];
 /* The moves in the track, in beats (4 to a bar): [label, request, title] */
 const MOVES = [["|◀", "seek/0", "To the first beat of the track"], ["◀◀", "jump/-16", "Back 4 bars"],
                ["◀", "jump/-4", "Back a bar"], ["▶", "jump/4", "Forward a bar"], ["▶▶", "jump/16", "Forward 4 bars"]];
@@ -346,6 +355,7 @@ function buildDeck(n, numbers) {
       h("input", {type: "range", id: "tempo" + n, class: "tempo-range", min: 60, max: 200, step: 0.1,
         "aria-label": "Tempo of deck " + n}),
       h("input", {type: "number", class: "tempo-num", min: 40, max: 220, step: 0.1, "aria-label": "BPM of deck " + n})),
+    h("details", {class: "deck-loop-cues"}, h("summary", {}, "Loop & Cues"),
     h("div", {class: "row"}, h("span", {class: "lbl"}, "Loop"),
       h("div", {class: "seg", role: "group", "aria-label": "Loop of deck " + n},
         LOOPS.map((beats) => h("button", {"data-beats": beats, "aria-pressed": "false",
@@ -354,7 +364,7 @@ function buildDeck(n, numbers) {
     h("div", {class: "row"}, h("span", {class: "lbl"}, "Move"),
       h("div", {class: "seg moves", role: "group", "aria-label": "Move deck " + n + " in its track"},
         MOVES.map(([label, what, title]) => h("button", {title, "data-move": what,
-          onclick: () => act(clicked("api/deck/" + n + "/" + what))}, label)))),
+          onclick: () => act(clicked("api/deck/" + n + "/" + what))}, label))))),
     h("div", {class: "row"}, h("span", {class: "lbl"}, "Cable"),
       h("button", {class: "btn small unplug", title: "Pull the cable: the deck says nothing and answers nothing",
         onclick: () => act("api/deck/" + n + "/" + (S.state.decks[n].unplugged ? "plug" : "unplug"))}, "Unplug"),
@@ -842,6 +852,11 @@ function buildDevice(d) {
         onclick: (e) => playerCommand(d, e.currentTarget, e.currentTarget.getAttribute("aria-pressed") === "true" ? "sync-off" : "sync-on")}, "SYNC"),
       h("button", {class: "sw", "data-command": "master", "aria-pressed": "false",
         onclick: (e) => playerCommand(d, e.currentTarget, "master")}, "MASTER")),
+    mixer ? null : h("details", {class: "player-loop-cues", hidden: true}, h("summary", {}, "Loop & Cues"),
+      h("div", {class: "seg", role: "group", "aria-label": "Player loop and cue controls"},
+        PLAYER_LOOP_AND_CUE.map(([command, label, tip]) => h("button", {type: "button", disabled: true,
+          "data-command": command, "data-tip": tip, title: tip,
+          onclick: (e) => playerCommand(d, e.currentTarget, command)}, label)))),
     h("div", {class: "facts"}),
     mixer ? null : h("div", {class: "player-control", hidden: true},
       h("button", {class: "btn small player-read", onclick: (e) => {
@@ -893,6 +908,14 @@ function renderDevices() {
         if (button.dataset.command === "play-pause") setText(button, live && st.play ? "PAUSE" : "PLAY");
         const tip = why || button.dataset.tip || "";
         if (button.title !== tip) button.title = tip;
+      }
+      const loopCues = q("player-loop-cues"), extraButtons = d.extra_buttons || [];
+      loopCues.hidden = !!set.observer || !extraButtons.length;
+      for (const button of loopCues.querySelectorAll("button")) {
+        button.hidden = !extraButtons.includes(button.dataset.command);
+        button.disabled = !usable || !st || !st.rbid || st.track_type !== 1;
+        button.dataset.number = d.number;
+        button.title = why || (usable && button.disabled ? "Load an analyzed rekordbox track first" : button.dataset.tip);
       }
       const read = q("player-read");
       read.hidden = !!set.auto_track_info;
@@ -1018,6 +1041,7 @@ function render() {
     const range = q("tempo-range"), num = q("tempo-num");
     if (active !== range) range.value = d.bpm;
     if (active !== num) num.value = d.bpm.toFixed(1);
+    q("deck-loop-cues").hidden = !!settingsOf(s).observer;
     for (const b of card.querySelectorAll(".seg button")) {
       b.setAttribute("aria-pressed", String(!!d.on && d.loop === Number(b.dataset.beats)));
       b.disabled = !d.on;

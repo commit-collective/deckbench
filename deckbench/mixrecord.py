@@ -9,9 +9,9 @@ SYNC on or off, MASTER taken. `MixRecorder.stop` turns them into scenario steps:
 `expect_player` to check that the player did it.
 
 A track's title and artist, when the bench has read them, go with its load. When a mixer reports what is on air, the
-changes are noted for bringing each channel in by hand. A loop or position change alone cannot identify the original
-button press. Those changes, pitch moves and ejects are kept as `log` steps and notes. A manually edited scenario can
-request Hot Cue 1, one-beat jumps and loop controls on the CDJ-2000NXS2.
+changes are noted for bringing each channel in by hand. Hot Cue 1, one-beat jumps and loop buttons sent by the bench
+to a CDJ-2000NXS2 are captured as explicit presses. Unexplained loops and position changes, pitch moves and ejects
+are kept as `log` steps and notes.
 
 A PLAY pressed while another player was the tempo master and playing is replayed on the same beat of the master's
 bar (`on_beat`): it is sent from half a bar before its time and waits for that beat, so it lands on the beat nearest
@@ -28,6 +28,7 @@ import threading
 import time
 
 from .protocols.monitor import model_title
+from .protocols.transport import NXS2_EXTRA_SETTLE
 from .protocols.prolink import Prolink
 
 RUNNING = ("playing", "looping")
@@ -39,6 +40,7 @@ SETUP_PLAIN = 3.0       # the same when no player loads a track before the mix
 PITCH_STEP = 0.1        # a pitch moved by less, in percent, is not noted
 JUMP_BEATS = 4          # a playing track whose beat is this far from where it should be has jumped
 MERGE = 3.0             # pitch moves of one player closer in time than this are one note
+BUTTON_STATUS_WINDOW = 0.6   # allow three status intervals for the effect of a press
 STATUS_LAG = 0.1        # a status says a player started about this long after PLAY was pressed (they come each 0.2 s)
 
 
@@ -70,8 +72,7 @@ class MixRecorder:
             t = max(0.0, now - self.began)
             p = self.players.get(number)
             if p is None:
-                self.players[number] = {"name": name, "model": model_title(name), "first": dict(st), "first_t": t, "last": dict(st), "last_t": t,
-                                        "hold": None, "pitch": st.get("pitch")}
+                self._add_player(number, name, st, t)
                 if t > JOINED and st.get("rbid"):
                     self.events.append((t, number, "joined", {"rbid": st["rbid"], "state": st["state"]}))
                 return
@@ -80,6 +81,22 @@ class MixRecorder:
             window = st.get("beat_window")
             if window and st.get("bar") and st.get("state") in RUNNING:     # its beat changed: when, and where in the bar
                 p["beat_t"], p["beat_bar"] = (window[0] + window[1]) / 2.0 - self.began, st["bar"]
+
+    def _add_player(self, number, name, st, t):
+        self.players[number] = {"name": name, "model": model_title(name), "first": dict(st), "first_t": t,
+                                "last": dict(st), "last_t": t, "hold": None, "pitch": st.get("pitch")}
+
+    def command(self, device, button, now):
+        """Keep the actual press time and the reported track and loop context."""
+        with self.lock:
+            if self.began is None or now < self.began:
+                return
+            number, st = device["number"], device["status"]
+            at = now - self.began
+            if number not in self.players:
+                self._add_player(number, device["name"], st, at)
+            context = {key: st[key] for key in ("source", "slot", "rbid")}
+            self.events.append((at, number, "button", {"press": button, "track": context, "loop": st["loop"]}))
 
     def master_beat(self, number, t):
         """The beat of the master's bar that player `number`'s start at `t` fell on: {"player", "beat", "period"}, or
@@ -94,7 +111,8 @@ class MixRecorder:
         return None
 
     def _compare(self, number, p, prev, st, prev_t, t):
-        add = lambda kind, **details: self.events.append((t, number, kind, details))
+        track = {key: st[key] for key in ("source", "slot", "rbid")}
+        add = lambda kind, **details: self.events.append((t, number, kind, {"track": track, **details}))
         key, before = (st["source"], st["slot"], st["rbid"]), (prev["source"], prev["slot"], prev["rbid"])
         if key != before:
             p["hold"] = None
@@ -240,7 +258,9 @@ def build(players, events, name, titles=None):
             events.append((0.0, n, "play", {"from": None, "already": True}))
 
     # the recorded events, after the setup
-    events = merge_pitch(sorted(events, key=lambda e: e[0]))
+    # A prompt status can arrive on the same clock tick as the command.
+    ordered = sorted(events, key=lambda event: (event[0], event[2] != "button"))
+    events = merge_pitch(match_button_status(ordered))
     actions = []                    # (at, step, expectation, default within)
     for t, n, kind, d in events:
         at = round(lead + t, 2)
@@ -262,7 +282,16 @@ def build(players, events, name, titles=None):
                 note(at, "player %d was playing when the recording began: it starts from where it loads, not from "
                          "where it was" % n)
             continue
-        if kind == "load":
+        if kind == "button":
+            match = {"model": players[n]["model"], "online": True, **d["track"]}
+            if d["press"] in LOOP_BUTTONS:
+                match["loop"] = d["loop"]
+            send_at = round(at - NXS2_EXTRA_SETTLE, 2)
+            steps.append({"at": send_at, "do": "expect_player", "player": n, "match": match,
+                          "within": 0.2, "required": True})
+            actions.append((at, {"do": "player", "player": n, "press": d["press"], "send_at": send_at},
+                            d.get("result"), 1))
+        elif kind == "load":
             title = named(d["source"], d["slot"], d["rbid"])
             if not loadable(d["source"], d["slot"]):
                 note(at, "player %d: load %s by hand (from player %d, slot %d: the bench cannot load from there)"
@@ -330,6 +359,38 @@ def build(players, events, name, titles=None):
     if notes:
         scenario["notes"] = notes
     return scenario
+
+
+LOOP_BUTTONS = {"loop-in", "loop-out", "four-beat-loop", "reloop-exit"}
+BUTTON_EFFECTS = {
+    "hot-cue-1": {"jump", "loop", "loop_end", "play"},
+    "beat-jump-back": {"jump"}, "beat-jump-forward": {"jump"},
+    "loop-in": set(), "loop-out": {"loop"}, "four-beat-loop": {"loop", "loop_end"},
+    "reloop-exit": {"loop", "loop_end"},
+}
+
+
+def match_button_status(events):
+    """Associate one status transition of each expected kind with a recent explicit press."""
+    pending = {}
+    for at, number, kind, detail in events:
+        if kind == "button":
+            detail = dict(detail)
+            pending[number] = (at, detail, set(BUTTON_EFFECTS[detail["press"]]))
+        elif kind in ("load", "eject"):
+            pending.pop(number, None)
+        elif number in pending:
+            sent_at, command, effects = pending[number]
+            if at - sent_at > BUTTON_STATUS_WINDOW:
+                pending.pop(number)
+            elif detail.get("track") == command["track"] and kind in effects:
+                effects.remove(kind)
+                if kind in ("loop", "loop_end"):
+                    command.setdefault("result", {})["loop"] = kind == "loop"
+                elif kind == "play":
+                    command.setdefault("result", {})["play"] = True
+                continue
+        yield at, number, kind, detail
 
 
 def on_beat(at, step, on):

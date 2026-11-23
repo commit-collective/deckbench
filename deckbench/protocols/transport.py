@@ -13,6 +13,7 @@ PLAY/PAUSE is the button, a toggle. CUE is held for the press's length, as a fin
 that worked in those tests, the controller's name included.
 """
 import struct
+import time
 
 from .startup import MAGIC
 
@@ -62,10 +63,12 @@ def down(send, button, pause, slot=None):
     send(packet(CONNECT, slot=slot))
     pause(NXS2_EXTRA_SETTLE if button in NXS2_EXTRA_BUTTONS else SETTLE)
     try:
+        at = time.time()
         send(pressed)
     except OSError:
         up(send, button, slot)
         raise
+    return at
 
 
 def up(send, button, slot=None):
@@ -81,11 +84,13 @@ def up(send, button, slot=None):
         raise errors[0]
 
 
-def press(send, button, pause, slot=None):
+def press(send, button, pause, slot=None, on_press=None):
     """One press: down, held for HOLD, up. The up is sent even if the hold was cut short. Never retried: PLAY/PAUSE
     is a toggle, and a second press would undo the first."""
-    down(send, button, pause, slot)
+    at = down(send, button, pause, slot)
     try:
+        if on_press is not None:
+            on_press(at)
         pause(HOLD)
     finally:
         up(send, button, slot)

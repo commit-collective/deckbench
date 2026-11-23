@@ -6,7 +6,8 @@ Newest first. A release is a tagged commit.
 
 ### Scenarios
 
-- Control loops, recall Hot Cue 1 and jump one beat in either direction on a CDJ-2000NXS2.
+- Use loop, Hot Cue 1 and one-beat jump controls on CDJ-2000NXS2 cards and in scenarios.
+- Record those NXS2 button presses as replay steps when Deckbench sends them.
 
 ### Compatibility changes
 

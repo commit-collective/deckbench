@@ -280,8 +280,8 @@ Use these CDJ-2000NXS2 commands through the player command endpoint or as
 Set up the intended loop state before a replay step. IN and OUT are physical
 button presses whose effect depends on the deck's state.
 
-Record Mix keeps unexplained position changes as notes because a status packet
-does not identify the button that caused the change. Remote recall of a saved
+Record Mix saves these commands when Deckbench sends them. Unexplained
+position changes are kept as notes because status alone cannot identify the button. Remote recall of a saved
 hot loop landed one beat early in one hardware test.
 
 `POST /api/player/IP/command/play-pause?number=N` (or `cue`, one tap) needs

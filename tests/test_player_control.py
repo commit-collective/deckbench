@@ -10,7 +10,9 @@ from unittest.mock import patch
 
 from _ports import fresh
 from deckbench.core import Deck, World
+from deckbench.protocols import transport
 from deckbench.protocols.prolink import Prolink
+from deckbench.scenario import Scenario
 from deckbench.web import serve
 
 
@@ -234,6 +236,61 @@ class PlayerControl(unittest.TestCase):
         packet[0x21] = 3
         self.net.monitor.feed(packet, "127.0.0.8", self.net.ports.update)
         self.assertEqual(self.call("command", "stop")[0], 400)
+
+    def test_record_mix_captures_nxs2_commands_from_the_http_route(self):
+        deck = self.player.deck
+        deck.playing = True
+        self.feed()
+        self.call("arm", "1")
+        server = serve(self.world, "127.0.0.1", 0)
+        base = "http://127.0.0.1:%d/api/" % server.server_address[1]
+
+        def post(path):
+            request = urllib.request.Request(base + path, method="POST")
+            with urllib.request.urlopen(request, timeout=3) as response:
+                return json.load(response)
+
+        presses = (("hot-cue-1", 0), ("beat-jump-forward", 0), ("four-beat-loop", 4),
+                   ("loop-in", 2), ("loop-out", 4), ("reloop-exit", 0))
+
+        def deliver(sock, packet, destination):
+            if len(packet) == 48 and packet[45]:
+                command = next(button for button, key in transport.NXS2_EXTRA_BUTTONS.items() if key == packet[42])
+                if command == "hot-cue-1":
+                    status = bytearray(self.player.status())
+                    status[0xA0:0xA4] = (49).to_bytes(4, "big")
+                    self.net.monitor.recent.clear()
+                    self.net.monitor.feed(status, self.ip, self.net.ports.update)
+                else:
+                    beats = dict(presses)[command]
+                    deck.loop = (0, beats) if beats else None
+                    self.feed()
+
+        try:
+            post("mix/start")
+            self.feed()
+            with patch.object(self.net.decks[3], "send", side_effect=deliver):
+                for press, _ in presses:
+                    post("player/%s/command/%s?number=2" % (self.ip, press))
+                scenario = Scenario(post("mix/stop")["scenario"])
+                commands = [step for step in scenario.steps if step.get("press") in transport.NXS2_EXTRA_BUTTONS]
+                self.assertEqual([step["press"] for step in commands], [press for press, _ in presses])
+                self.assertFalse([step["text"] for step in scenario.steps
+                                  if step["do"] == "log" and "by hand" in step["text"]], scenario.steps)
+                for command in commands:
+                    i = scenario.steps.index(command)
+                    guard = next(step for step in reversed(scenario.steps[:i])
+                                 if step.get("required") and step["at"] == command["at"])
+                    self.assertEqual(guard["match"]["rbid"], self.player.rbid)
+                    self.assertTrue(scenario.do(self.world, guard, 0)[0])
+                    self.assertTrue(scenario.do(self.world, command, 0)[0])
+                    if command["press"] in ("four-beat-loop", "reloop-exit"):
+                        result = next(step for step in scenario.steps[i + 1:]
+                                      if step["do"] == "expect_player" and not step.get("required"))
+                        self.assertTrue(scenario.do(self.world, result, 0)[0])
+        finally:
+            server.shutdown()
+            server.server_close()
 
     def test_http_route_requires_arming(self):
         server = serve(self.world, "127.0.0.1", 0)

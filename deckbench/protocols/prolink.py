@@ -1786,6 +1786,7 @@ class Prolink(Protocol):
             # an all-in-one (an XDJ-XZ or XDJ-AZ) has several decks and a mixer on one address: untried, so not controlled
             device["shared_address"] = shared
             device["transport_method"] = self.transport_method(device)
+            device["extra_buttons"] = list(transport.NXS2_EXTRA_BUTTONS) if device["name"].upper() == "CDJ-2000NXS2" else []
             device["fader_start_supported"] = device["name"].upper() not in self.NO_FADER_START
             device["transport_armed"] = bool(available and (self.control_on or identity in self.player_controls))
             device["load_allowed"] = self.load_refusal(device) is None
@@ -1910,8 +1911,12 @@ class Prolink(Protocol):
         try:
             with share(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as sock:
                 sock.bind((sender.address, self.ports.beat))
+                mix = self.monitor.mix
+                on_press = None
+                if mix is not None and button in transport.NXS2_EXTRA_BUTTONS and not device["unit"]:
+                    on_press = lambda at: mix.command(device, button, at)
                 transport.press(lambda data: sender.send(sock, data, (device["ip"], self.ports.beat)), button,
-                                self.runtime.stopping.wait, self.button_slot(device))
+                                self.runtime.stopping.wait, self.button_slot(device), on_press=on_press)
         except OSError as error:
             return 400, {"error": "could not send the button press: %s" % error}
         self.world.events.add("player_button", deck=device["number"], ip=device["ip"], button=button)
