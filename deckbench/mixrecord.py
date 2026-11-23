@@ -9,7 +9,7 @@ SYNC on or off, MASTER taken. `MixRecorder.stop` turns them into scenario steps:
 `expect_player` to check that the player did it.
 
 A track's title and artist, when the bench has read them, go with its load. When a mixer reports what is on air, the
-changes are noted for bringing each channel in by hand. Hot Cue 1, one-beat jumps and loop buttons sent by the bench
+changes are noted for bringing each channel in by hand. Hot cues, beat jumps and loop buttons sent by the bench
 to a CDJ-2000NXS2 are captured as explicit presses. Unexplained loops and position changes, pitch moves and ejects
 are kept as `log` steps and notes.
 
@@ -28,7 +28,7 @@ import threading
 import time
 
 from .protocols.monitor import model_title
-from .protocols.transport import NXS2_EXTRA_SETTLE
+from .protocols.transport import NXS2_BEAT_LOOPS, NXS2_EXTRA_SETTLE, NXS2_HOT_CUES, NXS2_JUMPS
 from .protocols.prolink import Prolink
 
 RUNNING = ("playing", "looping")
@@ -284,7 +284,7 @@ def build(players, events, name, titles=None):
             continue
         if kind == "button":
             match = {"model": players[n]["model"], "online": True, **d["track"]}
-            if d["press"] in LOOP_BUTTONS:
+            if d["press"] in LOOP_BUTTONS or d["press"] in NXS2_BEAT_LOOPS:
                 match["loop"] = d["loop"]
             send_at = round(at - NXS2_EXTRA_SETTLE, 2)
             steps.append({"at": send_at, "do": "expect_player", "player": n, "match": match,
@@ -363,9 +363,10 @@ def build(players, events, name, titles=None):
 
 LOOP_BUTTONS = {"loop-in", "loop-out", "four-beat-loop", "reloop-exit"}
 BUTTON_EFFECTS = {
-    "hot-cue-1": {"jump", "loop", "loop_end", "play"},
-    "beat-jump-back": {"jump"}, "beat-jump-forward": {"jump"},
-    "loop-in": set(), "loop-out": {"loop"}, "four-beat-loop": {"loop", "loop_end"},
+    **dict.fromkeys(NXS2_HOT_CUES, {"jump", "loop", "loop_end", "play"}),
+    **dict.fromkeys(NXS2_JUMPS, {"jump"}),
+    **dict.fromkeys(NXS2_BEAT_LOOPS, {"loop", "loop_end"}),
+    "loop-out": {"loop"}, "four-beat-loop": {"loop", "loop_end"},
     "reloop-exit": {"loop", "loop_end"},
 }
 
@@ -376,7 +377,7 @@ def match_button_status(events):
     for at, number, kind, detail in events:
         if kind == "button":
             detail = dict(detail)
-            pending[number] = (at, detail, set(BUTTON_EFFECTS[detail["press"]]))
+            pending[number] = (at, detail, set(BUTTON_EFFECTS.get(detail["press"], ())))
         elif kind in ("load", "eject"):
             pending.pop(number, None)
         elif number in pending:

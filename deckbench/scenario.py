@@ -280,7 +280,7 @@ class Scenario:
         elif do == "release":
             world.set_master(deck, False)
         elif do == "loop":
-            world.set_loop(deck, int(step["beats"]))
+            world.set_loop(deck, float(step["beats"]))
         elif do == "unloop":
             world.set_loop(deck, 0)
         elif do == "load":

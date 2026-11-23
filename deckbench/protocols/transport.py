@@ -18,9 +18,20 @@ import time
 from .startup import MAGIC
 
 BUTTONS = {"play-pause": 20, "cue": 21}
+BEAT_LOOP_LENGTHS = ("0.25", "0.5", "1", "2", "4", "8", "16", "32")
+BEAT_JUMP_SIZES = (1, 2, 4, 8, 16)
+NXS2_BEAT_LOOPS = {f"beat-loop-{beats}": 0x3C + pad for pad, beats in enumerate(BEAT_LOOP_LENGTHS)}
+NXS2_HOT_CUES = {f"hot-cue-{pad}": 0x45 + pad for pad in range(1, 9)}
+NXS2_HOT_CUE_DELETES = {f"hot-cue-delete-{pad}": 0x4F + pad for pad in range(1, 9)}
+NXS2_JUMPS = {
+    f"beat-jump-{direction}{f'-{beats}' if beats != 1 else ''}": 0x5A + 2 * pad + side
+    for pad, beats in enumerate(BEAT_JUMP_SIZES)
+    for side, direction in enumerate(("back", "forward"))
+}
 NXS2_EXTRA_BUTTONS = {
-    "hot-cue-1": 0x46, "beat-jump-back": 0x5A, "beat-jump-forward": 0x5B,
+    "quantize": 0x0A, "slip": 0x0B,
     "loop-in": 0x1E, "loop-out": 0x1F, "reloop-exit": 0x20, "four-beat-loop": 0x24,
+    **NXS2_BEAT_LOOPS, **NXS2_HOT_CUES, **NXS2_HOT_CUE_DELETES, **NXS2_JUMPS,
 }
 LEGACY_BUTTONS = {**BUTTONS, **NXS2_EXTRA_BUTTONS}
 CONTROLLER = 54                     # the controller's number in the packets: refused if a device on the link has it

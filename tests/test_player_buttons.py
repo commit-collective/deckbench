@@ -45,6 +45,27 @@ class Packets(unittest.TestCase):
             with self.assertRaises(ValueError):
                 transport.packet(transport.CONNECT, slot=slot)
 
+    def test_nxs2_pad_banks_have_the_wire_codes_in_controller_order(self):
+        banks = (
+            (("0.25", "0.5", "1", "2", "4", "8", "16", "32"), "beat-loop-", 0x3c),
+            (range(1, 9), "hot-cue-", 0x46),
+            (range(1, 9), "hot-cue-delete-", 0x50),
+        )
+        commands = {f"{prefix}{value}": start + index
+                    for values, prefix, start in banks for index, value in enumerate(values)}
+        commands.update({"beat-jump-back": 0x5a, "beat-jump-forward": 0x5b,
+                         "beat-jump-back-2": 0x5c, "beat-jump-forward-2": 0x5d,
+                         "beat-jump-back-4": 0x5e, "beat-jump-forward-4": 0x5f,
+                         "beat-jump-back-8": 0x60, "beat-jump-forward-8": 0x61,
+                         "beat-jump-back-16": 0x62, "beat-jump-forward-16": 0x63,
+                         "quantize": 0x0a, "slip": 0x0b})
+        for button, key in commands.items():
+            with self.subTest(button=button):
+                actual = transport.NXS2_EXTRA_BUTTONS[button]
+                self.assertEqual(transport.packet(0, actual, True, 2)[42:], bytes((key, 0, 0, 1, 0, 0)))
+                with self.assertRaises(ValueError):
+                    transport.packet(0, actual, True)
+
     def test_release_and_disconnect_follow_a_failed_press(self):
         sent = []
 

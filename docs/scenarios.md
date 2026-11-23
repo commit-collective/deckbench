@@ -102,7 +102,7 @@ a step `on_beat` that beat of the master's bar, sent half a bar before its time,
 where it was even if the tempo is not quite the same. Which beat it was is read from the players' statuses, which
 come five times a second: a PLAY pressed far from a beat may be put on the next one.
 
-On a CDJ-2000NXS2, Record Mix keeps the exact loop, Hot Cue 1 and one-beat jump commands sent from the card or API.
+On a CDJ-2000NXS2, Record Mix keeps the exact loop, hot cue, beat jump, Quantize and Slip commands sent from the card or API.
 Replay checks the track, plus the active-loop state for loop buttons. It also checks a loop start or exit when the
 recording saw that change. The active flag cannot verify a resize or whether an exited loop is saved.
 

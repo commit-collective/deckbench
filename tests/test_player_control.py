@@ -250,13 +250,13 @@ class PlayerControl(unittest.TestCase):
             with urllib.request.urlopen(request, timeout=3) as response:
                 return json.load(response)
 
-        presses = (("hot-cue-1", 0), ("beat-jump-forward", 0), ("four-beat-loop", 4),
-                   ("loop-in", 2), ("loop-out", 4), ("reloop-exit", 0))
+        presses = (("hot-cue-8", 0), ("beat-jump-forward-16", 0), ("beat-loop-0.25", 0.25),
+                   ("loop-in", 0.125), ("loop-out", 0.25), ("reloop-exit", 0))
 
         def deliver(sock, packet, destination):
             if len(packet) == 48 and packet[45]:
                 command = next(button for button, key in transport.NXS2_EXTRA_BUTTONS.items() if key == packet[42])
-                if command == "hot-cue-1":
+                if command == "hot-cue-8":
                     status = bytearray(self.player.status())
                     status[0xA0:0xA4] = (49).to_bytes(4, "big")
                     self.net.monitor.recent.clear()
@@ -284,7 +284,7 @@ class PlayerControl(unittest.TestCase):
                     self.assertEqual(guard["match"]["rbid"], self.player.rbid)
                     self.assertTrue(scenario.do(self.world, guard, 0)[0])
                     self.assertTrue(scenario.do(self.world, command, 0)[0])
-                    if command["press"] in ("four-beat-loop", "reloop-exit"):
+                    if command["press"] in ("beat-loop-0.25", "reloop-exit"):
                         result = next(step for step in scenario.steps[i + 1:]
                                       if step["do"] == "expect_player" and not step.get("required"))
                         self.assertTrue(scenario.do(self.world, result, 0)[0])

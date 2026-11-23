@@ -3,19 +3,29 @@
 
 const $ = (id) => document.getElementById(id);
 const SLOTS = {1: "CD", 2: "SD", 3: "USB", 4: "rekordbox"};
-const LOOPS = [1, 2, 4, 8, 16, 32];
+const LOOPS = [0.25, 0.5, 1, 2, 4, 8, 16, 32];
+const loopLabel = (beats) => ({0.25: "¼", 0.5: "½"})[beats] || String(beats);
+const JUMPS = [-16, -8, -4, -2, -1, 1, 2, 4, 8, 16];
+const jumpLabel = (beats) => (beats < 0 ? "−" : "+") + Math.abs(beats);
+const CUE_PADS = [1, 2, 3, 4, 5, 6, 7, 8];
 const PLAYER_LOOP_AND_CUE = [
-  ["loop-in", "IN / ??", "Mark loop in or halve the active loop"],
-  ["loop-out", "OUT / 2?", "Mark loop out or double the active loop"],
-  ["four-beat-loop", "4 BEAT", "Start a four-beat loop"],
-  ["reloop-exit", "RELOOP / EXIT", "Resume the saved loop or exit the active loop"],
-  ["hot-cue-1", "HOT CUE 1", "Recall Hot Cue 1 or set it if empty"],
-  ["beat-jump-back", "?1 BEAT", "Jump back one beat"],
-  ["beat-jump-forward", "+1 BEAT", "Jump forward one beat"],
+  ["Loop controls", [
+    ["loop-in", "IN / ½×", "Mark loop in or halve the active loop"],
+    ["loop-out", "OUT / 2×", "Mark loop out or double the active loop"],
+    ["four-beat-loop", "4 BEAT / EXIT", "Start a four-beat loop or exit the active loop"],
+    ["reloop-exit", "RELOOP / EXIT", "Resume the saved loop or exit the active loop"],
+    ["quantize", "QUANTIZE", "Toggle Quantize"],
+    ["slip", "SLIP", "Toggle Slip mode"],
+  ]],
+  ["Beat loop", LOOPS.map((beats) => ["beat-loop-" + beats, loopLabel(beats), "Loop " + loopLabel(beats) + " beats"])],
+  ["Beat jump", JUMPS.map((beats) => ["beat-jump-" + (beats < 0 ? "back" : "forward")
+    + (Math.abs(beats) === 1 ? "" : "-" + Math.abs(beats)), jumpLabel(beats), "Jump " + jumpLabel(beats) + " beats"])],
+  ["Hot cue", CUE_PADS.map((pad) => ["hot-cue-" + pad, pad, "Recall Hot Cue " + pad + " or set it if empty"])],
+  ["Delete hot cue", CUE_PADS.map((pad) => ["hot-cue-delete-" + pad, pad, "Delete Hot Cue " + pad])],
 ];
 /* The moves in the track, in beats (4 to a bar): [label, request, title] */
-const MOVES = [["|◀", "seek/0", "To the first beat of the track"], ["◀◀", "jump/-16", "Back 4 bars"],
-               ["◀", "jump/-4", "Back a bar"], ["▶", "jump/4", "Forward a bar"], ["▶▶", "jump/16", "Forward 4 bars"]];
+const MOVES = [["|◀", "seek/0", "To the first beat of the track"],
+  ...JUMPS.map((beats) => [jumpLabel(beats), "jump/" + beats, "Jump " + jumpLabel(beats) + " beats"])];
 /* A request for the moment the page was clicked, in the bench's time: a request that is slow to arrive acts where the playhead was then */
 const clicked = (path) => path + (path.includes("?") ? "&" : "?") + "at=" + (Date.now() / 1000 + S.offset).toFixed(3);
 const SWITCHES = [["play", "PLAY"], ["cue", "CUE"], ["sync", "SYNC"], ["master", "MASTER"]];      /* the deck's number is its on / off switch */
@@ -360,7 +370,7 @@ function buildDeck(n, numbers) {
       h("div", {class: "seg", role: "group", "aria-label": "Loop of deck " + n},
         LOOPS.map((beats) => h("button", {"data-beats": beats, "aria-pressed": "false",
           title: beats + " beats from where the deck is. Again to end it",
-          onclick: () => { const d = S.state.decks[n]; act(clicked("api/deck/" + n + "/loop/" + (d.loop === beats ? 0 : beats))); }}, beats)))),
+          onclick: () => { const d = S.state.decks[n]; act(clicked("api/deck/" + n + "/loop/" + (d.loop === beats ? 0 : beats))); }}, loopLabel(beats))))),
     h("div", {class: "row"}, h("span", {class: "lbl"}, "Move"),
       h("div", {class: "seg moves", role: "group", "aria-label": "Move deck " + n + " in its track"},
         MOVES.map(([label, what, title]) => h("button", {title, "data-move": what,
@@ -853,10 +863,15 @@ function buildDevice(d) {
       h("button", {class: "sw", "data-command": "master", "aria-pressed": "false",
         onclick: (e) => playerCommand(d, e.currentTarget, "master")}, "MASTER")),
     mixer ? null : h("details", {class: "player-loop-cues", hidden: true}, h("summary", {}, "Loop & Cues"),
-      h("div", {class: "seg", role: "group", "aria-label": "Player loop and cue controls"},
-        PLAYER_LOOP_AND_CUE.map(([command, label, tip]) => h("button", {type: "button", disabled: true,
-          "data-command": command, "data-tip": tip, title: tip,
-          onclick: (e) => playerCommand(d, e.currentTarget, command)}, label)))),
+      PLAYER_LOOP_AND_CUE.map(([group, buttons]) => h("div", {class: "row"},
+        h("span", {class: "lbl"}, group),
+        h("div", {class: "seg", role: "group", "aria-label": group}, buttons.map(([command, label, tip]) =>
+          h("button", {type: "button", disabled: true, "aria-label": tip,
+            "data-command": command, "data-tip": tip, title: tip, onclick: (e) => {
+              if (group !== "Delete hot cue" || window.confirm(tip + " on player " + e.currentTarget.dataset.number + "?")) {
+                playerCommand(d, e.currentTarget, command);
+              }
+            }}, label)))))),
     h("div", {class: "facts"}),
     mixer ? null : h("div", {class: "player-control", hidden: true},
       h("button", {class: "btn small player-read", onclick: (e) => {

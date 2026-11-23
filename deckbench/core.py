@@ -371,7 +371,7 @@ class World:
         self.changed()
 
     def set_loop(self, deck, beats, at=None):
-        """Sets a loop of `beats` beats (a whole number) that starts at the nearest beat to where the deck is (before or after: the grid), or
+        """Sets a loop of `beats` beats that starts at the nearest beat to where the deck is (before or after: the grid), or
         ends the loop (beats 0). `at`: the moment of the click."""
         at = self.when(at)
 
@@ -382,7 +382,7 @@ class World:
             else:
                 deck.loop = None
         self.settle(change)
-        log("%s %s" % (deck.name, "loops %d beats" % beats if beats else "leaves its loop"))
+        log("%s %s" % (deck.name, "loops %g beats" % beats if beats else "leaves its loop"))
         self.changed()
 
     def set_tempo(self, deck, bpm):

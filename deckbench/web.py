@@ -595,7 +595,7 @@ def serve(world, host="127.0.0.1", port=8750, allow_origins=(), token=None, trac
                     return self.send(200, encode_json(world.snapshot()))
                 if what == "loop" and len(parts) == 5:      # the loop's length in beats, 0 for none
                     try:
-                        beats = int(parts[4])
+                        beats = float(parts[4])
                     except ValueError:
                         beats = -1
                     if not 0 <= beats <= 64:

@@ -6,8 +6,9 @@ Newest first. A release is a tagged commit.
 
 ### Scenarios
 
-- Use loop, Hot Cue 1 and one-beat jump controls on CDJ-2000NXS2 cards and in scenarios.
-- Record those NXS2 button presses as replay steps when Deckbench sends them.
+- Use beat loops, hot cues, beat jumps, Quantize and Slip on CDJ-2000NXS2 cards and in scenarios.
+- Record NXS2 button presses as replay steps when Deckbench sends them.
+- Set quarter- and half-beat loops and jump 1, 2, 4, 8 or 16 beats on simulated decks.
 
 ### Compatibility changes
 

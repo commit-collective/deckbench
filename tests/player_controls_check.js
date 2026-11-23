@@ -11,9 +11,10 @@ const context = vm.createContext({
   act: url => calls.push(url),
   api: url => { calls.push(url); return Promise.resolve({}); }, toast: () => {},
   buildPlayerLoad: () => null,
+  window: {confirm: () => true},
 });
 const script = fs.readFileSync(path.join(__dirname, "..", "deckbench", "ui", "app.js"), "utf8");
-const buttons = script.slice(script.indexOf("const PLAYER_LOOP_AND_CUE"), script.indexOf("/* The moves"));
+const buttons = script.slice(script.indexOf("const LOOPS"), script.indexOf("/* The moves"));
 vm.runInContext(buttons, context);
 vm.runInContext("function identity() {" + script.split("function identity() {")[1].split("/* A card's state")[0], context);
 vm.runInContext("function playerCommand(" + script.split("function playerCommand(")[1].split("function buildPlayerLoad")[0], context);
@@ -40,7 +41,8 @@ for (const [label, command, pressed] of [["PLAY", "play-pause", "false"], ["STAR
 const extra = find(card, node => node.attrs && node.attrs.class === "player-loop-cues");
 assert.strictEqual(extra.attrs.hidden, true, "Loop and cue controls wait for model capabilities");
 for (const command of ["loop-in", "loop-out", "four-beat-loop", "reloop-exit", "hot-cue-1",
-  "beat-jump-back", "beat-jump-forward"]) {
+  "beat-jump-back", "beat-jump-forward", "beat-jump-back-16", "beat-jump-forward-8",
+  "hot-cue-8", "hot-cue-delete-8", "beat-loop-0.25", "beat-loop-32", "quantize", "slip"]) {
   const button = find(extra, node => node.attrs && node.attrs["data-command"] === command);
   assert.strictEqual(button.attrs.disabled, true, "A new control waits for player state");
   button.attrs.onclick({currentTarget: {dataset: {number: "2"}}});
