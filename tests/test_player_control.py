@@ -190,7 +190,7 @@ class PlayerControl(unittest.TestCase):
                 self.assertEqual(packets[1][42:], bytes((key, 0, 0, 1, 0, 0)))
                 self.assertEqual(packets[2][42:], bytes((key, 0, 0, 0, 0, 0)))
 
-    def test_nxs2_extra_buttons_require_opt_in_a_track_and_the_nxs2(self):
+    def test_extra_buttons_require_opt_in_a_track_and_a_slotted_player(self):
         step = {"do": "player", "player": 2, "press": "hot-cue-1"}
         with patch.object(self.net.decks[3], "send") as send:
             self.assertEqual(self.call("command", "hot-cue-1")[0], 403)
@@ -198,12 +198,13 @@ class PlayerControl(unittest.TestCase):
             self.player.rbid = 0
             self.feed()
             self.assertEqual(self.call("command", "hot-cue-1")[0], 409)
-            for model in (b"XDJ-1000MK2", b"CDJ-3000"):
+            for model in (b"CDJ-3000", b"CDJ-3000X"):
                 self.net.monitor.devices.clear()
                 self.player.name = model
                 self.feed()
                 self.call("arm", "1")
                 self.assertEqual(self.call("command", "hot-cue-1")[0], 400)
+                self.assertFalse(self.net.control_devices()[0]["extra_buttons"])
                 self.assertTrue(any(not ok and "CDJ-2000NXS2" in msg
                                     for ok, msg in self.net.check_steps([step])))
             send.assert_not_called()
@@ -237,11 +238,19 @@ class PlayerControl(unittest.TestCase):
         self.net.monitor.feed(packet, "127.0.0.8", self.net.ports.update)
         self.assertEqual(self.call("command", "stop")[0], 400)
 
-    def test_record_mix_captures_nxs2_commands_from_the_http_route(self):
+    def test_record_mix_captures_xdj_commands_from_the_http_route(self):
+        self.net.monitor.devices.clear()
+        self.player.name = b"XDJ-1000MK2"
         deck = self.player.deck
+        self.feed()
+        self.assertEqual(self.net.control_devices()[0]["extra_buttons"], list(transport.NXS2_EXTRA_BUTTONS))
+        self.assertEqual(self.call("command", "hot-cue-8")[0], 403)
+        self.call("arm", "1")
+        self.assertTrue(all(ok for ok, _ in self.net.check_steps([
+            {"do": "player", "player": 2, "press": "beat-jump-forward-16"},
+        ])))
         deck.playing = True
         self.feed()
-        self.call("arm", "1")
         server = serve(self.world, "127.0.0.1", 0)
         base = "http://127.0.0.1:%d/api/" % server.server_address[1]
 
@@ -282,6 +291,7 @@ class PlayerControl(unittest.TestCase):
                     guard = next(step for step in reversed(scenario.steps[:i])
                                  if step.get("required") and step["at"] == command["at"])
                     self.assertEqual(guard["match"]["rbid"], self.player.rbid)
+                    self.assertEqual(guard["match"]["model"], "XDJ-1000MK2")
                     self.assertTrue(scenario.do(self.world, guard, 0)[0])
                     self.assertTrue(scenario.do(self.world, command, 0)[0])
                     if command["press"] in ("beat-loop-0.25", "reloop-exit"):

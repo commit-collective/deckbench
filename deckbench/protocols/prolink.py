@@ -1749,7 +1749,7 @@ class Prolink(Protocol):
 
     # How each model is started and stopped. Fader start is documented as unsupported on the CDJ-3000 and XDJ-XZ. The
     # CDJ-3000 takes button presses (protocols/transport.py) instead: seen on CDJ-3000 firmware, the 3000X untried. The
-    # CDJ-2000NXS2 takes them in its own format, and fader start too. The XDJ-1000MK2 shares that format, untried.
+    # CDJ-2000NXS2 and XDJ-1000MK2 use slotted presses and support fader start.
     BUTTON_MODELS = ("CDJ-3000", "CDJ-3000X", "CDJ-2000NXS2", "XDJ-1000MK2")
     SLOT_MODELS = ("CDJ-2000NXS2", "XDJ-1000MK2")   # the little-endian format, whose slot is the player's number
     NO_FADER_START = ("CDJ-3000", "CDJ-3000X", "XDJ-XZ")
@@ -1786,7 +1786,8 @@ class Prolink(Protocol):
             # an all-in-one (an XDJ-XZ or XDJ-AZ) has several decks and a mixer on one address: untried, so not controlled
             device["shared_address"] = shared
             device["transport_method"] = self.transport_method(device)
-            device["extra_buttons"] = list(transport.NXS2_EXTRA_BUTTONS) if device["name"].upper() == "CDJ-2000NXS2" else []
+            device["extra_buttons"] = (
+                list(transport.NXS2_EXTRA_BUTTONS) if device["name"].upper() in self.SLOT_MODELS else [])
             device["fader_start_supported"] = device["name"].upper() not in self.NO_FADER_START
             device["transport_armed"] = bool(available and (self.control_on or identity in self.player_controls))
             device["load_allowed"] = self.load_refusal(device) is None
@@ -2011,8 +2012,8 @@ class Prolink(Protocol):
         if command not in transport.NXS2_EXTRA_BUTTONS and command not in (
                 "start", "stop", "play-pause", "cue", "cue-down", "cue-hold", "cue-up", "sync-on", "sync-off", "master"):
             return 400, {"error": "unknown player command"}
-        if command in transport.NXS2_EXTRA_BUTTONS and device["name"].upper() != "CDJ-2000NXS2":
-            return 400, {"error": "this button requires a CDJ-2000NXS2"}
+        if command in transport.NXS2_EXTRA_BUTTONS and device["name"].upper() not in self.SLOT_MODELS:
+            return 400, {"error": "this button requires a " + " or ".join(self.SLOT_MODELS)}
         if command == "cue-up":                 # always allowed: letting go must never be refused
             return self.hold_player_cue(device, False)
         if command == "cue-hold":               # only keeps a hold going, never presses
@@ -2164,8 +2165,9 @@ class Prolink(Protocol):
                 items.append((False, "player %d takes no button presses (PLAY, CUE): this %s has fader start only"
                               % (n, d["model"]) if d.get("fader_start_supported") else
                               "player %d takes no button presses (PLAY, CUE)" % n))
-            if presses & transport.NXS2_EXTRA_BUTTONS.keys() and d["name"].upper() != "CDJ-2000NXS2":
-                items.append((False, "player %d needs to be a CDJ-2000NXS2 for the requested buttons" % n))
+            if presses & transport.NXS2_EXTRA_BUTTONS.keys() and d["name"].upper() not in self.SLOT_MODELS:
+                items.append((False, "player %d needs to be a %s for the requested buttons"
+                              % (n, " or ".join(self.SLOT_MODELS))))
             if presses & {"start", "stop"} and not d.get("fader_start_supported"):
                 items.append((False, "player %d has no fader start (START, STOP)" % n))
             st = d.get("status") or {}

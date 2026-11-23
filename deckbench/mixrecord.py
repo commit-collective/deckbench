@@ -10,7 +10,7 @@ SYNC on or off, MASTER taken. `MixRecorder.stop` turns them into scenario steps:
 
 A track's title and artist, when the bench has read them, go with its load. When a mixer reports what is on air, the
 changes are noted for bringing each channel in by hand. Hot cues, beat jumps and loop buttons sent by the bench
-to a CDJ-2000NXS2 are captured as explicit presses. Unexplained loops and position changes, pitch moves and ejects
+to a CDJ-2000NXS2 or XDJ-1000MK2 are captured as explicit presses. Unexplained loops and position changes, pitch moves and ejects
 are kept as `log` steps and notes.
 
 A PLAY pressed while another player was the tempo master and playing is replayed on the same beat of the master's

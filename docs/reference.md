@@ -243,8 +243,7 @@ for each discovered player:
 | Model | `transport_method` | `fader_start_supported` | Commands |
 |---|---|---|---|
 | CDJ-3000, CDJ-3000X | `buttons` | false | `play-pause` and `cue` |
-| CDJ-2000NXS2 | `buttons` | true | `play-pause`, `cue`, `start`, `stop` and the hot cue, beat jump and loop commands below |
-| XDJ-1000MK2 | `buttons` | true | `play-pause` and `cue`, or `start` and `stop` |
+| CDJ-2000NXS2, XDJ-1000MK2 | `buttons` | true | `play-pause`, `cue`, `start`, `stop` and the extra commands below |
 | XDJ-XZ | (empty) | false | none |
 | others | `fader` | true | `start` and `stop`: fader start |
 
@@ -265,8 +264,9 @@ firmware run in cdj3k-emu, and on a physical CDJ-2000NXS2 and XDJ-1000MK2, which
 take the NXS2's format. Other models get no presses until they are tried. The API answers HTTP 202 with `sent: true, confirmed: false` and
 records `player_button`.
 
-Use these CDJ-2000NXS2 commands through the player command endpoint or as
-`press` values in a `player` scenario step. Load an analyzed rekordbox track first.
+The CDJ-2000NXS2 and XDJ-1000MK2 expose the commands below in `extra_buttons`.
+Use them through the player command endpoint or as `press` values in a `player`
+scenario step. Load an analyzed rekordbox track first.
 
 | Command | On the deck |
 |---|---|

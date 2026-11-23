@@ -3,11 +3,11 @@
 
 Experimental. A remote controller connects, presses and releases a button, then disconnects: four short datagrams
 sent to the player's UDP 50001 from the bench's own 50001. Seen working on CDJ-3000 firmware (in cdj3k-emu) and on a
-physical CDJ-2000NXS2. The XDJ-1000MK2 is sent the NXS2's format, untried. Nothing comes back: a sent press is not a confirmed one.
+physical CDJ-2000NXS2. The XDJ-1000MK2 shares the NXS2's format. The player sends no acknowledgement.
 
 The two formats differ after the header. The CDJ-3000's fields are big-endian with no slot. The NXS2's are
 little-endian and name a controller slot, 1 to 4: the tested one is the player's own number, which its receiver
-prefers. Each format only goes to the models it was tried on.
+prefers. The models supported by each format are listed in Prolink.
 
 PLAY/PAUSE is the button, a toggle. CUE is held for the press's length, as a finger would. The bytes are the ones
 that worked in those tests, the controller's name included.
