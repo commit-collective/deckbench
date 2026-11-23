@@ -190,7 +190,7 @@ class PlayerControl(unittest.TestCase):
                 self.assertEqual(packets[1][42:], bytes((key, 0, 0, 1, 0, 0)))
                 self.assertEqual(packets[2][42:], bytes((key, 0, 0, 0, 0, 0)))
 
-    def test_extra_buttons_require_opt_in_a_track_and_a_slotted_player(self):
+    def test_extra_buttons_require_opt_in_a_track_and_a_supported_player(self):
         step = {"do": "player", "player": 2, "press": "hot-cue-1"}
         with patch.object(self.net.decks[3], "send") as send:
             self.assertEqual(self.call("command", "hot-cue-1")[0], 403)
@@ -198,16 +198,32 @@ class PlayerControl(unittest.TestCase):
             self.player.rbid = 0
             self.feed()
             self.assertEqual(self.call("command", "hot-cue-1")[0], 409)
-            for model in (b"CDJ-3000", b"CDJ-3000X"):
-                self.net.monitor.devices.clear()
-                self.player.name = model
-                self.feed()
-                self.call("arm", "1")
-                self.assertEqual(self.call("command", "hot-cue-1")[0], 400)
-                self.assertFalse(self.net.control_devices()[0]["extra_buttons"])
-                self.assertTrue(any(not ok and "CDJ-2000NXS2" in msg
-                                    for ok, msg in self.net.check_steps([step])))
+            self.net.monitor.devices.clear()
+            self.player.name = b"CDJ-3000X"
+            self.feed()
+            self.call("arm", "1")
+            self.assertEqual(self.call("command", "hot-cue-1")[0], 400)
+            self.assertFalse(self.net.control_devices()[0]["extra_buttons"])
+            self.assertTrue(any(not ok and "hot-cue-1" in msg for ok, msg in self.net.check_steps([step])))
             send.assert_not_called()
+
+    def test_cdj3000_pad_commands_keep_the_big_endian_format(self):
+        self.net.monitor.devices.clear()
+        self.player.name = b"CDJ-3000"
+        self.feed()
+        self.call("arm", "1")
+        self.assertIn("beat-jump-forward-64", self.net.control_devices()[0]["extra_buttons"])
+        for button, key in (("hot-cue-8", 0x4d), ("beat-loop-0.25", 0x3c), ("beat-jump-back-32", 0x64),
+                            ("beat-jump-forward-64", 0x67), ("loop-half", 0x23), ("loop-double", 0x22)):
+            with self.subTest(button=button), patch.object(self.net.decks[3], "send") as send:
+                step = {"do": "player", "player": 2, "press": button}
+                self.assertTrue(all(ok for ok, _ in self.net.check_steps([step])))
+                self.assertTrue(self.net.player_do(step)[0])
+                packets = [call.args[1] for call in send.call_args_list]
+                self.assertEqual([p[36:40] for p in packets], [bytes((0, n, 0, 0)) for n in (1, 0, 0, 2)])
+                self.assertEqual(packets[1][40:], bytes((0, 1, 0, key, 0, 1, 0, 0)))
+                self.assertEqual(packets[2][40:], bytes((0, 1, 0, key, 0, 0, 0, 0)))
+        self.assertEqual(self.call("command", "hot-cue-delete-1")[0], 400)
 
     def test_sync_commands_use_the_documented_packet_and_stay_opt_in(self):
         self.assertEqual(self.call("command", "master")[0], 403)

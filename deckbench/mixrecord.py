@@ -10,7 +10,7 @@ SYNC on or off, MASTER taken. `MixRecorder.stop` turns them into scenario steps:
 
 A track's title and artist, when the bench has read them, go with its load. When a mixer reports what is on air, the
 changes are noted for bringing each channel in by hand. Hot cues, beat jumps and loop buttons sent by the bench
-to a CDJ-2000NXS2 or XDJ-1000MK2 are captured as explicit presses. Unexplained loops and position changes, pitch moves and ejects
+to a supported player are captured as explicit presses. Unexplained loops and position changes, pitch moves and ejects
 are kept as `log` steps and notes.
 
 A PLAY pressed while another player was the tempo master and playing is replayed on the same beat of the master's
@@ -28,7 +28,7 @@ import threading
 import time
 
 from .protocols.monitor import model_title
-from .protocols.transport import NXS2_BEAT_LOOPS, NXS2_EXTRA_SETTLE, NXS2_HOT_CUES, NXS2_JUMPS
+from .protocols.transport import BEAT_LOOPS, EXTRA_SETTLE, HOT_CUES, BEAT_JUMPS
 from .protocols.prolink import Prolink
 
 RUNNING = ("playing", "looping")
@@ -284,9 +284,9 @@ def build(players, events, name, titles=None):
             continue
         if kind == "button":
             match = {"model": players[n]["model"], "online": True, **d["track"]}
-            if d["press"] in LOOP_BUTTONS or d["press"] in NXS2_BEAT_LOOPS:
+            if d["press"] in LOOP_BUTTONS or d["press"] in BEAT_LOOPS:
                 match["loop"] = d["loop"]
-            send_at = round(at - NXS2_EXTRA_SETTLE, 2)
+            send_at = round(at - EXTRA_SETTLE, 2)
             steps.append({"at": send_at, "do": "expect_player", "player": n, "match": match,
                           "within": 0.2, "required": True})
             actions.append((at, {"do": "player", "player": n, "press": d["press"], "send_at": send_at},
@@ -361,11 +361,11 @@ def build(players, events, name, titles=None):
     return scenario
 
 
-LOOP_BUTTONS = {"loop-in", "loop-out", "four-beat-loop", "reloop-exit"}
+LOOP_BUTTONS = {"loop-in", "loop-out", "loop-half", "loop-double", "four-beat-loop", "reloop-exit"}
 BUTTON_EFFECTS = {
-    **dict.fromkeys(NXS2_HOT_CUES, {"jump", "loop", "loop_end", "play"}),
-    **dict.fromkeys(NXS2_JUMPS, {"jump"}),
-    **dict.fromkeys(NXS2_BEAT_LOOPS, {"loop", "loop_end"}),
+    **dict.fromkeys(HOT_CUES, {"jump", "loop", "loop_end", "play"}),
+    **dict.fromkeys(BEAT_JUMPS, {"jump"}),
+    **dict.fromkeys(BEAT_LOOPS, {"loop", "loop_end"}),
     "loop-out": {"loop"}, "four-beat-loop": {"loop", "loop_end"},
     "reloop-exit": {"loop", "loop_end"},
 }

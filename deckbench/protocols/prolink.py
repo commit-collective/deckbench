@@ -1768,6 +1768,15 @@ class Prolink(Protocol):
         """The controller slot of the player's button format: its number for the NXS2's, None for the CDJ-3000's."""
         return device["number"] if device["name"].upper() in cls.SLOT_MODELS else None
 
+    @classmethod
+    def extra_buttons(cls, device):
+        model = device["name"].upper()
+        if model in cls.SLOT_MODELS:
+            return transport.NXS2_EXTRA_BUTTONS
+        if model == "CDJ-3000":
+            return transport.CDJ3000_EXTRA_BUTTONS
+        return {}
+
     def control_devices(self):
         devices = self.monitor.snapshot()
         eligible = set()
@@ -1786,8 +1795,7 @@ class Prolink(Protocol):
             # an all-in-one (an XDJ-XZ or XDJ-AZ) has several decks and a mixer on one address: untried, so not controlled
             device["shared_address"] = shared
             device["transport_method"] = self.transport_method(device)
-            device["extra_buttons"] = (
-                list(transport.NXS2_EXTRA_BUTTONS) if device["name"].upper() in self.SLOT_MODELS else [])
+            device["extra_buttons"] = list(self.extra_buttons(device))
             device["fader_start_supported"] = device["name"].upper() not in self.NO_FADER_START
             device["transport_armed"] = bool(available and (self.control_on or identity in self.player_controls))
             device["load_allowed"] = self.load_refusal(device) is None
@@ -1914,7 +1922,7 @@ class Prolink(Protocol):
                 sock.bind((sender.address, self.ports.beat))
                 mix = self.monitor.mix
                 on_press = None
-                if mix is not None and button in transport.NXS2_EXTRA_BUTTONS and not device["unit"]:
+                if mix is not None and button in transport.EXTRA_COMMANDS and not device["unit"]:
                     on_press = lambda at: mix.command(device, button, at)
                 transport.press(lambda data: sender.send(sock, data, (device["ip"], self.ports.beat)), button,
                                 self.runtime.stopping.wait, self.button_slot(device), on_press=on_press)
@@ -2009,11 +2017,11 @@ class Prolink(Protocol):
                 return 403, {'error': 'switch Player control on in Settings first'}
             return self.load_player_track(device, parts[3], query)
         command = parts[3]
-        if command not in transport.NXS2_EXTRA_BUTTONS and command not in (
+        if command not in transport.EXTRA_COMMANDS and command not in (
                 "start", "stop", "play-pause", "cue", "cue-down", "cue-hold", "cue-up", "sync-on", "sync-off", "master"):
             return 400, {"error": "unknown player command"}
-        if command in transport.NXS2_EXTRA_BUTTONS and device["name"].upper() not in self.SLOT_MODELS:
-            return 400, {"error": "this button requires a " + " or ".join(self.SLOT_MODELS)}
+        if command in transport.EXTRA_COMMANDS and command not in device["extra_buttons"]:
+            return 400, {"error": "%s does not support %s" % (device["model"], command)}
         if command == "cue-up":                 # always allowed: letting go must never be refused
             return self.hold_player_cue(device, False)
         if command == "cue-hold":               # only keeps a hold going, never presses
@@ -2028,11 +2036,11 @@ class Prolink(Protocol):
             return 403, {"error": "switch Player control on in Settings first"}
         if command == "cue-down":
             return self.hold_player_cue(device, True)
-        if command in transport.NXS2_EXTRA_BUTTONS:
+        if command in transport.EXTRA_COMMANDS:
             status = device.get("status") or {}
             if not status.get("rbid") or status.get("track_type") != 1:
                 return 409, {"error": "load an analyzed rekordbox track before using hot cue, beat jump or loop controls"}
-        if command in transport.NXS2_EXTRA_BUTTONS or command in transport.BUTTONS:
+        if command in transport.EXTRA_COMMANDS or command in transport.BUTTONS:
             return self.press_player_button(device, command)
         occupied = {d["number"] for d in self.monitor.snapshot() if d["online"]}
         sender = next((l for l in sorted(self.decks.values(), key=lambda link: not link.deck.enabled)
@@ -2165,9 +2173,10 @@ class Prolink(Protocol):
                 items.append((False, "player %d takes no button presses (PLAY, CUE): this %s has fader start only"
                               % (n, d["model"]) if d.get("fader_start_supported") else
                               "player %d takes no button presses (PLAY, CUE)" % n))
-            if presses & transport.NXS2_EXTRA_BUTTONS.keys() and d["name"].upper() not in self.SLOT_MODELS:
-                items.append((False, "player %d needs to be a %s for the requested buttons"
-                              % (n, " or ".join(self.SLOT_MODELS))))
+            unsupported = (presses & transport.EXTRA_COMMANDS) - set(d["extra_buttons"])
+            if unsupported:
+                items.append((False, "player %d (%s) does not support %s"
+                              % (n, d["model"], ", ".join(sorted(unsupported)))))
             if presses & {"start", "stop"} and not d.get("fader_start_supported"):
                 items.append((False, "player %d has no fader start (START, STOP)" % n))
             st = d.get("status") or {}

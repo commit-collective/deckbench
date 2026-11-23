@@ -20,26 +20,35 @@ from .startup import MAGIC
 BUTTONS = {"play-pause": 20, "cue": 21}
 BEAT_LOOP_LENGTHS = ("0.25", "0.5", "1", "2", "4", "8", "16", "32")
 BEAT_JUMP_SIZES = (1, 2, 4, 8, 16)
-NXS2_BEAT_LOOPS = {f"beat-loop-{beats}": 0x3C + pad for pad, beats in enumerate(BEAT_LOOP_LENGTHS)}
-NXS2_HOT_CUES = {f"hot-cue-{pad}": 0x45 + pad for pad in range(1, 9)}
-NXS2_HOT_CUE_DELETES = {f"hot-cue-delete-{pad}": 0x4F + pad for pad in range(1, 9)}
-NXS2_JUMPS = {
+BEAT_LOOPS = {f"beat-loop-{beats}": 0x3C + pad for pad, beats in enumerate(BEAT_LOOP_LENGTHS)}
+HOT_CUES = {f"hot-cue-{pad}": 0x45 + pad for pad in range(1, 9)}
+HOT_CUE_DELETES = {f"hot-cue-delete-{pad}": 0x4F + pad for pad in range(1, 9)}
+BEAT_JUMPS = {
     f"beat-jump-{direction}{f'-{beats}' if beats != 1 else ''}": 0x5A + 2 * pad + side
-    for pad, beats in enumerate(BEAT_JUMP_SIZES)
+    for pad, beats in enumerate((*BEAT_JUMP_SIZES, 32, 64))
     for side, direction in enumerate(("back", "forward"))
 }
-NXS2_EXTRA_BUTTONS = {
+COMMON_EXTRA_BUTTONS = {
     "quantize": 0x0A, "slip": 0x0B,
     "loop-in": 0x1E, "loop-out": 0x1F, "reloop-exit": 0x20, "four-beat-loop": 0x24,
-    **NXS2_BEAT_LOOPS, **NXS2_HOT_CUES, **NXS2_HOT_CUE_DELETES, **NXS2_JUMPS,
+    **BEAT_LOOPS, **HOT_CUES,
 }
+NXS2_EXTRA_BUTTONS = {
+    **COMMON_EXTRA_BUTTONS, **HOT_CUE_DELETES,
+    **{name: code for name, code in BEAT_JUMPS.items() if code <= 0x63},
+}
+CDJ3000_EXTRA_BUTTONS = {
+    **COMMON_EXTRA_BUTTONS, "loop-half": 0x23, "loop-double": 0x22, **BEAT_JUMPS,
+}
+EXTRA_COMMANDS = NXS2_EXTRA_BUTTONS.keys() | CDJ3000_EXTRA_BUTTONS.keys()
 LEGACY_BUTTONS = {**BUTTONS, **NXS2_EXTRA_BUTTONS}
+CDJ3000_BUTTONS = {**BUTTONS, **CDJ3000_EXTRA_BUTTONS}
 CONTROLLER = 54                     # the controller's number in the packets: refused if a device on the link has it
 NAME = b"deckbench probe"           # as tested
 CONNECT, DISCONNECT = 1, 2
 HOLD = 0.1                          # seconds a button is held
 SETTLE = 0.1                        # time to connect before PLAY/PAUSE or CUE
-NXS2_EXTRA_SETTLE = 0.25            # connect time used in the physical NXS2 tests
+EXTRA_SETTLE = 0.25                 # connect time used in the physical NXS2 pad tests
 
 
 def packet(subtype, button=None, pressed=False, slot=None):
@@ -57,7 +66,7 @@ def packet(subtype, button=None, pressed=False, slot=None):
     struct.pack_into(">H", data, 34, len(data))
     struct.pack_into(order + "HH", data, 36, subtype, slot or 0)
     if button is not None:
-        buttons = BUTTONS if slot is None else LEGACY_BUTTONS
+        buttons = CDJ3000_BUTTONS if slot is None else LEGACY_BUTTONS
         if subtype != 0 or button not in buttons.values():
             raise ValueError("unsupported button event")
         struct.pack_into(order + "HHBBH", data, 40, 1, button, 0, int(pressed), 0)
@@ -69,10 +78,10 @@ def packet(subtype, button=None, pressed=False, slot=None):
 def down(send, button, pause, slot=None):
     """Connect, then the button goes down, through send(datagram). pause(seconds) waits. If the press cannot be sent,
     it is let go at once (up), so nothing is left held. slot: see packet."""
-    key = (BUTTONS if slot is None else LEGACY_BUTTONS)[button]
+    key = (CDJ3000_BUTTONS if slot is None else LEGACY_BUTTONS)[button]
     pressed = packet(0, key, True, slot)
     send(packet(CONNECT, slot=slot))
-    pause(NXS2_EXTRA_SETTLE if button in NXS2_EXTRA_BUTTONS else SETTLE)
+    pause(EXTRA_SETTLE if button in EXTRA_COMMANDS else SETTLE)
     try:
         at = time.time()
         send(pressed)
@@ -85,7 +94,7 @@ def down(send, button, pause, slot=None):
 def up(send, button, slot=None):
     """The button goes up, then the disconnect. Both are tried, whatever happens to the first."""
     errors = []
-    key = (BUTTONS if slot is None else LEGACY_BUTTONS)[button]
+    key = (CDJ3000_BUTTONS if slot is None else LEGACY_BUTTONS)[button]
     for data in (packet(0, key, slot=slot), packet(DISCONNECT, slot=slot)):
         try:
             send(data)

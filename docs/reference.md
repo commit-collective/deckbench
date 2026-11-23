@@ -242,7 +242,8 @@ for each discovered player:
 
 | Model | `transport_method` | `fader_start_supported` | Commands |
 |---|---|---|---|
-| CDJ-3000, CDJ-3000X | `buttons` | false | `play-pause` and `cue` |
+| CDJ-3000 | `buttons` | false | `play-pause`, `cue` and the extra commands below |
+| CDJ-3000X | `buttons` | false | `play-pause` and `cue` |
 | CDJ-2000NXS2, XDJ-1000MK2 | `buttons` | true | `play-pause`, `cue`, `start`, `stop` and the extra commands below |
 | XDJ-XZ | (empty) | false | none |
 | others | `fader` | true | `start` and `stop`: fader start |
@@ -264,25 +265,25 @@ firmware run in cdj3k-emu, and on a physical CDJ-2000NXS2 and XDJ-1000MK2, which
 take the NXS2's format. Other models get no presses until they are tried. The API answers HTTP 202 with `sent: true, confirmed: false` and
 records `player_button`.
 
-The CDJ-2000NXS2 and XDJ-1000MK2 expose the commands below in `extra_buttons`.
+The CDJ-3000, CDJ-2000NXS2 and XDJ-1000MK2 expose their supported commands in `extra_buttons`.
 Use them through the player command endpoint or as `press` values in a `player`
 scenario step. Load an analyzed rekordbox track first.
 
 | Command | On the deck |
 |---|---|
 | `hot-cue-1` through `hot-cue-8` | Recall a hot cue. With an empty slot the deck may set a cue. |
-| `hot-cue-delete-1` through `hot-cue-delete-8` | Delete a hot cue. |
+| `hot-cue-delete-1` through `hot-cue-delete-8` | Delete a hot cue on a CDJ-2000NXS2 or XDJ-1000MK2. |
 | `beat-jump-back`, `beat-jump-forward` | Move one beat. |
-| `beat-jump-back-N`, `beat-jump-forward-N` | Move 2, 4, 8 or 16 beats. Substitute the number for `N`. |
+| `beat-jump-back-N`, `beat-jump-forward-N` | Move 2, 4, 8 or 16 beats. The CDJ-3000 also takes 32 and 64. Substitute the number for `N`. |
 | `beat-loop-N` | Press a beat-loop pad. Use `0.25`, `0.5`, `1`, `2`, `4`, `8`, `16` or `32`. |
 | `quantize`, `slip` | Toggle the player's Quantize or Slip mode. |
 | `four-beat-loop` | Starts a four-beat loop or exits an active loop. |
 | `reloop-exit` | Exits the active loop or resumes a saved loop. |
-| `loop-in` | Sets the in point when no loop is set, or halves an active loop. |
-| `loop-out` | Sets the out point when creating a loop, or doubles an active loop. |
+| `loop-in`, `loop-out` | Set loop points. On the CDJ-2000NXS2 and XDJ-1000MK2, they halve or double an active loop. |
+| `loop-half`, `loop-double` | Halve or double the active loop on a CDJ-3000. |
 
-Set up the intended loop state before a replay step. IN and OUT are physical
-button presses whose effect depends on the deck's state.
+Set up the intended loop state before a replay step. These commands use the
+player's button handlers and their effect depends on the deck's state.
 
 Record Mix saves these commands when Deckbench sends them. Unexplained
 position changes are kept as notes because status alone cannot identify the button. Remote recall of a saved

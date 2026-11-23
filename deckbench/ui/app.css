@@ -417,6 +417,7 @@ h2:first-child { margin-top: 0; }
 .player-control label { display: block; margin-top: 10px; }
 .deck-loop-cues, .player-loop-cues, .player-load { margin-top: 12px; }
 .player-loop-cues .seg { margin-top: 8px; }
+.player-loop-cues .row[hidden] { display: none; }
 .player-load.locked > :not(summary) { opacity: .5; }
 .player-load.locked summary { color: var(--muted); }
 .player-load .fields { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); margin-block: 8px; }

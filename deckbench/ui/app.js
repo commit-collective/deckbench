@@ -14,11 +14,13 @@ const PLAYER_LOOP_AND_CUE = [
     ["loop-out", "OUT / 2×", "Mark loop out or double the active loop"],
     ["four-beat-loop", "4 BEAT / EXIT", "Start a four-beat loop or exit the active loop"],
     ["reloop-exit", "RELOOP / EXIT", "Resume the saved loop or exit the active loop"],
+    ["loop-half", "½×", "Halve the active loop"],
+    ["loop-double", "2×", "Double the active loop"],
     ["quantize", "QUANTIZE", "Toggle Quantize"],
     ["slip", "SLIP", "Toggle Slip mode"],
   ]],
   ["Beat loop", LOOPS.map((beats) => ["beat-loop-" + beats, loopLabel(beats), "Loop " + loopLabel(beats) + " beats"])],
-  ["Beat jump", JUMPS.map((beats) => ["beat-jump-" + (beats < 0 ? "back" : "forward")
+  ["Beat jump", [-64, -32, ...JUMPS, 32, 64].map((beats) => ["beat-jump-" + (beats < 0 ? "back" : "forward")
     + (Math.abs(beats) === 1 ? "" : "-" + Math.abs(beats)), jumpLabel(beats), "Jump " + jumpLabel(beats) + " beats"])],
   ["Hot cue", CUE_PADS.map((pad) => ["hot-cue-" + pad, pad, "Recall Hot Cue " + pad + " or set it if empty"])],
   ["Delete hot cue", CUE_PADS.map((pad) => ["hot-cue-delete-" + pad, pad, "Delete Hot Cue " + pad])],
@@ -867,7 +869,7 @@ function buildDevice(d) {
         h("span", {class: "lbl"}, group),
         h("div", {class: "seg", role: "group", "aria-label": group}, buttons.map(([command, label, tip]) =>
           h("button", {type: "button", disabled: true, "aria-label": tip,
-            "data-command": command, "data-tip": tip, title: tip, onclick: (e) => {
+            "data-command": command, "data-label": label, "data-tip": tip, title: tip, onclick: (e) => {
               if (group !== "Delete hot cue" || window.confirm(tip + " on player " + e.currentTarget.dataset.number + "?")) {
                 playerCommand(d, e.currentTarget, command);
               }
@@ -926,11 +928,24 @@ function renderDevices() {
       }
       const loopCues = q("player-loop-cues"), extraButtons = d.extra_buttons || [];
       loopCues.hidden = !!set.observer || !extraButtons.length;
-      for (const button of loopCues.querySelectorAll("button")) {
-        button.hidden = !extraButtons.includes(button.dataset.command);
-        button.disabled = !usable || !st || !st.rbid || st.track_type !== 1;
-        button.dataset.number = d.number;
-        button.title = why || (usable && button.disabled ? "Load an analyzed rekordbox track first" : button.dataset.tip);
+      const separateResize = extraButtons.includes("loop-half");
+      for (const row of loopCues.querySelectorAll(".row")) {
+        const buttons = Array.from(row.querySelectorAll("button"));
+        for (const button of buttons) {
+          const command = button.dataset.command;
+          button.hidden = !extraButtons.includes(command);
+          button.disabled = !usable || !st || !st.rbid || st.track_type !== 1;
+          button.dataset.number = d.number;
+          let tip = button.dataset.tip;
+          if (command === "loop-in" || command === "loop-out") {
+            const point = command === "loop-in" ? "in" : "out";
+            setText(button, separateResize ? point.toUpperCase() : button.dataset.label);
+            tip = separateResize ? "Mark loop " + point : tip;
+            if (button.getAttribute("aria-label") !== tip) button.setAttribute("aria-label", tip);
+          }
+          button.title = why || (usable && button.disabled ? "Load an analyzed rekordbox track first" : tip);
+        }
+        row.hidden = buttons.every((button) => button.hidden);
       }
       const read = q("player-read");
       read.hidden = !!set.auto_track_info;

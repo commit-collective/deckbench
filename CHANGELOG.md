@@ -6,7 +6,7 @@ Newest first. A release is a tagged commit.
 
 ### Scenarios
 
-- Use beat loops, hot cues, beat jumps, Quantize and Slip on CDJ-2000NXS2 and XDJ-1000MK2 cards and in scenarios.
+- Use beat loops, hot cues, beat jumps, Quantize and Slip on CDJ-3000, CDJ-2000NXS2 and XDJ-1000MK2 cards and in scenarios.
 - Record hot cue, beat jump and loop button presses when Deckbench sends them.
 - Set quarter- and half-beat loops and jump 1, 2, 4, 8 or 16 beats on simulated decks.
 

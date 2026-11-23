@@ -42,7 +42,8 @@ const extra = find(card, node => node.attrs && node.attrs.class === "player-loop
 assert.strictEqual(extra.attrs.hidden, true, "Loop and cue controls wait for model capabilities");
 for (const command of ["loop-in", "loop-out", "four-beat-loop", "reloop-exit", "hot-cue-1",
   "beat-jump-back", "beat-jump-forward", "beat-jump-back-16", "beat-jump-forward-8",
-  "hot-cue-8", "hot-cue-delete-8", "beat-loop-0.25", "beat-loop-32", "quantize", "slip"]) {
+  "hot-cue-8", "hot-cue-delete-8", "beat-loop-0.25", "beat-loop-32", "quantize", "slip",
+  "loop-half", "loop-double", "beat-jump-back-32", "beat-jump-forward-64"]) {
   const button = find(extra, node => node.attrs && node.attrs["data-command"] === command);
   assert.strictEqual(button.attrs.disabled, true, "A new control waits for player state");
   button.attrs.onclick({currentTarget: {dataset: {number: "2"}}});

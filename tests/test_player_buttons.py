@@ -63,8 +63,11 @@ class Packets(unittest.TestCase):
             with self.subTest(button=button):
                 actual = transport.NXS2_EXTRA_BUTTONS[button]
                 self.assertEqual(transport.packet(0, actual, True, 2)[42:], bytes((key, 0, 0, 1, 0, 0)))
-                with self.assertRaises(ValueError):
-                    transport.packet(0, actual, True)
+                if button in transport.CDJ3000_EXTRA_BUTTONS:
+                    self.assertEqual(transport.packet(0, actual, True)[42:], bytes((0, key, 0, 1, 0, 0)))
+                else:
+                    with self.assertRaises(ValueError):
+                        transport.packet(0, actual, True)
 
     def test_release_and_disconnect_follow_a_failed_press(self):
         sent = []
