@@ -11,7 +11,7 @@ SYNC on or off, MASTER taken. `MixRecorder.stop` turns them into scenario steps:
 A track's title and artist, when the bench has read them, go with its load. When a mixer reports what is on air, the
 changes are noted for bringing each channel in by hand. A loop or position change alone cannot identify the original
 button press. Those changes, pitch moves and ejects are kept as `log` steps and notes. A manually edited scenario can
-request Hot Cue 1 and one-beat jumps on the CDJ-2000NXS2.
+request Hot Cue 1, one-beat jumps and loop controls on the CDJ-2000NXS2.
 
 A PLAY pressed while another player was the tempo master and playing is replayed on the same beat of the master's
 bar (`on_beat`): it is sent from half a bar before its time and waits for that beat, so it lands on the beat nearest

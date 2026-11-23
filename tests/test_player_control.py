@@ -173,10 +173,11 @@ class PlayerControl(unittest.TestCase):
         self.feed()
         self.assertEqual(self.call("arm", "1", "5")[0], 400)
 
-    def test_nxs2_pad_steps_send_the_validated_button_sequence(self):
+    def test_nxs2_steps_send_the_validated_button_sequence(self):
         self.call("arm", "1")
         for button, key in (("hot-cue-1", 0x46), ("beat-jump-back", 0x5a),
-                            ("beat-jump-forward", 0x5b)):
+                            ("beat-jump-forward", 0x5b), ("loop-in", 0x1e),
+                            ("loop-out", 0x1f), ("reloop-exit", 0x20), ("four-beat-loop", 0x24)):
             with self.subTest(button=button), patch.object(self.net.decks[3], "send") as send:
                 step = {"do": "player", "player": 2, "press": button}
                 self.assertTrue(all(ok for ok, _ in self.net.check_steps([step])))
@@ -187,7 +188,7 @@ class PlayerControl(unittest.TestCase):
                 self.assertEqual(packets[1][42:], bytes((key, 0, 0, 1, 0, 0)))
                 self.assertEqual(packets[2][42:], bytes((key, 0, 0, 0, 0, 0)))
 
-    def test_pad_commands_require_opt_in_a_track_and_the_nxs2(self):
+    def test_nxs2_extra_buttons_require_opt_in_a_track_and_the_nxs2(self):
         step = {"do": "player", "player": 2, "press": "hot-cue-1"}
         with patch.object(self.net.decks[3], "send") as send:
             self.assertEqual(self.call("command", "hot-cue-1")[0], 403)

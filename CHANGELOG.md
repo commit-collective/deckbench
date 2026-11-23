@@ -6,7 +6,7 @@ Newest first. A release is a tagged commit.
 
 ### Scenarios
 
-- Press Hot Cue 1 or jump one beat in either direction on a CDJ-2000NXS2.
+- Control loops, recall Hot Cue 1 and jump one beat in either direction on a CDJ-2000NXS2.
 
 ### Compatibility changes
 

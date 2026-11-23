@@ -243,7 +243,7 @@ for each discovered player:
 | Model | `transport_method` | `fader_start_supported` | Commands |
 |---|---|---|---|
 | CDJ-3000, CDJ-3000X | `buttons` | false | `play-pause` and `cue` |
-| CDJ-2000NXS2 | `buttons` | true | `play-pause`, `cue`, `start`, `stop`, `hot-cue-1`, `beat-jump-back`, `beat-jump-forward` |
+| CDJ-2000NXS2 | `buttons` | true | `play-pause`, `cue`, `start`, `stop` and the hot cue, beat jump and loop commands below |
 | XDJ-1000MK2 | `buttons` | true | `play-pause` and `cue`, or `start` and `stop` |
 | XDJ-XZ | (empty) | false | none |
 | others | `fader` | true | `start` and `stop`: fader start |
@@ -265,16 +265,28 @@ firmware run in cdj3k-emu, and on a physical CDJ-2000NXS2 and XDJ-1000MK2, which
 take the NXS2's format. Other models get no presses until they are tried. The API answers HTTP 202 with `sent: true, confirmed: false` and
 records `player_button`.
 
-A hand-authored `player` scenario step can use the three CDJ-2000NXS2 pad commands
-as its `press` value. Each beat jump moves one beat. Load an analyzed track and
-save Hot Cue 1 before using `hot-cue-1`. The deck may set a cue if the slot is empty.
+Use these CDJ-2000NXS2 commands through the player command endpoint or as
+`press` values in a `player` scenario step. Load an analyzed rekordbox track first.
+
+| Command | On the deck |
+|---|---|
+| `hot-cue-1` | Recalls Hot Cue 1. With an empty slot the deck may set a cue. |
+| `beat-jump-back`, `beat-jump-forward` | Moves one beat. |
+| `four-beat-loop` | Starts a four-beat loop when no loop is active. |
+| `reloop-exit` | Exits the active loop or resumes a saved loop. |
+| `loop-in` | Sets the in point when no loop is set, or halves an active loop. |
+| `loop-out` | Sets the out point when creating a loop, or doubles an active loop. |
+
+Set up the intended loop state before a replay step. IN and OUT are physical
+button presses whose effect depends on the deck's state.
+
 Record Mix keeps unexplained position changes as notes because a status packet
 does not identify the button that caused the change. Remote recall of a saved
 hot loop landed one beat early in one hardware test.
 
 `POST /api/player/IP/command/play-pause?number=N` (or `cue`, one tap) needs
 player control on (or the player armed), like the other commands. The wrong command for a model is
-refused. Loop editing and the other hot cue slots are currently unavailable.
+refused.
 
 CUE can also be held, as on the player, where it plays from the cue point while
 held: `cue-down` connects and presses it, `cue-up` lets go and disconnects. The

@@ -17,14 +17,17 @@ import struct
 from .startup import MAGIC
 
 BUTTONS = {"play-pause": 20, "cue": 21}
-NXS2_PAD_BUTTONS = {"hot-cue-1": 0x46, "beat-jump-back": 0x5A, "beat-jump-forward": 0x5B}
-LEGACY_BUTTONS = {**BUTTONS, **NXS2_PAD_BUTTONS}
+NXS2_EXTRA_BUTTONS = {
+    "hot-cue-1": 0x46, "beat-jump-back": 0x5A, "beat-jump-forward": 0x5B,
+    "loop-in": 0x1E, "loop-out": 0x1F, "reloop-exit": 0x20, "four-beat-loop": 0x24,
+}
+LEGACY_BUTTONS = {**BUTTONS, **NXS2_EXTRA_BUTTONS}
 CONTROLLER = 54                     # the controller's number in the packets: refused if a device on the link has it
 NAME = b"deckbench probe"           # as tested
 CONNECT, DISCONNECT = 1, 2
 HOLD = 0.1                          # seconds a button is held
 SETTLE = 0.1                        # time to connect before PLAY/PAUSE or CUE
-PAD_SETTLE = 0.25                   # connect time used in the physical NXS2 pad tests
+NXS2_EXTRA_SETTLE = 0.25            # connect time used in the physical NXS2 tests
 
 
 def packet(subtype, button=None, pressed=False, slot=None):
@@ -57,7 +60,7 @@ def down(send, button, pause, slot=None):
     key = (BUTTONS if slot is None else LEGACY_BUTTONS)[button]
     pressed = packet(0, key, True, slot)
     send(packet(CONNECT, slot=slot))
-    pause(PAD_SETTLE if button in NXS2_PAD_BUTTONS else SETTLE)
+    pause(NXS2_EXTRA_SETTLE if button in NXS2_EXTRA_BUTTONS else SETTLE)
     try:
         send(pressed)
     except OSError:
