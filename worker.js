@@ -2,6 +2,11 @@
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/deckbench/app/demo" || url.pathname === "/deckbench/app/demo/") {
+      url.pathname = "/deckbench/app/";
+      url.search = "?demo";
+      return Response.redirect(url.toString(), 301);
+    }
     if (url.pathname === "/deckbench/app") {                  // the page's links are relative: it needs the slash
       url.pathname += "/";
       return Response.redirect(url.toString(), 301);
