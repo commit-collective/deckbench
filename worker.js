@@ -12,6 +12,12 @@ export default {
       return Response.redirect(url.toString(), 301);
     }
     url.pathname = url.pathname.replace(/^\/deckbench\/app/, "") || "/";
-    return env.ASSETS.fetch(new Request(url.toString(), request));
+    const response = await env.ASSETS.fetch(new Request(url.toString(), request));
+    const contentType = response.headers.get("Content-Type") || "";
+    if (!/^text\/html(?:\s*;|$)/i.test(contentType)) return response;
+
+    const hostedPage = new Response(response.body, response);
+    hostedPage.headers.set("X-Robots-Tag", "noindex");
+    return hostedPage;
   },
 };

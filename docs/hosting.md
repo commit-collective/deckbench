@@ -4,7 +4,12 @@ The page is plain files (`deckbench/ui`), so any static host can serve it. commi
 worker, `deckbench-app`, defined by `wrangler.toml` in this repo. It has the route `commitcollective.cc/deckbench/app/*`, which takes
 those addresses from the main site worker. The landing page at `/deckbench/` stays in the website's repo.
 
-A push to main that changes `deckbench/ui` builds and deploys the worker, with no change to the website's repo.
+The worker marks hosted HTML responses with `X-Robots-Tag: noindex`, including
+the demo. Search engines can still crawl the app URL and see that header.
+The project landing page is the search entry point.
+
+A push to main that changes the UI, worker or Wrangler configuration deploys
+the worker independently of the website.
 
 ## Setting it up on Cloudflare
 
