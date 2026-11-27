@@ -10,25 +10,33 @@ Newest first. A release is a tagged commit.
 
 ## v0.7.0
 
+The CDJ-3000's track info, waveforms and beat grids are read, and the bench refuses requests that could stop it.
+
 ### The page
 
-- Welcome the demo's first visit with what it shows and where to follow Deckbench.
+- The demo's first visit is welcomed with what it shows and where to follow Deckbench.
 
 ### Observation and diagnostics
 
 - A player's database reply that does not parse names the request and the first bytes that came back.
-- Show each deck of a unit that shares one address, as an all-in-one does, on a card of its own, with no player control. Tried only without a unit.
+- Each deck of a unit that shares one address, as an all-in-one does, has a card of its own, with no player control.
+  Tried only without a unit.
 
 ### Fixes
 
-- Refuse a tempo of 0, a negative one or `nan`, which stopped the page's updates and the decks' sound.
-- Refuse API requests made through a host name that is not the bench's own, as a page using DNS rebinding would.
-- Load only uploaded sound files for a phone, and refuse a scenario over 1 MB.
-- Start on a real network on macOS, where the sniffer and the fader listener failed with `Can't assign requested address`. A broadcast address of 255.255.255.255 is refused there with the one to use.
-- Read the track info, waveforms and beat grids of a CDJ-3000.
-- Show the title of a player's track on a bench deck once the bench has read the track's waveform for the player.
+- A tempo of 0, a negative one or `nan` is refused. It stopped the page's updates and the decks' sound.
+- API requests made through a host name that is not the bench's own are refused, as a page using DNS rebinding would
+  send them.
+- A phone loads only uploaded sound files, and a scenario over 1 MB is refused.
+- The bench starts on a real network on macOS. A broadcast address of 255.255.255.255 is refused there with the one to
+  use.
+- The track info, waveforms and beat grids of a CDJ-3000 are read.
+- A bench deck shows the title of a player's track once the bench has read the track's waveform for the player.
 
 ## v0.6.0
+
+Real players on the page: their waveforms and beat grids, PLAY/PAUSE and CUE from their cards, and their tracks on
+the bench's decks.
 
 ### Compatibility changes
 
@@ -43,297 +51,265 @@ Newest first. A release is a tagged commit.
 
 ### Real players
 
-- Draw each player's track waveform and beat grid on its card, read from the player that hosts the track.
-- Press PLAY/PAUSE and CUE from a player's card on the CDJ-3000, CDJ-2000NXS2 and XDJ-1000MK2.
-- Hold CUE on the card, and let go on PLAY/PAUSE to play on, as on the player.
-- Light the card's PLAY, CUE, SYNC and MASTER from what the player reports.
-- Place a stopped player's strip on its cue or where it paused, and start the strip from there.
-- Draw a CDJ-3000's loop from its status, placed from its precise position.
-- Request an analyzed SD/USB track on a stopped player through an armed remote-load form or API.
-- Add `--press-settle`, `--no-track-info` and `--no-waveforms`.
-- Show in the status line how the bench is on the link while its decks are off.
-- Show a player's full name, address and track on hover or tap.
+- Each player's card draws its track's waveform and beat grid, read from the player that hosts the track.
+- PLAY/PAUSE and CUE can be pressed from a player's card on the CDJ-3000, CDJ-2000NXS2 and XDJ-1000MK2.
+- CUE held on the card and let go on PLAY/PAUSE plays on, as on the player.
+- The card's PLAY, CUE, SYNC and MASTER light from what the player reports.
+- A stopped player's strip sits on its cue or where it paused, and starts from there.
+- A CDJ-3000's loop is drawn from its status, placed from its precise position.
+- An analyzed SD or USB track can be loaded on a stopped player through an armed remote-load form or the API.
+- `--press-settle`, `--no-track-info` and `--no-waveforms` are new.
+- The status line shows how the bench is on the link while its decks are off.
+- A player's full name, address and track show on hover or tap.
 
 ### Bench decks
 
-- Load a real player's SD or USB track on a bench deck, and play its audio on the track's grid.
-- Take the load-track command that rekordbox or Beat Link sends a player.
-- Give bench decks a player's header, and a CUE that plays while held.
-- Add a metronome to Listen.
+- A bench deck loads a real player's SD or USB track and plays its audio on the track's grid.
+- A bench deck takes the load-track command that rekordbox or Beat Link sends a player.
+- Bench decks have a player's header, and a CUE that plays while held.
+- Listen has a metronome.
 
 ### Scenarios
 
-- Add `player` steps and `expect_player` to press, load and check real players, with an example.
-- Add a Clear button to the scenario results.
+- `player` steps and `expect_player` press, load and check real players, with an example.
+- The scenario results have a Clear button.
 
 ### The page
 
-- Add a Phone button that shares the bench with phones on demand, with a QR code.
-- Reorder cards by their grip, and set how many sit in a row.
+- A Phone button shares the bench with phones on demand, with a QR code.
+- Cards are reordered by their grip, and the number in a row is set in Settings.
 
 ### Networks and other programs
 
-- Add `--feed` to watch the link through the packets another program forwards.
-- Choose the DJ network adapter in the Network panel, Tentative Windows cards included.
-- Let the Windows firewall helper cover several adapters.
+- `--feed` watches the link through the packets another program forwards.
+- The DJ network adapter is chosen in the Network panel, Tentative Windows cards included.
+- The Windows firewall helper covers several adapters.
 
 ### Fixes
 
-- Steady a real player's loop on the strip and draw it more clearly.
-- Keep a player's beats on the strip while CUE is held on the player.
-- Show no tempo for a player with no track, not about 655 BPM.
-- Forget a track's title once no player has it loaded.
-- Stop a deck's sound file from crackling in Listen.
-- Stop logging other players' beats on bench decks on Windows.
-- Reconnect a page a phone suspended.
-- Keep text selections while the page redraws.
-- Keep the link log's height in a short window.
-- Draw the strips again in the Classic look's light theme.
-- Keep the DJS-1000 emulator adapter connected when a project name is reported.
-- Start again on a real network in Linux or WSL.
-- Name a busy port in one line instead of a traceback.
+- A real player's loop is steadier on the strip and drawn more clearly.
+- A player's beats stay on the strip while CUE is held on the player.
+- A player with no track shows no tempo, not about 655 BPM.
+- A track's title is forgotten once no player has it loaded.
+- A deck's sound file no longer crackles in Listen.
+- On Windows, other players' beats are no longer logged on bench decks.
+- A page a phone suspended reconnects.
+- Text selections stay while the page redraws.
+- The link log keeps its height in a short window.
+- The strips are drawn again in the Classic look's light theme.
+- The DJS-1000 emulator adapter stays connected when a project name is reported.
+- The bench starts again on a real network in Linux or WSL.
+- A busy port is named in one line instead of a traceback.
 
 ## v0.5.0
 
+SYNC, MASTER and fader start for real players, an observer mode, and native macOS support.
+
 ### Compatibility changes
 
-- Plain CLI sessions no longer automatically select devices named DJS- as the
-  test target. Pass `--target PLAYER|IP` for `/api/unit`, `unit_*` events and
-  unit scenarios. Existing Python defaults and the explicit emulator adapter
-  keep their previous target behavior.
-- Clearing Events no longer resets event timestamps. Times remain relative to
-  session start, matching Network capture. Event numbering still restarts on
-  clear. Use `session` and `generation` to distinguish histories.
+- A plain command-line session no longer picks a device named DJS- as the unit under test. `--target PLAYER|IP` picks
+  it for `/api/unit`, `unit_*` events and unit scenarios.
+- Clearing Events no longer resets event times, which stay relative to the session's start, as in Network capture.
+  Event numbers still restart on clear.
 
 ### MASTER, SYNC and player controls
 
-- Serialize automatic MASTER handoffs with explicit requests and skip device snapshots when no handoff is needed.
-- Reconcile early MASTER commands with the sender's late status through a coordinated handoff.
-- Decode acceptance in standard-length master takeover replies.
-- Add opt-in SYNC and MASTER commands on discovered player cards.
-- Hand a stopped virtual master's role to an eligible playing, synced follower.
-- Add opt-in fader-start transport controls for discovered players without enabling the simulated mixer.
-- Explain that hardware fader-start commands require a stopped player at cue to start and a playing player to return to cue.
-- Keep delayed simulated-mixer packets from restoring on-air state after the mixer is switched off.
-- Make the demo's observed synced player follow master tempo and bar phase, with matching packet-log values.
+- Discovered players' cards have SYNC and MASTER commands, when turned on.
+- Discovered players have fader-start transport controls, when turned on, without the simulated mixer.
+- A stopped bench master hands its role to a playing, synced follower.
+- A MASTER request that comes before the sender's status still hands the role over.
+- The demo's synced player follows the master's tempo and bar phase.
 
 ### Observation and diagnostics
 
-- Add an announced observer mode without simulated playback decks or database servers.
-- Clear an observer's number-conflict warning when the conflict ends, without discarding other network errors.
-- Add continuous UDP capture, a full retained-capture export and explicit view limits.
-- Keep Events and Network on one session clock and reset replayed history on reconnect.
-- Report external-player state changes and allow an explicit test target without auto-selecting a DJS.
-- Record incoming database queries for hardware troubleshooting.
-- Decode mixer tempo status and CDJ-3000 precise positions without inventing beat grids.
-- Query loaded-track metadata on demand and serve meaningful synthetic tempo and duration fields.
-- Export full packet payloads and replay captures offline with seeded loss, delay and jitter.
+- An observer mode announces the bench with no playback decks or database servers.
+- UDP capture runs continuously, and the whole capture can be exported.
+- Events and Network share one session clock.
+- Other players' state changes are reported.
+- Incoming database queries are recorded.
+- Mixer tempo status and CDJ-3000 precise positions are decoded.
+- A loaded track's metadata is read on demand.
+- Captures play again offline, with chosen loss, delay and jitter.
 
-### Platform support and reliability
+### Platforms
 
-- Add native macOS interface and MAC discovery, a dedicated CI job and Ethernet/VM bridge setup guidance.
-- Print a usable browser URL with the actual port and token, including in phone mode.
-- Bound listener waits during shutdown and use a configured localhost address for the Mac mixer endpoint.
-- Add explicit network worker shutdown, socket cleanup and cancellable handoff timers.
-- Isolate CLI sleep mocking so checks cannot interrupt other network workers.
-- Make the startup-error test own its conflicting port without a timing-sensitive helper process.
-
-## v0.4.0
-
-### Phone access and setup
-
-- Add phone pairing links and optional QR codes with `--phone`.
-- Select the wired DJ adapter with `--dj-interface` and inspect available interfaces with `--network-info`.
-- Add a Windows firewall helper with scoped installation, inspection and removal.
-- Clarify browser connectivity, DJ network addressing and optional second-adapter setups.
-
-### Real-device interoperability
-
-- Support MASTER and SYNC handoffs between simulated decks and physical players.
-- Use actual adapter MAC addresses and send player status directly to discovered peers.
-- Fix compatibility fields associated with older-firmware warnings and advertise no shared USB or SD media.
-- Show broadcast tempo and beat position without enabling a simulated deck.
-- Treat physical DJS-1000 units as normal players unless an emulator test adapter is configured.
-
-### Beat display and browser audio
-
-- Align physical-player beat grids and retain loop shading across loop wraps.
-- Show a compact master beat reference above each deck's beat indicators.
-- Support browser audition of broadcast-only beats and explain unavailable or suspended audio.
-
-### Network tools
-
-- Keep the visible log stable with Follow off while packets continue collecting.
-- Preserve text selection and export held rows when the view is frozen.
-- Clearly distinguish simulated mixer controls from discovered physical mixers.
-
-## v0.3.0
-
-191 tests pass on Windows with Python 3.10. The GitHub Action passes on Ubuntu and Windows with Python 3.8 and 3.12.
-
-### Packaging and reliability
-
-- Installed packages include adapters, with an isolated CLI and asset check.
-- The sampler phase check establishes status-before-beat ordering across UDP
-  ports instead of depending on thread scheduling.
-- CI keeps full verbose logs and uses fixed OS images without automatic retries.
-- The README is shorter, with CLI and API detail in `docs/reference.md`.
-
-### The page
-
-- Play is play and pause: a deck that pauses stays where it is and plays on from there (it used to start again from its first beat). A deck is at its
-  first beat when its track is loaded.
-- CUE, as a CDJ has it: while playing it goes back to the cue point and pauses, held on the cue point it plays until let go, paused elsewhere it sets the
-  cue point. `POST /api/deck/<n>/cue[/<1|0>]`. The status says `cued` and `cue playing` besides `paused` and `playing`.
-- The deck's number is its on / off switch, and the ON button is gone.
-- A deck that is off shows only its number and its name, so the page is not mostly dimmed controls. Its card is as tall as that, not as tall as the decks that are on.
-- The header says what each sound is for: the chip `unit input` is the port the decks' sound is served on for a unit, and the button `Listen` plays it in the browser (it was `Sound`).
-- A chip `recording a session` shows while a journal is kept (see `docs/link.md`).
-- A message that something went through (a file sent, a scenario kept or copied) has a green outline, like a deck that is on. The red outline is for errors, and there is a yellow one for a warning (`toast(text, "warn")`).
-
-### Cue, loops and moves on the grid
-
-- CUE and a loop go to the nearest beat, before or after where the deck is (a loop started 0.3 beats late used to start on the beat before, and a cue was
-  wherever it was pressed). A deck that sets its cue is on it, so CUE held there plays from it.
-- The deck can be moved in its track: `POST /api/deck/N/seek/BEAT` and `jump/BEATS` (negative goes back), and a Move row on the page: to the first beat, and
-  a bar or four bars back or forward. A cue set late in a track could not be left before. A loop that is set stays through a move: waited for
-  when it is ahead, gone round when the deck is in it, left behind (still marked) when the deck is moved past it.
-- A pause stops where the playhead was when the page was clicked. The page sends the moment of the click (`?at=`, in the bench's clock), so a request that is slow
-  to arrive (a bench across WSL) no longer makes the deck run on, or the strip jump, before it stops.
-- A loop that is set is drawn ahead of the playhead, with the chip "LOOP 4 in 1.4 beats", and on a stopped deck too (it only showed once the deck was in it).
-- The strip and the page's sound no longer jump forward by a tenth of a second or so when play or cue is pressed. The answer to a click comes by another road than the
-  stream, and a quicker one moved the page's idea of the bench's clock half way at once. It now moves by 5 ms at most for each state.
-
-### The unit's input is one deck
-
-- `POST /api/audio/source/<n|all>` makes the sound port play only deck n, or all the decks again, while the bench runs (`--audio-decks` still sets the decks it is
-  started with). The state says which in `bench.audio_source`, the page's "unit input" chip shows it, and a journal keeps it. The DJS-1000 emulator's deck calls it when
-  the INPUT SOURCE knob of LIVE SAMPLING is turned.
-
-### Sent files are kept
-
-- The files the page sends with Browse are kept between runs in `~/.deckbench/tracks` (`--tracks-dir`, `$DECKBENCH_TRACKS`), named by a hash of their contents, so the same
-  file is one file and a path a session recorded is found again. They used to be in a temporary folder that was only removed when the bench exited by itself, and was left behind
-  when it was stopped (`pkill`, the emulator's `start.py stop`).
-- Files unused for a month are removed at the start, and the oldest when the folder passes 2 GB. A file a deck has loaded stays. `--clear-uploads`, `POST /api/uploads/clear` and
-  a button in the page's Settings empty it, and `GET /api/uploads` says what it holds.
-
-### A journal of a session
-
-- `POST /api/journal/start` begins keeping every request that changes the decks, with its time, after a baseline of requests that would put
-  the decks where they are. `POST /api/journal/stop` answers both. A program that records a session (the DJS-1000 emulator's REC) keeps it and
-  sends it again to a bench to play the session back. See `docs/link.md`.
-
-### Tracks of your own
-
-- A deck can play a sound file instead of its drum loop: `--track DECK=FILE@BPM[@START]`, the page's "Load a track" fold, or
-  `?audio=` on the load request of the API. You say the BPM it was made at, and the deck plays it at its own tempo. See `docs/audio.md`.
-- A deck that plays a sound file has its waveform behind its strip's beat grid, laid out from the BPM and the first beat you gave, so that a wrong
-  one is seen. It comes from `/api/deck/N/waveform`.
-- The strips no longer jump a few pixels now and then. The page took the bench's clock from each state as it arrived, so the delay of that message (a few milliseconds, more through WSL) moved them. It now follows the quickest messages and ignores the slow ones.
-- The waveform is one smooth shape, with the loudness taken between its values, and does not shimmer as the strip scrolls.
-- The bench's server keeps a queue of 128 connections instead of 5. A page that opened its event stream and a dozen requests at once, with
-  something else asking too, could have one held back a second, or refused through WSL's forwarding of localhost, and said "The bench does not answer."
-- The page's Sound button plays a deck's file when it has one (it played the drums of every deck). It is fetched from `/api/deck/N/audio.wav`.
-- The page's Browse button opens the browser's file picker and sends the file to the bench (`/api/upload`), so a bench in WSL or on
-  another machine gets a file from the one the browser is on.
-
-### Testing from code
-
-- The bench says when every socket it listens on is bound, and `start()` and the command line wait for that, so a bench is
-  listening when `start()` returns. The monitor counts the packets it reads, so a test sends a marker on each port and waits
-  for it instead of sleeping.
-- A test that is beaten to a port (the system hands the range's ports to client sockets) takes the next range and starts again.
-- A player is heard once its keep-alive has come as well as its status. The keep-alive says who it is, comes on another port and
-  can come later.
+- macOS finds its network interfaces natively, with setup notes for Ethernet and VM bridges.
+- The bench prints a browser address with its actual port and token, phone mode included.
 
 ### Fixes
 
-- A DJS-1000 on the link has its beat strip follow the beat of its bar. It sends 0 for the beat in the track, which the page kept as a place, so the strip stood on one beat.
-- The state of another device on the link (MASTER, SYNC, ON AIR, LOOP, OFFLINE) is side by side, right under the UNIT UNDER TEST tag, as tall together as the number's box. When there are too many for the width they wrap onto a row under. A flag that comes or goes does not change the card's height.
+- An observer's number-conflict warning clears when the conflict ends.
+- A simulated mixer switched off no longer turns channels back on air with a late packet.
+- The bench shuts down without waiting on its listeners.
 
-## v0.2.0
+## v0.4.0
 
-Tested on Ubuntu and Windows, with Python 3.8 and 3.12. The GitHub Action passes on all four.
+Phones on the bench, and simulated decks that hand MASTER and SYNC to real players.
 
-### Listen to the network
+### Phones and setup
 
-- The bench now hears other players and mixers on the link and shows each as a read-only card with its model and what it does.
-- The Network tab has a log of the Pro DJ Link packets as they come (`/api/packets`). The bench's own packets, statuses and beats are options. See `docs/link.md`.
-- A synced deck now snaps to the master's beat grid, not only to its tempo.
+- `--phone` gives phone pairing links, with QR codes.
+- `--dj-interface` picks the wired DJ adapter, and `--network-info` lists the interfaces.
+- A Windows firewall helper installs, shows and removes a scoped rule.
+- The docs explain browser connectivity, DJ network addresses and setups with a second adapter.
+
+### Real players
+
+- MASTER and SYNC pass between simulated decks and real players.
+- The bench uses its adapter's real MAC address and sends player status to each discovered player.
+- Broadcast tempo and beat position show without a simulated deck.
+- A real DJS-1000 is a normal player unless an emulator test adapter is configured.
+
+### Beats and sound
+
+- Real players' beat grids are aligned, and loop shading stays across a loop's wrap.
+- A compact master beat reference sits above each deck's beats.
+- The browser can play broadcast-only beats, and says when its sound is unavailable or suspended.
+
+### Network tools
+
+- With Follow off, the visible log holds still while packets keep coming.
+- A frozen view keeps text selection and exports its held rows.
+- Simulated mixer controls are set apart from discovered real mixers.
+
+### Fixes
+
+- Older players no longer warn about the bench's compatibility fields, and the bench offers no shared USB or SD media.
+
+## v0.3.0
+
+CUE and pause as on a CDJ, moves on the beat grid, tracks of your own, and sessions that can be played back.
+
+### Compatibility changes
+
+- Play is play and pause: a deck that pauses plays on from there. A deck is at its first beat when its track is
+  loaded.
+- The deck's number is its on / off switch, and the ON button is gone.
+- The page's Sound button is now Listen.
 
 ### The page
 
-- New look, the same as commitcollective.cc: black and white, thin lines, square corners. Colour only carries meaning: green for on and on air, blue for sync, amber for the master, purple for a loop, red for beat 1 and for a fault.
-- Two looks, each in dark and light, chosen in Settings: Commit (the default) and Classic, the first look.
-- Each deck and device has a scrolling strip with a grid of beats and bars. A loop shows where it goes back.
-- The tempo slider changes the tempo while you drag it, not on release.
-- The Sound button plays each playing deck's beat (kick, snare, hat). With a mixer, only decks on air are heard. Settings choose which decks and devices you hear.
-- The page can be hosted on another site and used from a phone. See `docs/phone.md`.
+- CUE works as on a CDJ, with `POST /api/deck/<n>/cue[/<1|0>]`. The status says `cued` and `cue playing`.
+- A deck that is off shows only its number and its name.
+- The header names each sound: the `unit input` chip is the port the decks' sound is served on, and Listen plays it in
+  the browser.
+- A `recording a session` chip shows while a journal is kept.
+- A message that something went through has a green outline, a warning a yellow one.
+
+### Cue, loops and moves on the grid
+
+- CUE and a loop go to the nearest beat. A deck that sets its cue is on it, so CUE held there plays from it.
+- `POST /api/deck/N/seek/BEAT`, `jump/BEATS` and a Move row on the page move the deck in its track. A loop that is set
+  stays through a move.
+- A pause stops where the playhead was when the page was clicked, even when the request arrives late.
+- A loop that is set is drawn ahead of the playhead, with a chip such as "LOOP 4 in 1.4 beats".
+
+### The unit's input
+
+- `POST /api/audio/source/<n|all>` makes the sound port play one deck, or all of them, while the bench runs. The
+  DJS-1000 emulator calls it when LIVE SAMPLING's INPUT SOURCE knob turns.
+
+### Tracks of your own
+
+- A deck plays a sound file instead of its drum loop: `--track DECK=FILE@BPM[@START]`, the page's "Load a track" fold,
+  or `?audio=` in the API. It plays at the deck's own tempo.
+- A deck that plays a sound file shows its waveform behind the strip's beat grid.
+- The page's Browse button sends a file from the browser's computer to the bench.
+- Listen plays a deck's file when it has one.
+- Sent files are kept between runs in `~/.deckbench/tracks` (`--tracks-dir`, `$DECKBENCH_TRACKS`). Files unused for a
+  month go, and the oldest when the folder passes 2 GB. `--clear-uploads` and a Settings button empty it.
+
+### Sessions
+
+- `POST /api/journal/start` and `stop` keep every request that changes the decks, with its time, so a session can be
+  played back. The DJS-1000 emulator's REC uses it.
+
+### Testing from code
+
+- `start()` and the command line return once every socket is bound.
+- A test beaten to a port takes the next range and starts again.
+
+### Fixes
+
+- A DJS-1000's beat strip follows the beat of its bar.
+- Another device's state flags sit side by side under its tag, and the card's height no longer changes with them.
+- The strips and the page's sound no longer jump when play or cue is pressed, or now and then while playing.
+- The waveform is one smooth shape and does not shimmer as the strip scrolls.
+- A page that opened many requests at once no longer says "The bench does not answer".
+
+## v0.2.0
+
+The bench listens to the whole link, and the page has a new look and a phone mode.
+
+### Listen to the network
+
+- The bench hears other players and mixers on the link and shows each as a read-only card.
+- The Network tab logs the Pro DJ Link packets as they come (`/api/packets`).
+- A synced deck snaps to the master's beat grid, not only to its tempo.
+
+### The page
+
+- A new look, the same as commitcollective.cc, where colour only carries meaning.
+- Two looks, Commit (the default) and Classic, each in dark and light.
+- Each deck and device has a scrolling strip with a grid of beats and bars.
+- The tempo slider changes the tempo while you drag it.
+- The Sound button plays each playing deck's beat. With a mixer, only decks on air are heard.
+- The page can be hosted on another site and used from a phone.
 - `?demo` runs a bench made of JavaScript inside the page, with no server.
 
 ### Safety
 
-- The API now refuses requests from web pages of another origin, since any site could otherwise drive a bench on localhost. `--allow-origin` lets one in.
+- The API refuses requests from web pages of another origin. `--allow-origin` lets one in.
 - `--token` makes the API ask for a token.
 
-### Releases and hosting
+### Releases
 
-- A tag now makes a GitHub release with the changelog entry as its notes.
-- The tests run on Ubuntu and Windows, and the workflow says which test failed.
-- The page is served by its own Cloudflare worker, so changing it needs no push to the website. See `docs/hosting.md`.
+- A tag makes a GitHub release with the changelog entry as its notes.
 
 ### Fixes
 
-- UDP sockets are shared with SO_REUSEPORT on macOS.
-- The page's server no longer does a reverse lookup at start, which held it up for many seconds on a macOS runner.
-- The WSL test of `Bench` only runs where a WSL distribution starts.
+- On macOS, UDP sockets are shared, and the page's server no longer waits on a reverse lookup at start.
 - The mixer's channel rows no longer share a CSS class with the beat strips.
 
 ## v0.1.0
 
-The first version.
+The first version: simulated Pro DJ Link decks and a mixer, driven from a page or an API, with scenarios that test a
+DJS-1000.
 
 ### Simulated decks
 
-- Pro DJ Link decks with discovery, status, beats, tempo master, sync and hand-off, loops, and the database server for track titles.
-- `--profile` makes the decks stand in for a CDJ-2000 (nexus), CDJ-2000NXS2, XDJ-1000MK2 or CDJ-3000, with its name, status length and nexus byte.
+- Pro DJ Link decks with discovery, status, beats, tempo master, sync and hand-off, loops, and track titles.
+- `--profile` makes the decks stand in for a CDJ-2000, CDJ-2000NXS2, XDJ-1000MK2 or CDJ-3000.
 - A deck can load a track from another deck's database and slot.
-- `--claim` makes a deck do what a real player does when it comes online. A deck that is on defends its number against another device.
+- `--claim` makes a deck come online as a real player does, and a deck that is on defends its number.
 - Strict decks behave as a CDJ-2000NXS2 does.
-- A simulated DJM mixer (`--mixer`) announces itself as device 33, reports which channels are on air, and starts and stops players with fader start.
+- A simulated DJM mixer (`--mixer`) reports which channels are on air and starts and stops players with fader start.
 - Each deck has sound.
 - Network faults can be simulated, for example 30 % packet loss.
 
 ### The page and the API
 
-- A card for each deck: switches, beat squares, tempo display and slider, loops, cable, and a track from any deck's database.
-- Tabs for events (filter, pause, export), scenarios (editor, examples, saved), the network and the settings. Works in light and dark.
+- A card for each deck, with its switches, beats, tempo, loops, cable and track.
+- Tabs for events, scenarios, the network and the settings, in light and dark.
 - An HTTP API and a command line drive the same things.
-- Some settings change while it runs (`/api/settings`): strict decks, database refusal and the model name.
+- Some settings change while it runs (`/api/settings`).
 
 ### Scenarios
 
 - Scenarios script the decks and check what the device under test did.
-- `expect_unit` checks its master role, sync, tempo and lamps. `expect_deck` checks the decks.
-- `unit` presses its controls, `when` acts only in a given state, and `require` says what the scenario needs. A scenario that needs a unit or adapter that is missing is skipped, not failed.
+- `expect_unit` and `expect_deck` check the unit and the decks, and `unit`, `when` and `require` act on the unit.
 - Matchers: `near`, `min`, `max`, `in`, `not`.
 - `--scenario` takes several files or a folder and ends with a summary.
 - Examples are in `deckbench/examples`.
 
 ### Testing a DJS-1000
 
-- `--adapter djs1000-emu` reads the emulator's lamps and presses its SYNC and MASTER. The Network tab shows the unit's state with buttons.
-- A library of scenarios in `deckbench/examples/unit`: the unit follows a master deck and its tempo, the master role passes between deck and unit, and it keeps following after a cable pull and with 30 % packet loss. `40-on-air.json` checks that the unit says it is on air when the mixer's channel 1 is open.
-- More of the unit is heard: synced, playing, on air and the beat, with `unit_sync` and `unit_play` events.
+- `--adapter djs1000-emu` reads the emulator's lamps and presses its SYNC and MASTER.
+- A library of unit scenarios in `deckbench/examples/unit`.
+- More of the unit is heard: synced, playing, on air and the beat.
 
 ### Running it
 
-- `--port-shift` moves every port of the decks. The bench names the port it cannot have when it starts.
+- `--port-shift` moves every port of the decks.
 - `--ready-file`, `GET /api/ready` and `deckbench.testing.Bench` start a bench from a test without guessing a delay.
-- Runs on Linux and Windows with Python 3.8 and later. The tests use ports of their own, so a running bench or rekordbox does not matter.
-- Not supported on macOS: the loopback carries no broadcasts, so decks on 127.0.0.n are not heard. Use `--bind` there.
-
-### Fixes
-
-- A title with a percent sign is no longer decoded twice.
+- Runs on Linux and Windows with Python 3.8 and later. Not on macOS, where the loopback carries no broadcasts.
